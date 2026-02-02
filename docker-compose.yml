@@ -2,7 +2,7 @@ version: "3.8"
 services:
   thaimui-pms-api:
     platform: linux/amd64
-    image: registry.gitlab.com/jostechnology/container-registry/thaimui-pms-api-dev:test
+    image: registry.gitlab.com/jostechnology/container-registry/thaimui-pms-api-dev:${TAG}
     container_name: thaimui-pms-api
     restart: always
     network_mode: bridge
