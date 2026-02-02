@@ -73,7 +73,7 @@ jobs:
       # SSH to Dev Server (ORS server)
       - name: Deploy to Dev Server
         run: |
-          PASS="${{ secrets.DEV_DEPLOY_PASSWORD }}"
+          PASS=$(printf '%s' '${{ secrets.DEV_DEPLOY_PASSWORD }}')
 
           echo "Starting deploy to Lightsail host..."
           echo "Host: ${{ secrets.DEV_DEPLOY_HOST }}"
