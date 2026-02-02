@@ -37,8 +37,8 @@ jobs:
       # Build and push the Docker image
       - name: Build and push Docker image
         run: |
-          docker build . -t registry.gitlab.com/jaoaurai/container-registry/thaimui-pms-api:${{ github.sha }}
-          docker push registry.gitlab.com/jaoaurai/container-registry/thaimui-pms-api:${{ github.sha }}
+          docker build . -t registry.gitlab.com/jostechnology/container-registry/thaimui-pms-api:${{ github.sha }}
+          docker push registry.gitlab.com/jostechnology/container-registry/thaimui-pms-api:${{ github.sha }}
       # Create a new tag and push it to GitHub
       - name: Create and push Git tag
         run: |

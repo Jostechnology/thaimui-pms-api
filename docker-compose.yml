@@ -1,7 +1,9 @@
 version: "3.8"
 services:
-  api:
-    image: registry.gitlab.com/jaoaurai/container-registry/thaimui-pms-api-dev:${TAG}
+  thaimui-pms-api:
+    build : .
+    platform: linux/amd64
+    image: registry.gitlab.com/jostechnology/container-registry/thaimui-pms-api-dev:test
     container_name: thaimui-pms-api
     restart: always
     network_mode: bridge
@@ -9,6 +11,8 @@ services:
     ports:
       - 5000:5000
     environment:
+      - connection_string=${connection_string}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
 
     volumes:
       - "/etc/localtime:/etc/localtime:ro"
