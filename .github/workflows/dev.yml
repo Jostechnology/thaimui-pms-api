@@ -1,0 +1,102 @@
+name: thaumui-pms-api
+
+on:
+  push:
+    branches:
+      - dev
+permissions:
+  contents: write  # Give the GITHUB_TOKEN permission to push tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code from GitHub
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Set up Docker Buildx for multi-platform builds
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Log in to GitLab Container Registry
+      - name: Log in to GitLab Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: registry.gitlab.com
+          username: ${{ secrets.GITLAB_USERNAME }}
+          password: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-files
+          path: docker-compose.yml
+
+      # Build and push the Docker image
+      - name: Build and push Docker image
+        run: |
+          docker build . -t registry.gitlab.com/jaoaurai/container-registry/thaimui-pms-api:${{ github.sha }}
+          docker push registry.gitlab.com/jaoaurai/container-registry/thaimui-pms-api:${{ github.sha }}
+      # Create a new tag and push it to GitHub
+      - name: Create and push Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="v$(date +'%Y%m%d%H%M%S')-${{ github.sha }}"
+          echo "Creating Git tag $TAG"
+          git tag $TAG
+          git push origin $TAG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      # Set up SSH key
+      # - name: Set up SSH agent
+      #   uses: webfactory/ssh-agent@v0.5.3
+      #   with:
+      #     ssh-private-key: ${{ secrets.LIGHTSAIL_SSH_KEY_DEV }}
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-files
+      
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      # SSH to Dev Server (ORS server)
+      - name: Deploy to Dev Server
+        run: |
+          PASS="${{ secrets.DEV_DEPLOY_PASSWORD }}"
+
+          echo "Starting deploy to Lightsail host..."
+          echo "Host: ${{ secrets.DEV_DEPLOY_HOST }}"
+          echo "User: ${{ secrets.DEV_DEPLOY_USER }}"
+
+          sshpass -p "$PASS" scp -o StrictHostKeyChecking=no docker-compose.yml \
+            ${{ secrets.DEV_DEPLOY_USER }}@${{ secrets.DEV_DEPLOY_HOST }}:/root/thaimui-pms-api/docker-compose.yml
+
+          sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.DEV_DEPLOY_USER }}@${{ secrets.DEV_DEPLOY_HOST }} << 'EOF'
+          set -e
+          cd /root/thaimui-pms-api
+
+          echo "TAG=${{ github.sha }}" > .env
+          echo 'connection_string=${{ vars.CONNECTION_STRING_DEV }}' >> .env
+
+          echo "Logging in to GitLab Container Registry"
+          docker login -u ${{ secrets.GITLAB_USERNAME }} -p ${{ secrets.GITLAB_ACCESS_TOKEN }} registry.gitlab.com
+
+          echo "Rebuilding containers..."
+          docker-compose down
+          docker-compose up -d
+
+          echo "✅ Deploy completed successfully."
+          EOF
+

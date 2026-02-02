@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   api:
-    build : .
+    image: registry.gitlab.com/jaoaurai/container-registry/thaimui-pms-api-dev:${TAG}
     container_name: thaimui-pms-api
     restart: always
     network_mode: bridge
