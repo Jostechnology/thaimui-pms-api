@@ -6,9 +6,19 @@ from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from functools import wraps
-
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.exceptions import TooManyRequests
 
 app = Flask(__name__)
+
+
+limiter = Limiter(
+    key_func=get_remote_address, #ระบุตัวตนผู้ใช้จาก IP
+    strategy="fixed-window",
+    storage_uri="memory://",
+)
+limiter.init_app(app)
 
 CORS(app)  # เปิดการเชื่อมต่อจากทุกโดเมน
 # LoggerMiddleware(app, project_id="tms-api")
@@ -27,6 +37,14 @@ def handle_app_exception(e):
         "error": e.message,
         "status": e.status_code
     }), e.status_code
+
+@app.errorhandler(429)
+def handle_ratelimit_error(e):
+    return jsonify({
+        "success": False,
+        "error": "Too Many Requests",
+        "message": e.description #ล็อกอินเกินกำหนด
+    }), 429
 
 @app.errorhandler(Exception)
 def handle_generic_exception(e):
