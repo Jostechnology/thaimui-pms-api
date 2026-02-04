@@ -39,6 +39,6 @@ def refresh_token_controller():
     new_access_token, new_refresh_token = auth_service.refresh_token_service(refresh_token)
     return jsonify({
         "access_token": new_access_token, 
-        "refresh_token": new_refresh_token,  # ← คืน refresh token ใหม่ด้วย
+        "refresh_token": new_refresh_token,  
         "success": True
     }), 200
