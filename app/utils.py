@@ -25,6 +25,13 @@ def create_token(data, token_type="access", expires_in=None):
         print(f"Error creating token: {e}")
         return None
 
+def encode_jwt(data):
+    try:
+        print(data)
+        return jwt.encode(data, JWT_SECRET_KEY, algorithm="HS256")
+    except Exception:
+        raise
+
 def decode_token(token):
     try:
         decoded = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])

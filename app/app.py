@@ -55,6 +55,7 @@ def handle_generic_exception(e):
     }), 500
 
 from .controllers import auth_controller
+from .controllers import user_controller
 
 with app.app_context():
     db.create_all()
