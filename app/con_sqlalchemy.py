@@ -20,9 +20,10 @@ class User(AuditMixin):
     __tablename__ = "m_user"
     user_id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id', ondelete='SET NULL', onupdate='CASCADE'))
+    role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id', onupdate='CASCADE'), nullable=False, default=2) # default role_id = 2 (Default User)
     password = db.Column(db.String(200), nullable=False)
-    
+    role = db.relationship('Role', back_populates="users", lazy='selectin')
+
 class Tokenlist(BaseModel):
     tablename = "t_token_list"
     id = db.Column(db.Integer, primary_key=True)
@@ -41,12 +42,19 @@ class Role(BaseModel):
     role_id = db.Column(db.Integer, primary_key=True)
     role_name = db.Column(db.String(80), unique=True, nullable=False)
     description = db.Column(db.String(200))
+    users = db.relationship('User', back_populates="role", lazy='selectin')
+    permissions = db.relationship('Permission', secondary='m_role_permission', back_populates='roles', lazy='selectin')
+    def get_permissions(self):
+        if self.role_name == "Admin":
+            return ["*"]
+        return [perm.permission_code for perm in self.permissions]
 
 class Permission(BaseModel):
     __tablename__ = "m_permission"
     permission_id = db.Column(db.Integer, primary_key=True)
     permission_code = db.Column(db.String(80), unique=True, nullable=False)
     permission_group = db.Column(db.String(80), nullable=False)
+    roles = db.relationship('Role', secondary='m_role_permission', back_populates='permissions', lazy='selectin')
 
 class RolePermission(BaseModel):
     __tablename__ = "m_role_permission"

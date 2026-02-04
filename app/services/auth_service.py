@@ -18,7 +18,9 @@ def login_service(data):
                 
         token_data = {
             "user_id": user.user_id,
-            "username" : user.username, 
+            "username" : user.username,
+            "role" : user.role.role_name,
+            "permissions": user.role.get_permissions()
         }
         access_token = create_token(token_data, "access")
         refresh_token = create_token(token_data, "refresh")
