@@ -6,9 +6,19 @@ from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from functools import wraps
-
+from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
+
+
+limiter = Limiter(
+    key_func=get_remote_address, #ระบุตัวตนผู้ใช้จาก IP
+    strategy="fixed-window",
+    storage_uri="memory://",
+)
+limiter.init_app(app)
 
 CORS(app)  # เปิดการเชื่อมต่อจากทุกโดเมน
 # LoggerMiddleware(app, project_id="tms-api")
@@ -18,6 +28,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 ma = Marshmallow(app)
 
 @app.errorhandler(AppException)
@@ -28,6 +39,14 @@ def handle_app_exception(e):
         "status": e.status_code
     }), e.status_code
 
+@app.errorhandler(429)
+def handle_ratelimit_error(e):
+    return jsonify({
+        "success": False,
+        "error": "Too Many Requests",
+        "message": e.description #ล็อกอินเกินกำหนด
+    }), 429
+
 @app.errorhandler(Exception)
 def handle_generic_exception(e):
     traceback.print_exc()
@@ -36,6 +55,7 @@ def handle_generic_exception(e):
     }), 500
 
 from .controllers import auth_controller
+from .controllers import user_controller
 
 with app.app_context():
     db.create_all()

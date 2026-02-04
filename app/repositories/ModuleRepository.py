@@ -1,0 +1,133 @@
+from app.con_sqlalchemy import Module, Permission, Role_permission
+from app.app import db
+from sqlalchemy import desc
+
+def get_all_modules():
+    try:
+        modules = db.session.query(Module).all()
+        return modules
+    except Exception:
+        raise
+
+def get_permissions_of_module(module : Module):
+    try:
+        permissions = db.session.query(Permission).filter(Permission.module_id == module.module_id).all()
+        return permissions
+    except Exception:
+        raise
+
+def get_module_highest_order():
+    try:
+        module = db.session.query(Module).filter(Module.level == 1).order_by(desc(Module.sort_order)).first()
+        return module
+    except Exception:
+        raise
+
+def get_module_by_code(module_code):
+    try:
+        module = db.session.query(Module).filter(Module.module_code == module_code).first()
+        return module
+    except Exception:
+        raise
+
+def get_module_by_id(module_id):
+    try:
+        module = db.session.query(Module).filter(Module.module_id == module_id).first()
+        return module
+    except Exception:
+        raise
+
+def create_module(data):
+    try:
+        print(data)
+        module_name = data.get("module_name")
+        module_code = data.get("module_code")
+        sort_order = data.get("sort_order")
+        parent_id = data.get("parent_id")
+        level = data.get("level")
+        new_module = Module(
+            module_name=module_name,
+            module_code=module_code,
+            sort_order=sort_order,
+            parent_id=parent_id,
+            level=level
+        )
+
+        return new_module
+    except Exception:
+        raise
+
+def create_permission(data):
+    try:
+        permission_code = data.get("permission_code")
+        description = data.get("description")
+        module_id = data.get("module_id")
+        method = data.get("method")
+
+        new_permission = Permission(
+            permission_code=permission_code,
+            description=description,
+            module_id=module_id,
+            method=method
+        )
+
+        return new_permission
+    except Exception:
+        raise
+
+def get_main_modules():
+    try:
+        modules =db.session.query(Module).filter(Module.level == 1).order_by(Module.sort_order).all()
+        return modules
+    except Exception:
+        raise
+
+def get_sub_module_hightest(module_id):
+    try:
+        module = db.session.query(Module).filter(Module.level != 1, Module.parent_id == module_id).order_by(desc(Module.sort_order)).first()
+        return module
+    except Exception:
+        raise
+
+def deactivate_role_permission_of_role(role_id):
+    try:
+        role_permissions = db.session.query(Role_permission).filter(Role_permission.role_id == role_id).all()
+        for rp in role_permissions:
+            rp.active_flag = False
+    
+    except Exception:
+        raise
+
+def get_role_permission_of_role_and_permission(role_id, permission_id):
+    try:
+        role_permission = db.session.query(Role_permission).filter(Role_permission.role_id == role_id, Role_permission.permission_id == permission_id).first()
+        return role_permission
+    except Exception:
+        raise
+
+def create_role_permission(data):
+    try:
+        role_id = data.get("role_id")
+        permission_id = data.get("permission_id")
+        role_permission = Role_permission(
+            role_id=role_id, permission_id=permission_id, active_flag=True
+        )
+        return role_permission
+    except Exception:
+        raise
+
+def get_permission_by_module(module_id, method):
+    try:
+        permission = Permission.query.filter_by(
+            module_id=module_id, method=method
+        ).first()
+        return permission
+    except Exception as e:
+        raise e
+
+def get_all_role_permission():
+    try:
+        role_permissions = db.session.query(Role_permission).all()
+        return role_permissions
+    except Exception:
+        raise

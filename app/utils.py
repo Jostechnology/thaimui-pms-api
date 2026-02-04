@@ -6,7 +6,7 @@ import bcrypt
 def create_token(data, token_type="access", expires_in=None):
     try:
         if token_type == "access":
-            exp = datetime.utcnow() + timedelta(minutes=15)
+            exp = datetime.utcnow() + timedelta(minutes=30)
         elif token_type == "refresh":
             exp = datetime.utcnow() + timedelta(days=7)
         else:
@@ -24,6 +24,13 @@ def create_token(data, token_type="access", expires_in=None):
     except Exception as e:
         print(f"Error creating token: {e}")
         return None
+
+def encode_jwt(data):
+    try:
+        print(data)
+        return jwt.encode(data, JWT_SECRET_KEY, algorithm="HS256")
+    except Exception:
+        raise
 
 def decode_token(token):
     try:
