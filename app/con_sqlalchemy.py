@@ -22,6 +22,14 @@ class User(AuditMixin):
     username = db.Column(db.String(80), unique=True, nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id', ondelete='SET NULL', onupdate='CASCADE'))
     password = db.Column(db.String(200), nullable=False)
+    
+class Tokenlist(BaseModel):
+    tablename = "t_token_list"
+    id = db.Column(db.Integer, primary_key=True)
+    jwt_id = db.Column(db.String(255), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, nullable=False)
+    token_type = db.Column(db.String(20), default="refresh")
+
 
 class Tokenlist(BaseModel):
     __tablename__ = "t_token_list"
@@ -44,3 +52,4 @@ class RolePermission(BaseModel):
     __tablename__ = "m_role_permission"
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id'), primary_key=True, nullable=False)
     permission_id = db.Column(db.Integer, db.ForeignKey('m_permission.permission_id'), primary_key=True, nullable=False)
+
