@@ -16,4 +16,5 @@ requests==2.32.3
 SQLAlchemy==2.0.37
 bcrypt==4.3.0
 PyJWT==2.11.0
+Flask-Migrate==4.1.0
 flask-limiter==3.8.0
