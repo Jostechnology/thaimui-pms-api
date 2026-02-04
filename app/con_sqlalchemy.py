@@ -32,12 +32,6 @@ class Tokenlist(BaseModel):
     token_type = db.Column(db.String(20), default="refresh")
 
 
-class Role(BaseModel):
-    __tablename__ = "m_role"
-    role_id = db.Column(db.Integer, primary_key=True)
-    role_name = db.Column(db.String(80), nullable=False)
-    description = db.Column(db.String(200), nullable=True)
-
 class Tokenlist(BaseModel):
     __tablename__ = "t_token_list"
     id = db.Column(db.Integer, primary_key=True)
