@@ -31,13 +31,6 @@ class Tokenlist(BaseModel):
     user_id = db.Column(db.Integer, nullable=False)
     token_type = db.Column(db.String(20), default="refresh")
 
-
-class Tokenlist(BaseModel):
-    __tablename__ = "t_token_list"
-    id = db.Column(db.Integer, primary_key=True)
-    jwt_id = db.Column(db.String(255), unique=True, nullable=False)
-    user_id = db.Column(db.Integer, nullable=False)
-
 class Role(BaseModel):
     __tablename__ = "m_role"
     role_id = db.Column(db.Integer, primary_key=True)
