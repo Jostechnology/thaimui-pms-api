@@ -1,3 +1,4 @@
+from app.api_auth import verify_required
 from app.app import app, db
 from flask import request, jsonify
 from app.services import user_service

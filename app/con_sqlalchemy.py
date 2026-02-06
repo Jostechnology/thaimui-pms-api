@@ -1,6 +1,8 @@
 from app.app import db
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
+from sqlalchemy import event
+from flask import g
 
 def bangkok_now():
     return datetime.now(ZoneInfo("Asia/Bangkok"))
@@ -13,9 +15,23 @@ class BaseModel(db.Model):
 class AuditMixin(BaseModel):
     """Mixin to add created_by and updated_by tracking"""
     __abstract__ = True
-    created_by = db.Column(db.Integer)
-    updated_by = db.Column(db.Integer)
+    created_by = db.Column(db.String(80))
+    updated_by = db.Column(db.String(80))
 
+@event.listens_for(AuditMixin, 'before_insert', propagate=True)
+def receive_before_insert(mapper, connection, target):
+    """Set created_by when inserting"""
+    username = g.get("username", None)
+    if username:
+        target.created_by = username
+        target.updated_by = username
+
+@event.listens_for(AuditMixin, 'before_update', propagate=True)
+def receive_before_update(mapper, connection, target):
+    """Set updated_by when updating"""
+    username = g.get("username", None)
+    if username:
+        target.updated_by = username
 class User(AuditMixin):
     __tablename__ = "m_user"
     user_id = db.Column(db.Integer, primary_key=True)
