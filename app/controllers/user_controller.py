@@ -42,3 +42,25 @@ def upsert_role_permission():
     data = request.get_json()
     res = user_service.upsert_role_permission(data)
     return jsonify({"data" : res, "success" : True}), 200
+
+@app.route("/api/create_user", methods=["POST"]) #add_limiter??
+def api_create_user():
+    data = request.get_json()
+    res = user_service.create_user(data)
+    return jsonify({"data" : res, "success" : True}), 200 
+
+@app.route("/api/get_user_list", methods=["GET"])
+def api_get_user_list():
+    try:
+        data = {
+            "page": request.args.get("page", 1, type=int),
+            "pageConfig": request.args.get("pageConfig", 10, type=int),
+            "search": request.args.get("search", ""),
+            "filter": request.args.get("filter", None)
+        }
+        res = user_service.get_user_list(data)
+        return jsonify({"data": res, "success": True}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+

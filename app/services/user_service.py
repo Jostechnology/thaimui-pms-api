@@ -5,7 +5,7 @@ from app.app import db
 from app.exception import NotFoundError
 from app.repositories import ModuleRepository, RoleRepository, UserRepository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
-from app.utils import encode_jwt
+from app.utils import encode_jwt , hash_bcrypt
 
 def get_all_roles():
     try:
@@ -344,4 +344,61 @@ def upsert_role_permission(data):
         db.session.rollback()
         raise
 
+def create_user(data):
+    try:
+        username = data.get("username")
+        password = data.get("password")
+        role_id = data.get("role_id")
+        if not username or not password:
+            return {"error": "Missing username, password, or role_id"}, 400
+
+        if UserRepository.check_username_exist(username):
+            return {"error": "Username already exists"}, 400
+
+        hashed_password = hash_bcrypt(password)
+
+        create_obj = {
+            "username" : username,
+            "password" : hashed_password,
+            "role_id" :  role_id
+        }
+
+        new_user = UserRepository.create_user(create_obj)
+        db.session.add(new_user)
+        db.session.commit()
+
+        return UserRepository.get_user_by_id(new_user.user_id).username
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+
+def get_user_list(data):
+    try:
+        page = int(data.get("page", 1))
+        limit = int(data.get("pageConfig", 10))
+        username = data.get("search", "")
+        role_id = data.get("filter") 
+
+        result = UserRepository.get_user_list_paginated(
+            page=page, 
+            limit=limit, 
+            username=username, 
+            role_id=role_id
+        )
+        items = []
+        for user in result['items']:
+            items.append({
+                "username": user.username,
+                "role_id": user.role_id,
+                "role_name": user.role.role_name if user.role else "-",
+                "created_date": user.created_date.strftime("%Y-%m-%d %H:%M:%S") if user.created_date else "-"
+            })
+        return {
+            "items": items,
+            "total_pages": result['total_pages']
+        }
+
+    except Exception as e:
+        raise e
 
