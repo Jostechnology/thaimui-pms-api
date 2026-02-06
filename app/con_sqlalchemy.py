@@ -56,6 +56,10 @@ class Role(BaseModel):
     users = db.relationship('User', back_populates="role", lazy='selectin')
     active_flag = db.Column(db.Boolean, nullable=False)
     permissions = db.relationship('Permission', secondary='m_role_permission', back_populates='roles', lazy='selectin')
+    def get_permissions(self):
+        if self.role_name == "Admin":
+            return ["*"]
+        return [perm.permission_code for perm in self.permissions]
 
 class Module(BaseModel):
     __tablename__ = "m_module"

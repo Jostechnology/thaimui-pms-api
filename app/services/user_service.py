@@ -263,6 +263,88 @@ def create_module(data):
     except Exception as e:
         db.session.rollback()
         raise e
+    
+def edit_module(module_id,data):
+    try:
+        module = ModuleRepository.get_module_by_id(module_id)
+        if not module:
+            return {"error": "Module not found"}, 404
+
+        module_name = data.get("module_name")
+        module_code = data.get("module_code")
+        sort_order = data.get("sort_order", module.sort_order)
+        permission_list = data.get("permission_list", [])
+
+        if not module_name or not module_code:
+            return {"error": "Missing module_name or module_code"}, 400
+
+        existing = ModuleRepository.get_module_by_code(module_code)
+        if existing and existing.module_id != module_id:
+            return {"error": "Module code already exists"}, 400
+
+        module.module_name = module_name
+        module.module_code = module_code
+        module.sort_order = sort_order
+
+        # Update permissions: diff-based (keep existing, delete removed, add new)
+        existing_permissions = ModuleRepository.get_permissions_of_module(module)
+        new_methods = set(permission_list) if permission_list else set()
+
+        # ลบ permission ที่ไม่อยู่ใน list ใหม่
+        for perm in existing_permissions:
+            if perm.method not in new_methods:
+                db.session.delete(perm)
+            else:
+                # อัปเดต code/description ให้ตรงกับชื่อ module ใหม่
+                perm.permission_code = f"{perm.method}.{module_code}"
+                perm.description = f"{perm.method.capitalize()} {module_name}"
+                new_methods.discard(perm.method)
+
+        # สร้างเฉพาะ permission ที่ยังไม่มี
+        valid_methods = {"view", "create", "edit", "delete"}
+        for method in new_methods:
+            if method not in valid_methods:
+                continue
+            permiss_dict = {
+                "permission_code": f"{method}.{module_code}",
+                "description": f"{method.capitalize()} {module_name}",
+                "module_id": module.module_id,
+                "method": method,
+            }
+            new_permission = ModuleRepository.create_permission(permiss_dict)
+            db.session.add(new_permission)
+
+        db.session.commit()
+
+        return ModuleSchema().dump(module)
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+def delete_module(module_id):
+    try:
+        module = ModuleRepository.get_module_by_id(module_id)
+        if not module:
+            return {"error": "Module not found"}, 404
+
+
+        ModuleRepository.delete_module_by_id(module_id)
+        db.session.commit()
+
+        return {"message": "Module deleted successfully"}
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+    
+def get_module(module_id):
+    try:
+        module = ModuleRepository.get_module_by_id(module_id)
+        if not module:
+            raise NotFoundError("ไม่พบ Module")
+        return ModuleSchema().dump(module)
+    except Exception as e:
+        raise e
 
 def get_modules_main():
     try:
