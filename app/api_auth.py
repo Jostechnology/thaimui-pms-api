@@ -29,9 +29,10 @@ def verify_required(f):
             return jsonify({"message": "Invalid or expired token"}), 401
 
         jti = decoded.get("jti")
-        if Tokenlist.query.filter_by(jwt_id=jti).first():
-            return jsonify({"message": "Token revoked"}), 401
+        
+        if not Tokenlist.query.filter_by(jwt_id=jti).first():
+            return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
+            
         g.username = decoded.get("username")
         return f(*args, **kwargs)
     return decorated
-
