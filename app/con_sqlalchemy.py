@@ -56,12 +56,8 @@ class Role(BaseModel):
     users = db.relationship('User', back_populates="role", lazy='selectin')
     active_flag = db.Column(db.Boolean, nullable=False)
     permissions = db.relationship('Permission', secondary='m_role_permission', back_populates='roles', lazy='selectin')
-    def get_permissions(self):
-        if self.role_name == "Admin":
-            return ["*"]
-        return [perm.permission_code for perm in self.permissions]
 
-class Module(db.Model):
+class Module(BaseModel):
     __tablename__ = "m_module"
     module_id = db.Column(db.Integer, primary_key=True)
     module_name = db.Column(db.String(255), nullable=False)
@@ -77,7 +73,7 @@ class Module(db.Model):
         cascade='all, delete-orphan'
     )
 
-class Permission(db.Model):
+class Permission(BaseModel):
     __tablename__ = "m_permission"
     permission_id =  db.Column(db.Integer, primary_key=True)
     module_id = db.Column(
@@ -96,7 +92,7 @@ class Permission(db.Model):
     )
 
 
-class Role_permission(db.Model):
+class Role_permission(BaseModel):
     __tablename__ = "m_role_permission"
     role_permission_id = db.Column(db.Integer, primary_key=True)
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id'), nullable=False)
