@@ -1,7 +1,7 @@
 from app.exception import AppException, UniqueError, ValidationError, NotFoundError
 from app.ma_sqlalchemy import UserSchema
-from app.repositories import UserLoginRepository, UserRepository 
-from app.utils import create_token, hash_bcrypt, verify_bcrypt 
+from app.repositories import UserLoginRepository, UserRepository
+from app.utils import create_token, hash_bcrypt, verify_bcrypt
 from app.app import db
 
 def login_service(data):
@@ -18,11 +18,7 @@ def login_service(data):
                 
         token_data = {
             "user_id": user.user_id,
-            "username" : user.username,
-            "role_name" : user.role.role_name,
-            "role_id" : user.role.role_id,
-            "role_code" : user.role.role_code,
-            "permissions": user.role.get_permissions()
+            "username" : user.username, 
         }
         access_token = create_token(token_data, "access")
         refresh_token = create_token(token_data, "refresh")
@@ -135,10 +131,6 @@ def refresh_token_service(refresh_token):
         new_refresh_token = create_token(token_data, "refresh")
         
         db.session.commit()
-        
-        print(f"✅ Refresh Token Success for user_id: {user_id}")  # Add logging
-        print(f"   Old Refresh Token (Revoked): {jti}")
-        print(f"   New Refresh Token Generated")
         
         return new_access_token, new_refresh_token
     
