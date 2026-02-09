@@ -2,10 +2,10 @@ import base64
 from copy import deepcopy
 import json
 from app.app import db
-from app.exception import NotFoundError
+from app.exception import AppException, MissingFieldsError, NotFoundError, UniqueError
 from app.repositories import ModuleRepository, RoleRepository, UserRepository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
-from app.utils import encode_jwt, hash_bcrypt
+from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
 
 def get_all_roles():
     try:
@@ -166,16 +166,17 @@ def create_module(data):
             sort_order = sort_order.sort_order + 1 if sort_order else 1
 
         if not module_name or not module_code:
-            return {"error": "Missing module_name or module_code"}, 400
+            raise MissingFieldsError("Missing module_name or module_code")
 
         existing = ModuleRepository.get_module_by_code(module_code)
         if existing:
-            return {"error": "Module code already exists"}, 400
+            raise UniqueError("Module Already exists")
+        
 
         if parent_id:
             parent = ModuleRepository.get_module_by_id(parent_id)
             if not parent:
-                return {"error": "Parent module not found"}, 400
+                raise NotFoundError("Parent module not found")
 
         create_obj = {
             "module_name" : module_name,
@@ -276,11 +277,11 @@ def edit_module(module_id,data):
         permission_list = data.get("permission_list", [])
 
         if not module_name or not module_code:
-            return {"error": "Missing module_name or module_code"}, 400
+            raise MissingFieldsError("Missing module_name or module_code")
 
         existing = ModuleRepository.get_module_by_code(module_code)
         if existing and existing.module_id != module_id:
-            return {"error": "Module code already exists"}, 400
+            raise UniqueError("Module code already exists")
 
         module.module_name = module_name
         module.module_code = module_code
@@ -325,8 +326,7 @@ def delete_module(module_id):
     try:
         module = ModuleRepository.get_module_by_id(module_id)
         if not module:
-            return {"error": "Module not found"}, 404
-
+            raise NotFoundError("Module not found")
 
         ModuleRepository.delete_module_by_id(module_id)
         db.session.commit()
@@ -390,7 +390,7 @@ def upsert_role_permission(data):
         module_list = data.get("module_list")
 
         if not role_id or not isinstance(module_list, list):
-            return {"error": "Missing role_id or module_list"}, 400
+            raise MissingFieldsError("Missing role_id or module_list")
 
         permission_id_list = []
         for module in module_list:
@@ -425,3 +425,150 @@ def upsert_role_permission(data):
     except Exception as e:
         db.session.rollback()
         raise
+
+def create_user(data):
+    try:
+        username = data.get("username")
+        password = data.get("password")
+        role_id = data.get("role_id")
+        if not username or not password:
+            raise MissingFieldsError("Missing username, password, or role_id")
+
+        if UserRepository.check_username_exist(username):
+            raise UniqueError("User already Exists")
+
+        hashed_password = hash_bcrypt(password)
+
+        create_obj = {
+            "username" : username,
+            "password" : hashed_password,
+            "role_id" :  role_id
+        }
+
+        new_user = UserRepository.create_user(create_obj)
+        db.session.add(new_user)
+        db.session.commit()
+
+        return UserRepository.get_user_by_id(new_user.user_id).username
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+
+def get_user_list(data):
+    try:
+        page = int(data.get("page", 1))
+        limit = int(data.get("pageConfig", 10))
+        username = data.get("search", "")
+        role_id = data.get("filter") 
+
+        result = UserRepository.get_user_list_paginated(
+            page=page, 
+            limit=limit, 
+            username=username, 
+            role_id=role_id
+        )
+        items = []
+        for user in result['items']:
+            items.append({
+                "username": user.username,
+                "role_id": user.role_id,
+                "role_name": user.role.role_name if user.role else "-",
+                "created_date": user.created_date.strftime("%Y-%m-%d %H:%M:%S") if user.created_date else "-",
+                "is_active": user.is_active
+            })
+        return {
+            "items": items,
+            "total_pages": result['total_pages']
+        }
+
+    except Exception as e:
+        raise e
+    
+def change_user_role(data):
+    try:
+        username = data.get("username")
+        role_id = data.get("role_id")
+        update_by = data.get("update_by")
+
+        user = UserRepository.get_user_by_username(username)
+        if not user:
+            raise NotFoundError("User not found")
+        
+        role_update = UserRepository.change_user_role(username, role_id)
+        db.session.add(role_update)
+        db.session.commit()
+        return UserRepository.get_user_by_id(user.user_id).username
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+def change_user_password(data):
+    try:
+        username = data.get("username", "").strip()
+        new_password_raw = data.get("new_password")
+        old_password_raw = data.get("old_password")
+
+        user = UserRepository.get_user_by_username(username)
+        if not user:
+            raise NotFoundError("User not found")
+        
+        if not username or not new_password_raw or not old_password_raw:
+            raise MissingFieldsError("Missing required fields (username, new_password, old_password)")
+        
+        if not verify_bcrypt(old_password_raw, user.password):
+            raise ValueError("รหัสผ่านเดิมไม่ถูกต้อง")
+        
+        if old_password_raw == new_password_raw:
+            raise ValueError("รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม")
+
+        hashed_new_password = hash_bcrypt(new_password_raw)
+
+        UserRepository.update_user_password(username, hashed_new_password)
+        
+        db.session.commit()
+        return {"message": "เปลี่ยนรหัสผ่านสำเร็จ", "success": True}
+
+    except AppException:
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        raise AppException(str(e))
+
+
+def ban_user(data):
+    try:
+        username = data.get("username")
+        is_active = data.get("is_active")
+        if isinstance(is_active, str):
+            is_active = is_active.lower() == 'true'
+        
+        updated_by = data.get("updated_by")
+
+        user = UserRepository.get_user_by_username(username)
+        if not user:
+            return NotFoundError("ไม่พบผู้ใช้งานนี้ในระบบ")
+
+        user.is_active = is_active
+        
+        if hasattr(user, 'updated_by'):
+            user.updated_by = updated_by
+            
+        db.session.commit()
+
+        status_msg = "คืนสิทธิ์" if is_active else "ระงับสิทธิ์"
+        
+        return {
+            "message": f"ดำเนินการ{status_msg}ผู้ใช้ {username} สำเร็จ",
+            "success": True
+        }
+
+    except AppException:
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        raise AppException(str(e))
+
+

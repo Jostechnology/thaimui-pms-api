@@ -27,3 +27,7 @@ class AuthenticationError(AppException):
 class AuthorizationError(AppException):
     status_code = 403
     message = "Permission denied"
+
+class MissingFieldsError(AppException):
+    status_code = 400
+    message = "Missing Fields"
