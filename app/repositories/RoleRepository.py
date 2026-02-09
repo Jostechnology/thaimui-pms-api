@@ -1,5 +1,5 @@
 from app.app import db
-from app.con_sqlalchemy import Permission, Role, Role_permission
+from app.con_sqlalchemy import Permission, Role, RolePermission
 
 def get_all_roles():
     try:
@@ -19,20 +19,20 @@ def get_role_by_id(id : int):
 def get_active_permissions_by_role(role_id: int):
     try:
         return (
-            db.session.query(Role_permission)
+            db.session.query(RolePermission)
             .join(
                 Permission,
-                Permission.permission_id == Role_permission.permission_id
+                Permission.permission_id == RolePermission.permission_id
             )
             .with_entities(
-                Role_permission.role_id,
-                Role_permission.permission_id,
+                RolePermission.role_id,
+                RolePermission.permission_id,
                 Permission.module_id,
                 Permission.method,
             )
             .filter(
-                Role_permission.role_id == role_id,
-                Role_permission.active_flag.is_(True)
+                RolePermission.role_id == role_id,
+                RolePermission.active_flag.is_(True)
             )
             .all()
         )

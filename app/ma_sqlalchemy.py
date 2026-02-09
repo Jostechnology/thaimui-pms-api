@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import Role_permission
+from app.con_sqlalchemy import RolePermission
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -41,5 +41,5 @@ class ModuleSchema(Schema):
 
 class RolePermissionSchema(SQLAlchemyAutoSchema):
     class Meta:
-        model = Role_permission
+        model = RolePermission
         load_instance = True
