@@ -45,6 +45,7 @@ def upsert_role_permission():
     return jsonify({"data" : res, "success" : True}), 200
 
 @app.route("/api/create_user", methods=["POST"]) #add_limiter??
+@verify_required
 def api_create_user():
     data = request.get_json()
     res = user_service.create_user(data)

@@ -17,7 +17,10 @@ def login_service(data):
 
         if not validate:
             raise NotFoundError("รหัสหรือชื่อผู้ใช้ไม่ถูกต้อง")
-                
+
+        if not bool(user.is_active):
+            raise NotFoundError("ผู้ใช้งานนี้ถูกระงับการใช้งาน")
+        
         token_data = {
             "user_id": user.user_id,
             "username" : user.username,

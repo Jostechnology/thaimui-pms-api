@@ -5,11 +5,7 @@ from app.app import db
 from app.exception import NotFoundError
 from app.repositories import ModuleRepository, RoleRepository, UserRepository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
-<<<<<<< HEAD
 from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
-=======
-from app.utils import encode_jwt, hash_bcrypt
->>>>>>> origin/auto-mixing
 
 def get_all_roles():
     try:
