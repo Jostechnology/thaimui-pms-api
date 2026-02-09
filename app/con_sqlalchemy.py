@@ -1,6 +1,8 @@
 from app.app import db
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
+from sqlalchemy import event
+from flask import g
 
 def bangkok_now():
     return datetime.now(ZoneInfo("Asia/Bangkok"))
@@ -13,9 +15,23 @@ class BaseModel(db.Model):
 class AuditMixin(BaseModel):
     """Mixin to add created_by and updated_by tracking"""
     __abstract__ = True
-    created_by = db.Column(db.Integer)
-    updated_by = db.Column(db.Integer)
+    created_by = db.Column(db.String(80))
+    updated_by = db.Column(db.String(80))
 
+@event.listens_for(AuditMixin, 'before_insert', propagate=True)
+def receive_before_insert(mapper, connection, target):
+    """Set created_by when inserting"""
+    username = g.get("username", None)
+    if username:
+        target.created_by = username
+        target.updated_by = username
+
+@event.listens_for(AuditMixin, 'before_update', propagate=True)
+def receive_before_update(mapper, connection, target):
+    """Set updated_by when updating"""
+    username = g.get("username", None)
+    if username:
+        target.updated_by = username
 class User(AuditMixin):
     __tablename__ = "m_user"
     user_id = db.Column(db.Integer, primary_key=True)
@@ -32,7 +48,6 @@ class Tokenlist(BaseModel):
     user_id = db.Column(db.Integer, nullable=False)
     token_type = db.Column(db.String(20), default="refresh")
 
-
 class Role(BaseModel):
     __tablename__ = "m_role"
     role_id = db.Column(db.Integer, primary_key=True)
@@ -42,12 +57,8 @@ class Role(BaseModel):
     users = db.relationship('User', back_populates="role", lazy='selectin')
     active_flag = db.Column(db.Boolean, nullable=False)
     permissions = db.relationship('Permission', secondary='m_role_permission', back_populates='roles', lazy='selectin')
-    def get_permissions(self):
-        if self.role_name == "Admin":
-            return ["*"]
-        return [perm.permission_code for perm in self.permissions]
 
-class Module(db.Model):
+class Module(BaseModel):
     __tablename__ = "m_module"
     module_id = db.Column(db.Integer, primary_key=True)
     module_name = db.Column(db.String(255), nullable=False)
@@ -63,7 +74,7 @@ class Module(db.Model):
         cascade='all, delete-orphan'
     )
 
-class Permission(db.Model):
+class Permission(BaseModel):
     __tablename__ = "m_permission"
     permission_id =  db.Column(db.Integer, primary_key=True)
     module_id = db.Column(
@@ -82,7 +93,7 @@ class Permission(db.Model):
     )
 
 
-class Role_permission(db.Model):
+class Role_permission(BaseModel):
     __tablename__ = "m_role_permission"
     role_permission_id = db.Column(db.Integer, primary_key=True)
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id'), nullable=False)
