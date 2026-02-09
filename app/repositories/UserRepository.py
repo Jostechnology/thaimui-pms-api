@@ -35,7 +35,8 @@ def create_user(data):
         user = User(
             username=data.get("username"),
             password=data.get("password"),
-            role_id=data.get("role_id")
+            role_id=data.get("role_id"),
+            is_active=data.get("is_active", True)
         )
         return user
     except Exception:
@@ -84,3 +85,4 @@ def update_user_password(username, new_password):
     except Exception:
         db.session.rollback()
         raise
+

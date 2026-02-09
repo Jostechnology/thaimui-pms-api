@@ -392,7 +392,8 @@ def get_user_list(data):
                 "username": user.username,
                 "role_id": user.role_id,
                 "role_name": user.role.role_name if user.role else "-",
-                "created_date": user.created_date.strftime("%Y-%m-%d %H:%M:%S") if user.created_date else "-"
+                "created_date": user.created_date.strftime("%Y-%m-%d %H:%M:%S") if user.created_date else "-",
+                "is_active": user.is_active
             })
         return {
             "items": items,
@@ -449,6 +450,39 @@ def change_user_password(data):
     except Exception as e:
         db.session.rollback()
         print(f"Error Change Password: {str(e)}")
+        raise e
+
+
+def ban_user(data):
+    try:
+        username = data.get("username")
+        is_active = data.get("is_active")
+        if isinstance(is_active, str):
+            is_active = is_active.lower() == 'true'
+        
+        updated_by = data.get("updated_by")
+
+        user = UserRepository.get_user_by_username(username)
+        if not user:
+            return {"error": "ไม่พบผู้ใช้งานนี้ในระบบ", "success": False}, 404
+
+        user.is_active = is_active
+        
+        if hasattr(user, 'updated_by'):
+            user.updated_by = updated_by
+            
+        db.session.commit()
+
+        status_msg = "คืนสิทธิ์" if is_active else "ระงับสิทธิ์"
+        
+        return {
+            "message": f"ดำเนินการ{status_msg}ผู้ใช้ {username} สำเร็จ",
+            "success": True
+        }, 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in ban_user: {str(e)}")
         raise e
 
 

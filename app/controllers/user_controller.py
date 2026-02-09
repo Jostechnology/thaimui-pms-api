@@ -83,3 +83,13 @@ def api_change_user_password():
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500    
+
+@app.route("/api/ban_user", methods=["PUT"])
+def api_ban_user():
+    try:
+        data = request.get_json()
+        res = user_service.ban_user(data)
+        return jsonify({"data": res, "success": True}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500    
