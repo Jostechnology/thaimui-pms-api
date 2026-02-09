@@ -27,6 +27,11 @@ def api_create_module():
     res = user_service.create_module(data)
     return jsonify({"data" : res, "success" : True}), 200 
 
+@app.route('/api/get_module/<int:module_id>', methods=['POST'])
+def api_get_module(module_id):
+    res = user_service.get_module(module_id)
+    return jsonify({"data" : res, "success" : True}), 200
+
 @app.route('/api/get_modules_main', methods=['GET', 'POST'])
 def api_get_modules_main():
     res = user_service.get_modules_main()
@@ -95,3 +100,21 @@ def api_ban_user():
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500    
+
+@app.route('/api/edit_module/<int:module_id>', methods=['PUT'])
+def api_edit_module(module_id=None):
+    data = request.get_json()
+    if module_id is None:
+        module_id = data.get("module_id")
+    res = user_service.edit_module(module_id, data)
+    return jsonify({"data" : res, "success" : True}), 200
+
+
+
+@app.route('/api/delete_module/<int:module_id>', methods=['DELETE'])
+def api_delete_module(module_id=None):
+    data = request.get_json()
+    if module_id is None:
+        module_id = data.get("module_id")
+    res = user_service.delete_module(module_id)
+    return jsonify({"data" : res, "success" : True}), 200
