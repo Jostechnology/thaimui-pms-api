@@ -34,6 +34,9 @@ class ModuleSchema(Schema):
     parent_id = fields.Integer()
     level = fields.Integer()
     sort_order = fields.Integer()
+    permission_list = fields.Method("get_permissions")
+    def get_permissions(self, obj):
+        return [permission.method for permission in obj.permissions]
 
 
 class RolePermissionSchema(SQLAlchemyAutoSchema):

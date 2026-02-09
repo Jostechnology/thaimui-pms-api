@@ -116,6 +116,43 @@ def create_role_permission(data):
     except Exception:
         raise
 
+def update_module(module, data):
+    try:
+        if data.get("module_name"):
+            module.module_name = data.get("module_name")
+        if data.get("module_code"):
+            module.module_code = data.get("module_code")
+        if data.get("sort_order") is not None:
+            module.sort_order = data.get("sort_order")
+        if data.get("parent_id") is not None:
+            module.parent_id = data.get("parent_id")
+        if data.get("level") is not None:
+            module.level = data.get("level")
+        return module
+    except Exception:
+        raise
+
+def delete_module_by_id(module_id):
+    try:
+        module = db.session.query(Module).filter(Module.module_id == module_id).first()
+        sub_module = db.session.query(Module).filter(Module.parent_id == module_id).all()
+        for sm in sub_module:
+            db.session.delete(sm)
+        if module:
+            db.session.delete(module)
+        return module
+    except Exception:
+        raise
+
+def delete_permissions_by_module(module_id):
+    try:
+        permissions = db.session.query(Permission).filter(Permission.module_id == module_id).all()
+        for p in permissions:
+            db.session.delete(p)
+        return permissions
+    except Exception:
+        raise
+
 def get_permission_by_module(module_id, method):
     try:
         permission = Permission.query.filter_by(
