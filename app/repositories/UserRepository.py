@@ -74,3 +74,13 @@ def change_user_role(username, role_id):
     except Exception:
         db.session.rollback()
         raise
+
+def update_user_password(username, new_password):
+    try:
+        user = get_user_by_username(username)
+        user.password = new_password
+        db.session.commit()
+        return user
+    except Exception:
+        db.session.rollback()
+        raise

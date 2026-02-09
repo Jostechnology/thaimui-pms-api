@@ -5,7 +5,7 @@ from app.app import db
 from app.exception import NotFoundError
 from app.repositories import ModuleRepository, RoleRepository, UserRepository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
-from app.utils import encode_jwt , hash_bcrypt
+from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
 
 def get_all_roles():
     try:
@@ -419,4 +419,36 @@ def change_user_role(data):
     except Exception as e:
         db.session.rollback()
         raise e
+
+def change_user_password(data):
+    try:
+        username = data.get("username", "").strip()
+        new_password_raw = data.get("new_password")
+        old_password_raw = data.get("old_password")
+
+        user = UserRepository.get_user_by_username(username)
+        if not user:
+            return {"error": "User not found", "success": False}, 404
+        
+        if not username or not new_password_raw or not old_password_raw:
+            return {"error": "Missing required fields (username, new_password, old_password)", "success": False}, 400
+        
+        if not verify_bcrypt(old_password_raw, user.password):
+            return {"error": "รหัสผ่านเดิมไม่ถูกต้อง", "success": False}, 400
+        
+        if old_password_raw == new_password_raw:
+            return {"error": "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม", "success": False}, 400
+
+        hashed_new_password = hash_bcrypt(new_password_raw)
+
+        UserRepository.update_user_password(username, hashed_new_password)
+        
+        db.session.commit()
+        return {"message": "เปลี่ยนรหัสผ่านสำเร็จ", "success": True}, 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error Change Password: {str(e)}")
+        raise e
+
 
