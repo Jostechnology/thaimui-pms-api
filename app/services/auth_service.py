@@ -1,7 +1,7 @@
 from app.exception import AppException, UniqueError, ValidationError, NotFoundError
 from app.ma_sqlalchemy import UserSchema
-from app.repositories import UserLoginRepository, UserRepository
-from app.utils import create_token, hash_bcrypt, verify_bcrypt
+from app.repositories import UserLoginRepository, UserRepository 
+from app.utils import create_token, hash_bcrypt, verify_bcrypt 
 from app.app import db
 from app.utils import decode_token
 from app.con_sqlalchemy import Tokenlist
@@ -17,10 +17,17 @@ def login_service(data):
 
         if not validate:
             raise NotFoundError("รหัสหรือชื่อผู้ใช้ไม่ถูกต้อง")
-                
+
+        if not bool(user.is_active):
+            raise NotFoundError("ผู้ใช้งานนี้ถูกระงับการใช้งาน")
+        
         token_data = {
             "user_id": user.user_id,
-            "username" : user.username, 
+            "username" : user.username,
+            "role_name" : user.role.role_name,
+            "role_id" : user.role.role_id,
+            "role_code" : user.role.role_code,
+            "permissions": user.role.get_permissions()
         }
         access_token = create_token(token_data, "access")
         refresh_token = create_token(token_data, "refresh")

@@ -39,6 +39,8 @@ class User(AuditMixin):
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id', onupdate='CASCADE'), nullable=False, default=2) # default role_id = 2 (Default User)
     password = db.Column(db.String(200), nullable=False)
     role = db.relationship('Role', back_populates="users", lazy='selectin')
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+
 
 class Tokenlist(BaseModel):
     __tablename__ = "t_token_list"
