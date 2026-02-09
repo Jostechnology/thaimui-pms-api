@@ -123,15 +123,22 @@ def refresh_token_service(refresh_token):
         if not valid_token:
             raise ValidationError("Refresh token ไม่ถูกต้องหรือหมดอายุ")
         
-        # ลบ token เก่าออกจาก whitelist
+        # ลบ refresh token เก่าออกจาก whitelist
         db.session.delete(valid_token)
 
         Tokenlist.query.filter_by(user_id=user_id).delete()
         
-        # สร้าง access token + refresh token ใหม่
+        user = UserRepository.get_user_by_id(user_id)
+        if not user:
+            raise NotFoundError("ไม่พบข้อมูลผู้ใช้")
+        
         token_data = {
-            "user_id": user_id,
-            "username": decoded.get("username")
+            "user_id": user.user_id,
+            "username": user.username,
+            "role_name": user.role.role_name,
+            "role_id": user.role.role_id,
+            "role_code": user.role.role_code,
+            "permissions": user.role.get_permissions()
         }
         new_access_token = create_token(token_data, "access")
         new_refresh_token = create_token(token_data, "refresh")
