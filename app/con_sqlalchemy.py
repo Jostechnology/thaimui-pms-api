@@ -41,6 +41,7 @@ class User(AuditMixin):
     role = db.relationship('Role', back_populates="users", lazy='selectin')
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
+
 class Tokenlist(BaseModel):
     __tablename__ = "t_token_list"
     id = db.Column(db.Integer, primary_key=True)
@@ -57,6 +58,10 @@ class Role(BaseModel):
     users = db.relationship('User', back_populates="role", lazy='selectin')
     active_flag = db.Column(db.Boolean, nullable=False)
     permissions = db.relationship('Permission', secondary='m_role_permission', back_populates='roles', lazy='selectin')
+    def get_permissions(self):
+        if self.role_name == "Admin":
+            return ["*"]
+        return [perm.permission_code for perm in self.permissions]
 
 class Module(BaseModel):
     __tablename__ = "m_module"
