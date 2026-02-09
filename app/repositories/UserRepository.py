@@ -64,3 +64,13 @@ def get_user_list_paginated(page, limit, username="", role_id=None):
         
     except Exception as e:
         raise e
+    
+def change_user_role(username, role_id):
+    try:
+        user = get_user_by_username(username)
+        user.role_id = role_id
+        db.session.commit()
+        return user
+    except Exception:
+        db.session.rollback()
+        raise

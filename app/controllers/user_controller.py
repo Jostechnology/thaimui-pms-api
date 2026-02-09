@@ -64,3 +64,12 @@ def api_get_user_list():
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/change_user_role", methods=["PUT"])
+def api_change_user_role():
+    try:
+        data = request.get_json()
+        res = user_service.change_user_role(data)
+        return jsonify({"data": res, "success": True}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500

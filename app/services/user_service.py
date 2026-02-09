@@ -401,4 +401,22 @@ def get_user_list(data):
 
     except Exception as e:
         raise e
+    
+def change_user_role(data):
+    try:
+        username = data.get("username")
+        role_id = data.get("role_id")
+        update_by = data.get("update_by")
+
+        user = UserRepository.get_user_by_username(username)
+        if not user:
+            return {"error": "User not found"}, 404
+        
+        role_update = UserRepository.change_user_role(username, role_id)
+        db.session.add(role_update)
+        db.session.commit()
+        return UserRepository.get_user_by_id(user.user_id).username
+    except Exception as e:
+        db.session.rollback()
+        raise e
 
