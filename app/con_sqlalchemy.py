@@ -25,7 +25,7 @@ class User(AuditMixin):
     role = db.relationship('Role', back_populates="users", lazy='selectin')
 
 class Tokenlist(BaseModel):
-    _tablename_ = "t_token_list"
+    __tablename__ = "t_token_list"
     id = db.Column(db.Integer, primary_key=True)
     jwt_id = db.Column(db.String(255), unique=True, nullable=False)
     user_id = db.Column(db.Integer, nullable=False)
