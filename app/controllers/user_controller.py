@@ -9,6 +9,7 @@ def api_get_all_roles():
     return jsonify({"data" : roles, "success" : True}), 200
 
 @app.route("/api/get_module_tree", methods=["POST"])
+@verify_required
 def api_get_module_tree():
     module_tree = user_service.get_module_tree()
     return jsonify({"data" : module_tree, "success" : True}), 200 

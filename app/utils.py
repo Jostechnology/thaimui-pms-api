@@ -6,7 +6,7 @@ import bcrypt
 def create_token(data, token_type="access", expires_in=None):
     try:
         if token_type == "access":
-            exp = datetime.utcnow() + timedelta(minutes=15)
+            exp = datetime.utcnow() + timedelta(minutes=1)
         elif token_type == "refresh":
             exp = datetime.utcnow() + timedelta(days=7)
         else:
