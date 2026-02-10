@@ -68,35 +68,9 @@ def api_get_module_sorted():
 @decode_and_verify_permission_jwt(authorizes=[{"module_code": "ROLE_MANAGEMENT", "method": "edit"}])
 def upsert_role_permission():
     data = request.get_json()
-    role_id = data.get("role_id")
-
-    try:
-        current_username = getattr(g, "username", None)
-        if not current_username:
-            return jsonify({"error": "Permission denied"}), 403
-
-        current_user = user_repository.get_user_by_username(current_username)
-        if not current_user:
-            return jsonify({"error": "Permission denied"}), 403
-
-        current_user_role = role_repository.get_role_by_id(current_user.role_id)
-        is_admin = current_user_role and (getattr(current_user_role, "role_code", "") or "").lower() == "admin"
-
-        # Guard 1: ห้าม user แก้ role ตัวเอง (ป้องกัน privilege escalation) ยกเว้น Admin
-        if role_id and current_user.role_id == int(role_id) and not is_admin:
-            return jsonify({"error": "Permission denied: ไม่สามารถแก้ไข role ของตัวเองได้"}), 403
-
-        # Guard 2: ถ้า target role เป็น Admin ให้เฉพาะ Admin เท่านั้นที่แก้ได้
-        if role_id:
-            target_role = role_repository.get_role_by_id(role_id)
-            if target_role and (getattr(target_role, "role_code", "") or "").lower() == "admin" and not is_admin:
-                return jsonify({"error": "Permission denied: only admin can edit Admin role"}), 403
-
-    except Exception:
-        return jsonify({"error": "Permission denied"}), 403
-
     res = user_service.upsert_role_permission(data)
-    return jsonify({"data": res, "success": True}), 200
+    return jsonify({"data" : res, "success" : True}), 200
+
 
 @app.route("/api/create_user", methods=["POST"]) #add_limiter??
 @verify_required
