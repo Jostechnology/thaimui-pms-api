@@ -75,11 +75,11 @@ def upsert_role_permission():
         if not current_username:
             return jsonify({"error": "Permission denied"}), 403
 
-        current_user = UserRepository.get_user_by_username(current_username)
+        current_user = user_repository.get_user_by_username(current_username)
         if not current_user:
             return jsonify({"error": "Permission denied"}), 403
 
-        current_user_role = RoleRepository.get_role_by_id(current_user.role_id)
+        current_user_role = role_repository.get_role_by_id(current_user.role_id)
         is_admin = current_user_role and (getattr(current_user_role, "role_code", "") or "").lower() == "admin"
 
         # Guard 1: ห้าม user แก้ role ตัวเอง (ป้องกัน privilege escalation) ยกเว้น Admin
@@ -88,7 +88,7 @@ def upsert_role_permission():
 
         # Guard 2: ถ้า target role เป็น Admin ให้เฉพาะ Admin เท่านั้นที่แก้ได้
         if role_id:
-            target_role = RoleRepository.get_role_by_id(role_id)
+            target_role = role_repository.get_role_by_id(role_id)
             if target_role and (getattr(target_role, "role_code", "") or "").lower() == "admin" and not is_admin:
                 return jsonify({"error": "Permission denied: only admin can edit Admin role"}), 403
 
