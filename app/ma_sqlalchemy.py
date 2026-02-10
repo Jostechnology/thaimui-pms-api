@@ -43,3 +43,9 @@ class RolePermissionSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = RolePermission
         load_instance = True
+
+class WorkOrderSchema(Schema):
+    work_order_id = fields.Integer()
+    doc_num = fields.String()
+    created_date = fields.DateTime()
+    

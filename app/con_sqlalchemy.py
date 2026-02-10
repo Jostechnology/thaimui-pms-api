@@ -114,8 +114,8 @@ class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'), nullable=False)
-    start_date = db.Column(db.DateTime, nullable=False)
-    end_date = db.Column(db.DateTime, nullable=False)
+    start_date = db.Column(db.DateTime)
+    end_date = db.Column(db.DateTime)
 
 class Employee(AuditMixin):
     __tablename__ = "m_employee"

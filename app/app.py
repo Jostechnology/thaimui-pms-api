@@ -56,6 +56,7 @@ def handle_generic_exception(e):
 
 from .controllers import auth_controller
 from .controllers import user_controller
+from .controllers import work_order_controller
 
 with app.app_context():
     db.create_all()

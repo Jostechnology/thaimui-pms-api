@@ -1,6 +1,6 @@
 from app.exception import AppException, UniqueError, ValidationError, NotFoundError
 from app.ma_sqlalchemy import UserSchema
-from app.repositories import UserLoginRepository, UserRepository 
+from app.repositories import user_login_repository, user_repository 
 from app.utils import create_token, hash_bcrypt, verify_bcrypt 
 from app.app import db
 from app.utils import decode_token
@@ -11,7 +11,7 @@ def login_service(data):
         username = data.get("username")
         password = data.get("password")
 
-        user = UserRepository.get_user_by_username(username)
+        user = user_repository.get_user_by_username(username)
 
         validate = verify_bcrypt(password, user.password)
 
@@ -58,7 +58,7 @@ def register_service(data):
             raise ValidationError("Username and password are required")
         
         # Check uniqueness
-        if UserRepository.check_username_exist(username):
+        if user_repository.check_username_exist(username):
             raise UniqueError("username นี้มีอยู่แล้ว")
         
         hashed_password = hash_bcrypt(password)
@@ -67,7 +67,7 @@ def register_service(data):
             "password": hashed_password
         }
         
-        new_user = UserRepository.create_user(create_user_data)
+        new_user = user_repository.create_user(create_user_data)
         db.session.add(new_user)
         db.session.commit()
         return user_schema.dump(new_user)
@@ -128,7 +128,7 @@ def refresh_token_service(refresh_token):
 
         Tokenlist.query.filter_by(user_id=user_id).delete()
         
-        user = UserRepository.get_user_by_id(user_id)
+        user = user_repository.get_user_by_id(user_id)
         if not user:
             raise NotFoundError("ไม่พบข้อมูลผู้ใช้")
         
