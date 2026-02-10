@@ -6,6 +6,7 @@ from app.exception import NotFoundError
 from app.repositories import ModuleRepository, RoleRepository, UserRepository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
 from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
+from app.exception import AppException
 
 def get_all_roles():
     try:
@@ -422,9 +423,12 @@ def upsert_role_permission(data):
         updated = ModuleRepository.get_all_modules()
         return RolePermissionSchema(many=True).dump(updated)
 
-    except Exception as e:
+    except AppException:
         db.session.rollback()
         raise
+    except Exception as e:
+        db.session.rollback()
+        raise AppException(str(e))
 
 def create_user(data):
     try:
@@ -450,9 +454,12 @@ def create_user(data):
         db.session.commit()
 
         return UserRepository.get_user_by_id(new_user.user_id).username
+    except AppException:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
-        raise e
+        raise AppException(str(e))
 
 
 def get_user_list(data):
@@ -482,8 +489,12 @@ def get_user_list(data):
             "total_pages": result['total_pages']
         }
 
+    except AppException:
+        db.session.rollback()
+        raise
     except Exception as e:
-        raise e
+        db.session.rollback()
+        raise AppException(str(e))
     
 def change_user_role(data):
     try:
@@ -499,9 +510,13 @@ def change_user_role(data):
         db.session.add(role_update)
         db.session.commit()
         return UserRepository.get_user_by_id(user.user_id).username
+    
+    except AppException:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
-        raise e
+        raise AppException(str(e))
 
 def change_user_password(data):
     try:
@@ -529,10 +544,12 @@ def change_user_password(data):
         db.session.commit()
         return {"message": "เปลี่ยนรหัสผ่านสำเร็จ", "success": True}, 200
 
+    except AppException:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
-        print(f"Error Change Password: {str(e)}")
-        raise e
+        raise AppException(str(e))
 
 
 def ban_user(data):
@@ -562,9 +579,11 @@ def ban_user(data):
             "success": True
         }, 200
 
+    except AppException:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
-        print(f"Error in ban_user: {str(e)}")
-        raise e
+        raise AppException(str(e))
 
 
