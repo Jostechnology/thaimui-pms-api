@@ -52,7 +52,6 @@ def create_user(data):
     except Exception:
         raise
 
-@staticmethod
 def get_user_list_paginated(page, limit, username="", role_id=None):
     try:
         offset = (page - 1) * limit

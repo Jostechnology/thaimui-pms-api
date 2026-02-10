@@ -2,7 +2,7 @@ from app.api_auth import verify_required, decode_and_verify_permission_jwt
 from app.app import app, db
 from flask import request, jsonify, g
 from app.services import user_service
-from app.repositories import RoleRepository, UserRepository
+from app.repositories import role_repository, user_repository
 from sqlalchemy.exc import IntegrityError
 
 @app.route("/api/get_all_roles", methods=["GET", "POST"])
@@ -22,8 +22,7 @@ def api_create_role():
         return jsonify({"success": False, "error": "ชื่อบทบาทนี้มีอยู่ในระบบแล้ว"}), 400
     except Exception as e:
         error_msg = str(e)
-        if "Duplicate entry" in error_msg:
-            return jsonify({"success": False, "error": "ชื่อบทบาทนี้มีอยู่ในระบบแล้ว"}), 400
+        
         return jsonify({"success": False, "error": f"เกิดข้อผิดพลาด: {error_msg}"}), 500
 
 @app.route("/api/get_module_tree", methods=["POST"])

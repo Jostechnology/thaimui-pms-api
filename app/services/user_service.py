@@ -11,7 +11,7 @@ from app.exception import AppException
 
 def create_role(role_data: dict):
     try:
-        new_role = RoleRepository.create_role(role_data)
+        new_role = role_repository.create_role(role_data)
         
         # Add permissions
         module_list = role_data.get("module_list")
@@ -77,7 +77,7 @@ def get_module_tree():
 def get_role_permission(username, role_id):
     try:
         if (not role_id) and username:
-            user = UserRepository.get_user_by_username(username)
+            user = user_repository.get_user_by_username(username)
             if not user:
                 raise NotFoundError("ไม่พบผู้ใข้งาน")
 
