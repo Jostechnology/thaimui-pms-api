@@ -1,12 +1,30 @@
-from app.api_auth import verify_required
+from app.api_auth import verify_required, decode_and_verify_permission_jwt
 from app.app import app, db
-from flask import request, jsonify
+from flask import request, jsonify, g
 from app.services import user_service
+from app.repositories import RoleRepository, UserRepository
+from sqlalchemy.exc import IntegrityError
 
 @app.route("/api/get_all_roles", methods=["GET", "POST"])
 def api_get_all_roles():
     roles = user_service.get_all_roles()
     return jsonify({"data" : roles, "success" : True}), 200
+
+@app.route("/api/create_role", methods=["POST"])
+@verify_required
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "ROLE_MANAGEMENT", "method": "create"}])
+def api_create_role():
+    data = request.get_json()
+    try:
+        res = user_service.create_role(data)
+        return jsonify({"data" : res, "success" : True}), 200
+    except IntegrityError:
+        return jsonify({"success": False, "error": "ชื่อบทบาทนี้มีอยู่ในระบบแล้ว"}), 400
+    except Exception as e:
+        error_msg = str(e)
+        if "Duplicate entry" in error_msg:
+            return jsonify({"success": False, "error": "ชื่อบทบาทนี้มีอยู่ในระบบแล้ว"}), 400
+        return jsonify({"success": False, "error": f"เกิดข้อผิดพลาด: {error_msg}"}), 500
 
 @app.route("/api/get_module_tree", methods=["POST"])
 @verify_required
@@ -23,6 +41,8 @@ def api_get_role_permission():
     return jsonify({"data" : {"module_tree" : module_tree, "signature" : signature, "success" : True}}), 200 
 
 @app.route("/api/create_module", methods=["POST"])
+@verify_required
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "MODULE_MANAGEMENT", "method": "create"}])
 def api_create_module():
     data = request.get_json()
     res = user_service.create_module(data)
@@ -45,10 +65,39 @@ def api_get_module_sorted():
     return jsonify({"data" : res + 1, "success" : True}), 200
 
 @app.route('/api/upsert_role_permission', methods=['PUT'])
+@verify_required
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "ROLE_MANAGEMENT", "method": "edit"}])
 def upsert_role_permission():
     data = request.get_json()
+    role_id = data.get("role_id")
+
+    try:
+        current_username = getattr(g, "username", None)
+        if not current_username:
+            return jsonify({"error": "Permission denied"}), 403
+
+        current_user = UserRepository.get_user_by_username(current_username)
+        if not current_user:
+            return jsonify({"error": "Permission denied"}), 403
+
+        current_user_role = RoleRepository.get_role_by_id(current_user.role_id)
+        is_admin = current_user_role and (getattr(current_user_role, "role_code", "") or "").lower() == "admin"
+
+        # Guard 1: ห้าม user แก้ role ตัวเอง (ป้องกัน privilege escalation) ยกเว้น Admin
+        if role_id and current_user.role_id == int(role_id) and not is_admin:
+            return jsonify({"error": "Permission denied: ไม่สามารถแก้ไข role ของตัวเองได้"}), 403
+
+        # Guard 2: ถ้า target role เป็น Admin ให้เฉพาะ Admin เท่านั้นที่แก้ได้
+        if role_id:
+            target_role = RoleRepository.get_role_by_id(role_id)
+            if target_role and (getattr(target_role, "role_code", "") or "").lower() == "admin" and not is_admin:
+                return jsonify({"error": "Permission denied: only admin can edit Admin role"}), 403
+
+    except Exception:
+        return jsonify({"error": "Permission denied"}), 403
+
     res = user_service.upsert_role_permission(data)
-    return jsonify({"data" : res, "success" : True}), 200
+    return jsonify({"data": res, "success": True}), 200
 
 @app.route("/api/create_user", methods=["POST"]) #add_limiter??
 @verify_required
@@ -103,6 +152,8 @@ def api_ban_user():
         return jsonify({"error": str(e)}), 500    
 
 @app.route('/api/edit_module/<int:module_id>', methods=['PUT'])
+@verify_required
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "MODULE_MANAGEMENT", "method": "edit"}])
 def api_edit_module(module_id=None):
     data = request.get_json()
     if module_id is None:
@@ -113,6 +164,8 @@ def api_edit_module(module_id=None):
 
 
 @app.route('/api/delete_module/<int:module_id>', methods=['DELETE'])
+@verify_required
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "MODULE_MANAGEMENT", "method": "delete"}])
 def api_delete_module(module_id=None):
     data = request.get_json()
     if module_id is None:

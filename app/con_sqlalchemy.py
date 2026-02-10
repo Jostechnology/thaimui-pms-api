@@ -1,11 +1,18 @@
 from app.app import db
-from datetime import date, datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timezone, timedelta
 from sqlalchemy import event
 from flask import g
 
 def bangkok_now():
-    return datetime.now(ZoneInfo("Asia/Bangkok"))
+    """Return current datetime in Asia/Bangkok. If zoneinfo/tzdata is unavailable,
+    fall back to UTC+7 offset to avoid import-time errors on Windows.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Bangkok"))
+    except Exception:
+        # tzdata not available in this environment — fallback to UTC+7
+        return datetime.utcnow() + timedelta(hours=7)
 
 class BaseModel(db.Model):
     __abstract__ = True

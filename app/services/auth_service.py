@@ -90,9 +90,9 @@ def logout_service(refresh_token):
         if decoded:
             user_id = decoded.get("user_id")
             
-            # ลบ token ปัจจุบันออกจาก whitelist
-            Tokenlist.query.filter_by(user_id=user_id).delete()
-            db.session.commit()
+        # ลบเฉพาะ access token เก่าที่หมดอายุ (ไม่ลบ refresh token ที่กำลังใช้)
+        Tokenlist.query.filter_by(user_id=user_id, token_type="access").delete()
+        db.session.commit()
         
         return {"message": "Logged out successfully"}
     

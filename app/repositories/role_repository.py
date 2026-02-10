@@ -9,6 +9,23 @@ def get_all_roles():
     except Exception:
         raise
 
+
+def create_role(role_data: dict):
+    try:
+        new_role = Role(
+            role_code=role_data.get("role_code"),
+            role_name=role_data.get("role_name"),
+            description=role_data.get("description"),
+            active_flag=role_data.get("active_flag", True)
+        )
+        db.session.add(new_role)
+        db.session.commit()
+        return new_role
+    except Exception:
+        db.session.rollback()
+        raise
+    
+
 def get_role_by_id(id : int):
     try:
         role = db.session.query(Role).filter(Role.role_id == id).first()

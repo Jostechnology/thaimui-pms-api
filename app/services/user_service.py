@@ -8,6 +8,25 @@ from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, Modu
 from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
 from app.exception import AppException
 
+
+def create_role(role_data: dict):
+    try:
+        new_role = RoleRepository.create_role(role_data)
+        
+        # Add permissions
+        module_list = role_data.get("module_list")
+        if module_list:
+            upsert_data = {
+                "role_id": new_role.role_id,
+                "module_list": module_list
+            }
+            upsert_role_permission(upsert_data)
+
+        return RoleSchema().dump(new_role)
+    except Exception as e:
+        raise e
+
+
 def get_all_roles():
     try:
         roles = role_repository.get_all_roles()
@@ -57,8 +76,8 @@ def get_module_tree():
 
 def get_role_permission(username, role_id):
     try:
-        if username:
-            user = user_repository.get_user_by_username(username)
+        if (not role_id) and username:
+            user = UserRepository.get_user_by_username(username)
             if not user:
                 raise NotFoundError("ไม่พบผู้ใข้งาน")
 
