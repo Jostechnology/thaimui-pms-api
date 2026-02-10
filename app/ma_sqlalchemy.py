@@ -48,4 +48,9 @@ class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.String()
     created_date = fields.DateTime()
-    
+
+class EmployeeSchema(Schema):
+    employee_id = fields.Integer()
+    salary = fields.Float()
+    user_id = fields.Integer()
+    created_date = fields.DateTime()
