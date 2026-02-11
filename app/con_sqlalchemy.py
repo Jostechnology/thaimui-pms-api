@@ -157,6 +157,8 @@ class SalesItem(AuditMixin):
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
     doc_num = db.Column(db.String(50), nullable=False)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'))
+
 
 class WorkItem(AuditMixin):
     __tablename__ = "t_work_items"
