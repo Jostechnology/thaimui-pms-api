@@ -6,7 +6,7 @@ def get_all_employees(data):
     try:
         search = data.get("search", "")
         items =  employee_repository.get_all_employees(search)
-        return EmployeeSchema(many=True).dump(items)
+        return {"items": EmployeeSchema(many=True).dump(items)}
     except Exception:
         raise
 
