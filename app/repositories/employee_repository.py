@@ -1,13 +1,13 @@
 from app.con_sqlalchemy import Employee
 from app.app import db
 
-def get_all_employees(page, limit, search):
+def get_all_employees(search):
     try:
         query = Employee.query
         if search:
             query = query.filter(Employee.employee_id.ilike(f"%{search}%"))
-        query = query.paginate(page=page, per_page=limit, error_out=False)
-        return {"items": query.items, "total_pages": query.pages}
+        items = query.all()
+        return items
     except Exception:
         raise
 

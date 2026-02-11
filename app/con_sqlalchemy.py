@@ -122,6 +122,8 @@ class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'), nullable=False)
+    phase_name = db.Column(db.String(100), nullable=False)
+    phase_status = db.Column(db.String(50), nullable=False , default='Pending')
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
 

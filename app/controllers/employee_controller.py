@@ -7,10 +7,8 @@ from app.services.employee_service import get_all_employees, create_employee
 @verify_required
 def api_get_employee_list():
     try:
-        page = request.args.get("page", 1, type=int)
-        limit = request.args.get("limit", 10, type=int)
         search = request.args.get("search", "", type=str)
-        data = {"page": page, "limit": limit, "search": search}
+        data = {"search": search}
         
         result = get_all_employees(data)
         return jsonify({"data": result, "success": True}), 200  
