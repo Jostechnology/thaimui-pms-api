@@ -8,11 +8,10 @@ def create_work_phase(data):
             work_order_id=data.get("work_order_id"),
             phase_name=data.get("phase_name"),
             start_date=data.get("start_date"),
-            end_date=data.get("end_date"),
         )
         db.session.add(work_phase)
         db.session.flush()  # get work_phase_id before committing
-
+        work_phase.work_order.current_phase_id = work_phase.work_phase_id
         # Create WorkAssignment for each employee
         employee_id_list = data.get("employee_id_list", [])
         for employee_id in employee_id_list:

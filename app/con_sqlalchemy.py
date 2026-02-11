@@ -117,6 +117,8 @@ class WorkOrder(AuditMixin):
     work_order_id = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.String(50), nullable=False)
     status = db.Column(db.String(50), nullable=False , default='Ready')
+    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
+    current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
 
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
@@ -126,6 +128,9 @@ class WorkPhase(AuditMixin):
     phase_status = db.Column(db.String(50), nullable=False , default='Pending')
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
+    employee_list = db.relationship('Employee', secondary='t_work_assignment', backref='work_phases', lazy='selectin')
+    sales_item_list = db.relationship('SalesItem', secondary='t_work_items', backref='work_phases', lazy='selectin')
+    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref='work_phases', lazy='selectin')
 
 class Employee(AuditMixin):
     __tablename__ = "m_employee"

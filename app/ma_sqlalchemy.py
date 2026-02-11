@@ -44,19 +44,9 @@ class RolePermissionSchema(SQLAlchemyAutoSchema):
         model = RolePermission
         load_instance = True
 
-class WorkOrderSchema(Schema):
-    work_order_id = fields.Integer()
-    doc_num = fields.String()
-    created_date = fields.DateTime()
 
-class WorkPhaseSchema(Schema):
-    work_phase_id = fields.Integer()
-    work_order_id = fields.Integer()
-    phase_name = fields.String()
-    phase_status = fields.String()
-    start_date = fields.DateTime()
-    end_date = fields.DateTime()
-    created_date = fields.DateTime()
+
+
 
 class EmployeeSchema(Schema):
     employee_id = fields.Integer()
@@ -75,6 +65,22 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.String()
+class WorkPhaseSchema(Schema):
+    work_phase_id = fields.Integer()
+    work_order_id = fields.Integer()
+    phase_name = fields.String()
+    phase_status = fields.String()
+    start_date = fields.DateTime()
+    end_date = fields.DateTime()
+    created_date = fields.DateTime()
+    employee_list = fields.List(fields.Nested(EmployeeSchema()))
+    sales_item_list = fields.List(fields.Nested(SalesItemSchema()))
+class WorkOrderSchema(Schema):
+    work_order_id = fields.Integer()
+    doc_num = fields.String()
+    created_date = fields.DateTime()
+    status = fields.String()
+    current_phase = fields.Nested(WorkPhaseSchema())
 
 class MaterialListSchema(Schema):
     material_list_id = fields.Integer()
