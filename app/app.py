@@ -58,6 +58,8 @@ from .controllers import auth_controller
 from .controllers import user_controller
 from .controllers import work_order_controller
 from .controllers import employee_controller
+from .controllers import sales_item_controller
+from .controllers import material_list_controller
 
 with app.app_context():
     db.create_all()

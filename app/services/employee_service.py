@@ -11,3 +11,11 @@ def get_all_employees(data):
         return {"items": EmployeeSchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
     except Exception:
         raise
+
+
+def create_employee(data):
+    try:
+        employee = employee_repository.create_employee(data)
+        return EmployeeSchema().dump(employee)
+    except Exception:
+        raise

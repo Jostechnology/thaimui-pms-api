@@ -10,3 +10,20 @@ def get_all_employees(page, limit, search):
         return {"items": query.items, "total_pages": query.pages}
     except Exception:
         raise
+
+
+def create_employee(data):
+    try:
+        employee = Employee(
+            employee_first_name=data.get("employee_first_name"),
+            employee_last_name=data.get("employee_last_name"),
+            citizen_id=data.get("citizen_id"),
+            status=data.get("status", "ว่างงาน"),
+            user_id=data.get("user_id"),
+        )
+        db.session.add(employee)
+        db.session.commit()
+        return employee
+    except Exception:
+        db.session.rollback()
+        raise

@@ -10,3 +10,17 @@ def get_all_work_orders(page, limit, search):
         return {"items": query.items, "total_pages": query.pages}
     except Exception:
         raise
+
+
+def create_work_order(data):
+    try:
+        work_order = WorkOrder(
+            doc_num=data.get("doc_num"),
+            status=data.get("status", "Ready"),
+        )
+        db.session.add(work_order)
+        db.session.commit()
+        return work_order
+    except Exception:
+        db.session.rollback()
+        raise

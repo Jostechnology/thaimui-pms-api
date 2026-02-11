@@ -51,6 +51,31 @@ class WorkOrderSchema(Schema):
 
 class EmployeeSchema(Schema):
     employee_id = fields.Integer()
-    salary = fields.Float()
+    employee_first_name = fields.String()
+    employee_last_name = fields.String()
+    citizen_id = fields.String()
+    status = fields.String()
     user_id = fields.Integer()
+    created_date = fields.DateTime()
+
+class SalesItemSchema(Schema):
+    sales_item_id = fields.Integer()
+    item_code = fields.String()
+    item_num = fields.Integer()
+    item_name = fields.String()
+    item_description = fields.String()
+    cost_price = fields.Float()
+    unit_price = fields.Float()
+    doc_num = fields.String()
+    created_date = fields.DateTime()
+
+class MaterialListSchema(Schema):
+    material_list_id = fields.Integer()
+    sales_item_id = fields.Integer()
+    item_code = fields.String()
+    item_name = fields.String()
+    item_description = fields.String()
+    item_num = fields.Integer()
+    cost_price = fields.Float()
+    unit_price = fields.Float()
     created_date = fields.DateTime()

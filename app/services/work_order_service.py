@@ -11,3 +11,11 @@ def get_all_work_orders(data):
         return {"items": WorkOrderSchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
     except Exception:
         raise
+
+
+def create_work_order(data):
+    try:
+        work_order = work_order_repository.create_work_order(data)
+        return WorkOrderSchema().dump(work_order)
+    except Exception:
+        raise

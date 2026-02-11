@@ -116,6 +116,7 @@ class WorkOrder(AuditMixin):
     __tablename__ = "t_work_order"
     work_order_id = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(50), nullable=False , default='Ready')
 
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
