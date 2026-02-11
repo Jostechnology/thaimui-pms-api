@@ -127,7 +127,10 @@ class WorkPhase(AuditMixin):
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
     employee_id = db.Column(db.Integer, primary_key=True)
-    salary = db.Column(db.Float, nullable=False)
+    employee_first_name = db.Column(db.String(100), nullable=False)
+    employee_last_name = db.Column(db.String(100), nullable=False)
+    citizen_id = db.Column(db.String(20), unique=True, nullable=False)
+    status = db.Column(db.String(50), nullable=False , default='ว่างงาน')
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
 
 class WorkAssignment(AuditMixin):
