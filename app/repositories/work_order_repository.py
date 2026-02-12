@@ -11,6 +11,12 @@ def get_all_work_orders(page, limit, search):
     except Exception:
         raise
 
+def get_work_order_by_id(work_order_id):
+    try:
+        work_order = WorkOrder.query.get(work_order_id)
+        return work_order
+    except Exception:
+        raise
 
 def create_work_order(data):
     try:
