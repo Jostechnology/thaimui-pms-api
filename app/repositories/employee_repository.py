@@ -1,0 +1,29 @@
+from app.con_sqlalchemy import Employee
+from app.app import db
+
+def get_all_employees(search):
+    try:
+        query = Employee.query
+        if search:
+            query = query.filter(Employee.employee_id.ilike(f"%{search}%"))
+        items = query.all()
+        return items
+    except Exception:
+        raise
+
+
+def create_employee(data):
+    try:
+        employee = Employee(
+            employee_first_name=data.get("employee_first_name"),
+            employee_last_name=data.get("employee_last_name"),
+            citizen_id=data.get("citizen_id"),
+            status=data.get("status", "ว่างงาน"),
+            user_id=data.get("user_id"),
+        )
+        db.session.add(employee)
+        db.session.commit()
+        return employee
+    except Exception:
+        db.session.rollback()
+        raise

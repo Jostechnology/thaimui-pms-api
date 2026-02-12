@@ -12,6 +12,16 @@ def get_user_by_username(username):
     except Exception:
         raise
 
+def get_user_by_id(user_id):
+    try:
+        user = db.session.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            raise NotFoundError("ไม่พบผู้ใช้งาน")
+        return user
+    
+    except Exception:
+        raise
+
 def check_username_exist(username):
     try:
         u_name = db.session.query(User.username).filter(User.username == username).first()
@@ -42,7 +52,6 @@ def create_user(data):
     except Exception:
         raise
 
-@staticmethod
 def get_user_list_paginated(page, limit, username="", role_id=None):
     try:
         offset = (page - 1) * limit

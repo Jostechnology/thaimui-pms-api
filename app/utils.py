@@ -1,4 +1,4 @@
-import jwt, uuid
+import jwt, uuid ,json, base64
 from  app.config import JWT_SECRET_KEY
 from datetime import datetime, timedelta, time
 import bcrypt
@@ -62,3 +62,36 @@ def convert_end_date(end_date):
         datetime.strptime(end_date, "%Y-%m-%d").date(),
         time.max
     )
+
+
+def check_true_permissions(authorizes, permission_tree):
+    """
+    ตรวจสอบว่า permission_tree มี permission ที่ต้องการทั้งหมดหรือไม่
+    authorizes: list of dict เช่น [{"module_code": "USER", "method": "read"}]
+    permission_tree: list of module dict ที่มี permission และ sub_modules
+    raises ValueError ถ้าไม่มีสิทธิ์
+    """
+    if not authorizes:
+        return
+
+    def find_module_permissions(modules, module_code):
+        for m in modules:
+            if m.get("module_code") == module_code:
+                return m.get("permission", [])
+            for sm in m.get("sub_modules", []):
+                if sm.get("module_code") == module_code:
+                    return sm.get("permission", [])
+        return []
+
+    for auth in authorizes:
+        module_code = auth.get("module_code")
+        method = auth.get("method")
+        permissions = find_module_permissions(permission_tree, module_code)
+
+        granted = any(
+            isinstance(p, dict) and p.get("method") == method and p.get("check") is True
+            for p in permissions
+        )
+
+        if not granted:
+            raise ValueError(f"ไม่มีสิทธิ์ '{method}' สำหรับ module '{module_code}'")

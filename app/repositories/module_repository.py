@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import Module, Permission, Role_permission
+from app.con_sqlalchemy import Module, Permission, RolePermission
 from app.app import db
 from sqlalchemy import desc
 
@@ -91,7 +91,7 @@ def get_sub_module_hightest(module_id):
 
 def deactivate_role_permission_of_role(role_id):
     try:
-        role_permissions = db.session.query(Role_permission).filter(Role_permission.role_id == role_id).all()
+        role_permissions = db.session.query(RolePermission).filter(RolePermission.role_id == role_id).all()
         for rp in role_permissions:
             rp.active_flag = False
     
@@ -100,7 +100,7 @@ def deactivate_role_permission_of_role(role_id):
 
 def get_role_permission_of_role_and_permission(role_id, permission_id):
     try:
-        role_permission = db.session.query(Role_permission).filter(Role_permission.role_id == role_id, Role_permission.permission_id == permission_id).first()
+        role_permission = db.session.query(RolePermission).filter(RolePermission.role_id == role_id, RolePermission.permission_id == permission_id).first()
         return role_permission
     except Exception:
         raise
@@ -109,7 +109,7 @@ def create_role_permission(data):
     try:
         role_id = data.get("role_id")
         permission_id = data.get("permission_id")
-        role_permission = Role_permission(
+        role_permission = RolePermission(
             role_id=role_id, permission_id=permission_id, active_flag=True
         )
         return role_permission
@@ -164,7 +164,7 @@ def get_permission_by_module(module_id, method):
 
 def get_all_role_permission():
     try:
-        role_permissions = db.session.query(Role_permission).all()
+        role_permissions = db.session.query(RolePermission).all()
         return role_permissions
     except Exception:
         raise

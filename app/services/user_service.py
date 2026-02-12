@@ -3,13 +3,33 @@ from copy import deepcopy
 import json
 from app.app import db
 from app.exception import AppException, MissingFieldsError, NotFoundError, UniqueError
-from app.repositories import ModuleRepository, RoleRepository, UserRepository
+from app.repositories import module_repository, role_repository, user_repository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
 from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
+from app.exception import AppException
+
+
+def create_role(role_data: dict):
+    try:
+        new_role = role_repository.create_role(role_data)
+        
+        # Add permissions
+        module_list = role_data.get("module_list")
+        if module_list:
+            upsert_data = {
+                "role_id": new_role.role_id,
+                "module_list": module_list
+            }
+            upsert_role_permission(upsert_data)
+
+        return RoleSchema().dump(new_role)
+    except Exception as e:
+        raise e
+
 
 def get_all_roles():
     try:
-        roles = RoleRepository.get_all_roles()
+        roles = role_repository.get_all_roles()
         sche = RoleSchema(many=True)
         return sche.dump(roles)
     except Exception as e:
@@ -17,11 +37,11 @@ def get_all_roles():
 
 def get_module_tree():
     try:
-        modules = ModuleRepository.get_all_modules()
+        modules = module_repository.get_all_modules()
         module_dict = {}
         for mod in modules:
             if mod.level == 1:
-                perm_query = ModuleRepository.get_permissions_of_module(mod)
+                perm_query = module_repository.get_permissions_of_module(mod)
                 perm_res = GetPermissionSchema(many=True).dump(perm_query)
                 perm_ls = []
                 for perm in perm_res:
@@ -36,7 +56,7 @@ def get_module_tree():
                     "sort_order": mod.sort_order,
                 }
             elif mod.level == 2 and mod.parent_id in module_dict:
-                perm_query = ModuleRepository.get_permissions_of_module(mod)
+                perm_query = module_repository.get_permissions_of_module(mod)
                 perm_res = GetPermissionSchema(many=True).dump(perm_query)
                 perm_ls = []
                 for perm in perm_res:
@@ -56,17 +76,17 @@ def get_module_tree():
 
 def get_role_permission(username, role_id):
     try:
-        if username:
-            user = UserRepository.get_user_by_username(username)
+        if (not role_id) and username:
+            user = user_repository.get_user_by_username(username)
             if not user:
                 raise NotFoundError("ไม่พบผู้ใข้งาน")
 
             role_id = user.role_id
-            role = RoleRepository.get_role_by_id(role_id)
+            role = role_repository.get_role_by_id(role_id)
             if not role:
                 raise NotFoundError("ไม่พบ Role")
 
-        role_permission = RoleRepository.get_active_permissions_by_role(role_id)
+        role_permission = role_repository.get_active_permissions_by_role(role_id)
         if not role_permission:
             role_permission = []
 
@@ -162,19 +182,19 @@ def create_module(data):
         create_permission_list = []
 
         if level == 1 and sort_order == 0:
-            sort_order = ModuleRepository.get_module_highest_order()
+            sort_order = module_repository.get_module_highest_order()
             sort_order = sort_order.sort_order + 1 if sort_order else 1
 
         if not module_name or not module_code:
             raise MissingFieldsError("Missing module_name or module_code")
 
-        existing = ModuleRepository.get_module_by_code(module_code)
+        existing = module_repository.get_module_by_code(module_code)
         if existing:
             raise UniqueError("Module Already exists")
         
 
         if parent_id:
-            parent = ModuleRepository.get_module_by_id(parent_id)
+            parent = module_repository.get_module_by_id(parent_id)
             if not parent:
                 raise NotFoundError("Parent module not found")
 
@@ -186,7 +206,7 @@ def create_module(data):
             "level" : level,
         }
 
-        new_module = ModuleRepository.create_module(create_obj)
+        new_module = module_repository.create_module(create_obj)
         db.session.add(new_module)
         db.session.flush()
         per_view = "view."
@@ -255,7 +275,7 @@ def create_module(data):
                     create_permission_list.append(permiss_dict)
 
         for perm in create_permission_list:
-            permission = ModuleRepository.create_permission(perm)
+            permission = module_repository.create_permission(perm)
             db.session.add(permission)
 
         db.session.commit()
@@ -267,7 +287,7 @@ def create_module(data):
     
 def edit_module(module_id,data):
     try:
-        module = ModuleRepository.get_module_by_id(module_id)
+        module = module_repository.get_module_by_id(module_id)
         if not module:
             return {"error": "Module not found"}, 404
 
@@ -279,7 +299,7 @@ def edit_module(module_id,data):
         if not module_name or not module_code:
             raise MissingFieldsError("Missing module_name or module_code")
 
-        existing = ModuleRepository.get_module_by_code(module_code)
+        existing = module_repository.get_module_by_code(module_code)
         if existing and existing.module_id != module_id:
             raise UniqueError("Module code already exists")
 
@@ -288,7 +308,7 @@ def edit_module(module_id,data):
         module.sort_order = sort_order
 
         # Update permissions: diff-based (keep existing, delete removed, add new)
-        existing_permissions = ModuleRepository.get_permissions_of_module(module)
+        existing_permissions = module_repository.get_permissions_of_module(module)
         new_methods = set(permission_list) if permission_list else set()
 
         # ลบ permission ที่ไม่อยู่ใน list ใหม่
@@ -312,7 +332,7 @@ def edit_module(module_id,data):
                 "module_id": module.module_id,
                 "method": method,
             }
-            new_permission = ModuleRepository.create_permission(permiss_dict)
+            new_permission = module_repository.create_permission(permiss_dict)
             db.session.add(new_permission)
 
         db.session.commit()
@@ -324,11 +344,11 @@ def edit_module(module_id,data):
 
 def delete_module(module_id):
     try:
-        module = ModuleRepository.get_module_by_id(module_id)
+        module = module_repository.get_module_by_id(module_id)
         if not module:
             raise NotFoundError("Module not found")
 
-        ModuleRepository.delete_module_by_id(module_id)
+        module_repository.delete_module_by_id(module_id)
         db.session.commit()
 
         return {"message": "Module deleted successfully"}
@@ -339,7 +359,7 @@ def delete_module(module_id):
     
 def get_module(module_id):
     try:
-        module = ModuleRepository.get_module_by_id(module_id)
+        module = module_repository.get_module_by_id(module_id)
         if not module:
             raise NotFoundError("ไม่พบ Module")
         return ModuleSchema().dump(module)
@@ -348,14 +368,14 @@ def get_module(module_id):
 
 def get_modules_main():
     try:
-        modules = ModuleRepository.get_main_modules()
+        modules = module_repository.get_main_modules()
         return ModuleSchema(many=True).dump(modules)
     except Exception as e:
         raise e
     
 def get_module_sorted(module_id):
     try:
-        module = ModuleRepository.get_sub_module_hightest(module_id)
+        module = module_repository.get_sub_module_hightest(module_id)
         if not module:
             return 0
         return module.sort_order
@@ -364,10 +384,10 @@ def get_module_sorted(module_id):
 
 def update_role_permissions(role_id, permission_ids):
     try:
-        ModuleRepository.deactivate_role_permission_of_role()
+        module_repository.deactivate_role_permission_of_role()
 
         for pid in permission_ids:
-            rp = ModuleRepository.get_role_permission_of_role_and_permission(role_id, pid)
+            rp = module_repository.get_role_permission_of_role_and_permission(role_id, pid)
             if rp:
                 rp.active_flag = True
             else:
@@ -375,7 +395,7 @@ def update_role_permissions(role_id, permission_ids):
                     "role_id" : role_id,
                     "permission_id" : pid
                 }
-                new_rp = ModuleRepository.create_role_permission(create_obj)
+                new_rp = module_repository.create_role_permission(create_obj)
                 db.session.add(new_rp)
 
         db.session.commit()
@@ -398,15 +418,15 @@ def upsert_role_permission(data):
             method = module.get("method")
             if not module_id or not method:
                 continue
-            mr = ModuleRepository.get_permission_by_module(module_id, method)
+            mr = module_repository.get_permission_by_module(module_id, method)
             if mr and mr.permission_id is not None:
                 permission_id_list.append(mr.permission_id)
 
-        ModuleRepository.deactivate_role_permission_of_role(role_id)
+        module_repository.deactivate_role_permission_of_role(role_id)
 
 
         for pid in permission_id_list:
-            existing = ModuleRepository.get_role_permission_of_role_and_permission(role_id, pid)
+            existing = module_repository.get_role_permission_of_role_and_permission(role_id, pid)
             if existing:
                 existing.active_flag = True
             else:
@@ -414,17 +434,20 @@ def upsert_role_permission(data):
                     "role_id" : role_id,
                     "permission_id" : pid
                 }
-                new_rp = ModuleRepository.create_role_permission(create_obj)
+                new_rp = module_repository.create_role_permission(create_obj)
                 db.session.add(new_rp)
 
         db.session.commit()
 
-        updated = ModuleRepository.get_all_modules()
+        updated = module_repository.get_all_modules()
         return RolePermissionSchema(many=True).dump(updated)
 
-    except Exception as e:
+    except AppException:
         db.session.rollback()
         raise
+    except Exception as e:
+        db.session.rollback()
+        raise AppException(str(e))
 
 def create_user(data):
     try:
@@ -434,7 +457,7 @@ def create_user(data):
         if not username or not password:
             raise MissingFieldsError("Missing username, password, or role_id")
 
-        if UserRepository.check_username_exist(username):
+        if user_repository.check_username_exist(username):
             raise UniqueError("User already Exists")
 
         hashed_password = hash_bcrypt(password)
@@ -445,14 +468,14 @@ def create_user(data):
             "role_id" :  role_id
         }
 
-        new_user = UserRepository.create_user(create_obj)
+        new_user = user_repository.create_user(create_obj)
         db.session.add(new_user)
         db.session.commit()
 
-        return UserRepository.get_user_by_id(new_user.user_id).username
+        return user_repository.get_user_by_id(new_user.user_id).username
     except Exception as e:
         db.session.rollback()
-        raise e
+        raise AppException(str(e))
 
 
 def get_user_list(data):
@@ -462,7 +485,7 @@ def get_user_list(data):
         username = data.get("search", "")
         role_id = data.get("filter") 
 
-        result = UserRepository.get_user_list_paginated(
+        result = user_repository.get_user_list_paginated(
             page=page, 
             limit=limit, 
             username=username, 
@@ -482,8 +505,12 @@ def get_user_list(data):
             "total_pages": result['total_pages']
         }
 
+    except AppException:
+        db.session.rollback()
+        raise
     except Exception as e:
-        raise e
+        db.session.rollback()
+        raise AppException(str(e))
     
 def change_user_role(data):
     try:
@@ -491,17 +518,17 @@ def change_user_role(data):
         role_id = data.get("role_id")
         update_by = data.get("update_by")
 
-        user = UserRepository.get_user_by_username(username)
+        user = user_repository.get_user_by_username(username)
         if not user:
             raise NotFoundError("User not found")
         
-        role_update = UserRepository.change_user_role(username, role_id)
+        role_update = user_repository.change_user_role(username, role_id)
         db.session.add(role_update)
         db.session.commit()
-        return UserRepository.get_user_by_id(user.user_id).username
+        return user_repository.get_user_by_id(user.user_id).username
     except Exception as e:
         db.session.rollback()
-        raise e
+        raise AppException(str(e))
 
 def change_user_password(data):
     try:
@@ -509,7 +536,7 @@ def change_user_password(data):
         new_password_raw = data.get("new_password")
         old_password_raw = data.get("old_password")
 
-        user = UserRepository.get_user_by_username(username)
+        user = user_repository.get_user_by_username(username)
         if not user:
             raise NotFoundError("User not found")
         
@@ -524,7 +551,7 @@ def change_user_password(data):
 
         hashed_new_password = hash_bcrypt(new_password_raw)
 
-        UserRepository.update_user_password(username, hashed_new_password)
+        user_repository.update_user_password(username, hashed_new_password)
         
         db.session.commit()
         return {"message": "เปลี่ยนรหัสผ่านสำเร็จ", "success": True}
@@ -546,7 +573,7 @@ def ban_user(data):
         
         updated_by = data.get("updated_by")
 
-        user = UserRepository.get_user_by_username(username)
+        user = user_repository.get_user_by_username(username)
         if not user:
             return NotFoundError("ไม่พบผู้ใช้งานนี้ในระบบ")
 

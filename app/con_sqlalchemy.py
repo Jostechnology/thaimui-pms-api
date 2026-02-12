@@ -1,11 +1,18 @@
 from app.app import db
-from datetime import date, datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timezone, timedelta
 from sqlalchemy import event
 from flask import g
 
 def bangkok_now():
-    return datetime.now(ZoneInfo("Asia/Bangkok"))
+    """Return current datetime in Asia/Bangkok. If zoneinfo/tzdata is unavailable,
+    fall back to UTC+7 offset to avoid import-time errors on Windows.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Bangkok"))
+    except Exception:
+        # tzdata not available in this environment — fallback to UTC+7
+        return datetime.utcnow() + timedelta(hours=7)
 
 class BaseModel(db.Model):
     __abstract__ = True
@@ -98,9 +105,70 @@ class Permission(BaseModel):
     )
 
 
-class Role_permission(BaseModel):
+class RolePermission(BaseModel):
     __tablename__ = "m_role_permission"
     role_permission_id = db.Column(db.Integer, primary_key=True)
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id'), nullable=False)
     permission_id = db.Column(db.Integer, db.ForeignKey('m_permission.permission_id'), nullable=False)
     active_flag = db.Column(db.Boolean, nullable=False)
+
+class WorkOrder(AuditMixin):
+    __tablename__ = "t_work_order"
+    work_order_id = db.Column(db.Integer, primary_key=True)
+    doc_num = db.Column(db.String(50), nullable=False)
+    doc_entry = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(50), nullable=False , default='Ready')
+    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
+    current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
+
+class WorkPhase(AuditMixin):
+    __tablename__ = "t_work_phase"
+    work_phase_id = db.Column(db.Integer, primary_key=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'), nullable=False)
+    phase_name = db.Column(db.String(100), nullable=False)
+    phase_status = db.Column(db.String(50), nullable=False , default='Pending')
+    start_date = db.Column(db.DateTime)
+    end_date = db.Column(db.DateTime)
+    employee_list = db.relationship('Employee', secondary='t_work_assignment', backref='work_phases', lazy='selectin')
+    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref='work_phases', lazy='selectin')
+class Employee(AuditMixin):
+    __tablename__ = "m_employee"
+    employee_id = db.Column(db.Integer, primary_key=True)
+    employee_first_name = db.Column(db.String(100), nullable=False)
+    employee_last_name = db.Column(db.String(100), nullable=False)
+    citizen_id = db.Column(db.String(20), unique=True, nullable=False)
+    phone_number = db.Column(db.String(10), nullable=True)
+    email = db.Column(db.String(100), nullable=True)
+    address = db.Column(db.String(255), nullable=True)
+    status = db.Column(db.String(50), nullable=False , default='ว่างงาน')
+    user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
+
+class WorkAssignment(AuditMixin):
+    __tablename__ = "t_work_assignment"
+    work_assignment_id = db.Column(db.Integer, primary_key=True)
+    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=False)
+    employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
+
+class SalesItem(AuditMixin):
+    __tablename__ = "t_sales_items"
+    sales_item_id = db.Column(db.Integer, primary_key=True)
+    item_code = db.Column(db.String(50), nullable=False)
+    item_num = db.Column(db.Integer, nullable=False)
+    item_name = db.Column(db.String(255), nullable=False)
+    item_description = db.Column(db.String(500))
+    cost_price = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False)
+    doc_num = db.Column(db.String(50), nullable=False)
+    material_list = db.relationship('MaterialList', backref='sales_item', lazy='selectin')
+    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'))
+    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref='sales_item', lazy='selectin')
+class MaterialList(AuditMixin):
+    __tablename__ = "t_material_list"
+    material_list_id = db.Column(db.Integer, primary_key=True)
+    sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
+    item_code = db.Column(db.String(50), nullable=False)
+    item_name = db.Column(db.String(255), nullable=False)
+    item_description = db.Column(db.String(500))
+    item_num = db.Column(db.Integer, nullable=False)
+    cost_price = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False)
