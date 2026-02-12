@@ -25,7 +25,7 @@ def api_create_work_order():
     try:
         data = request.get_json()
         result = create_work_order(data)
-        return jsonify({"data": result, "success": True}), 200
+        return jsonify({"data": {"item" : result}, "success": True}), 200
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500

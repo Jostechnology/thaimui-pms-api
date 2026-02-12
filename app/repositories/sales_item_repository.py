@@ -32,7 +32,7 @@ def create_sales_item(data):
             doc_num=data.get("doc_num"),
         )
         db.session.add(sales_item)
-        db.session.commit()
+        db.session.flush()
         return sales_item
     except Exception:
         db.session.rollback()

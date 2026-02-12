@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkOrder
+from app.con_sqlalchemy import WorkOrder, SalesItem
 from app.app import db
 
 def get_all_work_orders(page, limit, search):
@@ -16,10 +16,11 @@ def create_work_order(data):
     try:
         work_order = WorkOrder(
             doc_num=data.get("doc_num"),
+            doc_entry=data.get("doc_entry"),
             status=data.get("status", "Ready"),
         )
         db.session.add(work_order)
-        db.session.commit()
+        db.session.flush()
         return work_order
     except Exception:
         db.session.rollback()

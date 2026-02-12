@@ -31,7 +31,7 @@ def create_material_list(data):
             unit_price=data.get("unit_price"),
         )
         db.session.add(material)
-        db.session.commit()
+        db.session.flush()
         return material
     except Exception:
         db.session.rollback()

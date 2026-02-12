@@ -74,7 +74,6 @@ class WorkPhaseSchema(Schema):
     end_date = fields.DateTime()
     created_date = fields.DateTime()
     employee_list = fields.List(fields.Nested(EmployeeSchema()))
-    sales_item_list = fields.List(fields.Nested(SalesItemSchema()))
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.String()
