@@ -13,6 +13,12 @@ def get_all_work_orders(data):
     except Exception:
         raise
 
+def get_work_order_by_id(work_order_id):
+    try:
+        work_order = work_order_repository.get_work_order_by_id(work_order_id)
+        return WorkOrderSchema().dump(work_order)
+    except Exception:
+        raise
 
 def create_work_order(data):
     try:
