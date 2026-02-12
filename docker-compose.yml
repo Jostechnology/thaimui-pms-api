@@ -12,6 +12,7 @@ services:
     environment:
       - connection_string=${connection_string}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CENTER_ACCESS_KEY=${CENTER_ACCESS_KEY}
 
     volumes:
       - "/etc/localtime:/etc/localtime:ro"
