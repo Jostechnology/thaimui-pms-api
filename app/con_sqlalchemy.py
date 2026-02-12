@@ -137,6 +137,9 @@ class Employee(AuditMixin):
     employee_first_name = db.Column(db.String(100), nullable=False)
     employee_last_name = db.Column(db.String(100), nullable=False)
     citizen_id = db.Column(db.String(20), unique=True, nullable=False)
+    phone_number = db.Column(db.String(10), nullable=True)
+    email = db.Column(db.String(100), nullable=True)
+    address = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), nullable=False , default='ว่างงาน')
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
 
