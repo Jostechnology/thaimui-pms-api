@@ -1,4 +1,5 @@
 from app.con_sqlalchemy import Tokenlist
+from app.config import CENTER_ACCESS_KEY
 from app.utils import decode_token, check_true_permissions
 from functools import wraps
 from flask import request, jsonify, g
@@ -25,6 +26,10 @@ def verify_required(f):
 
         if not token:
             return jsonify({"message": "Missing token"}), 401
+        
+        if token == CENTER_ACCESS_KEY:
+            g.username = "SYSTEM_CENTER"
+            return f(*args, **kwargs)
 
         decoded = decode_token(token)
         if not decoded:
