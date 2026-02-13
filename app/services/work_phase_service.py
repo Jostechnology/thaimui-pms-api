@@ -1,12 +1,14 @@
 from app.con_sqlalchemy import WorkPhase, WorkAssignment
 from app.ma_sqlalchemy import WorkPhaseSchema
-from app.repositories import work_phase_repository
+from app.repositories import work_order_repository, work_phase_repository
 from app.app import db
 
 
 def create_work_phase(data):
     try:
         work_phases = []
+        work_order = work_order_repository.get_work_order_by_id(data.get("work_order_id"))
+        work_order.status = "Working"
         for item in data.get("items", []):
             work_phase = WorkPhase(
                 work_order_id=item.get("work_order_id"),
