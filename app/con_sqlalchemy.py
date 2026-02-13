@@ -121,6 +121,8 @@ class WorkOrder(AuditMixin):
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
 
+VALID_PHASE_STATUSES = ["Pending", "InProgress", "Completed", "Cancel"]
+
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
