@@ -19,17 +19,8 @@ def get_all_material_lists(page, limit, search):
         raise
 
 
-def create_material_list(data):
+def create_material_list(material):
     try:
-        material = MaterialList(
-            sales_item_id=data.get("sales_item_id"),
-            item_code=data.get("item_code"),
-            item_name=data.get("item_name"),
-            item_description=data.get("item_description"),
-            item_num=data.get("item_num"),
-            cost_price=data.get("cost_price"),
-            unit_price=data.get("unit_price"),
-        )
         db.session.add(material)
         db.session.flush()
         return material
