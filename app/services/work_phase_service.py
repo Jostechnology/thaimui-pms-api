@@ -30,44 +30,42 @@ def create_work_phase(data):
         raise
 
 
-def update_work_phase(work_phase_id, data):
+def update_work_phase(data):
     try:
-        work_phase = work_phase_repository.get_work_phase_by_id(work_phase_id)
-        if not work_phase:
-            raise Exception("Work phase not found")
-        
-        if "phase_name" in data:
-            work_phase.phase_name = data["phase_name"]
+        results = []
+        for item in data.get("items", []):
+            work_phase_id = item.get("work_phase_id")
+            work_phase = work_phase_repository.get_work_phase_by_id(work_phase_id)
+            if not work_phase:
+                raise Exception(f"Work phase id {work_phase_id} not found")
+            
+            if "phase_name" in item:
+                work_phase.phase_name = item["phase_name"]
 
-        if "phase_status" in data:
-            work_phase.phase_status = data["phase_status"]
+            if "phase_status" in item:
+                work_phase.phase_status = item["phase_status"]
 
-        if "end_date" in data:
-            work_phase.end_date = data["end_date"]
+            if "end_date" in item:
+                work_phase.end_date = item["end_date"]
 
-        if "employee_id_list" in data:
-            work_phase_repository.delete_work_assignments_by_phase(work_phase_id)
-            for employee_id in data["employee_id_list"]:
-                assignment = WorkAssignment(
-                    work_phase_id=work_phase_id,
-                    employee_id=employee_id,
-                )
-                work_phase_repository.create_work_assignment(assignment)
+            if "employee_id_list" in item:
+                work_phase_repository.delete_work_assignments_by_phase(work_phase_id)
+                for employee_id in item["employee_id_list"]:
+                    assignment = WorkAssignment(
+                        work_phase_id=work_phase_id,
+                        employee_id=employee_id,
+                    )
+                    work_phase_repository.create_work_assignment(assignment)
 
-        work_phase = work_phase_repository.update_work_phase(work_phase)
+            work_phase = work_phase_repository.update_work_phase(work_phase)
+            results.append(work_phase)
+
         db.session.commit()
-        return WorkPhaseSchema().dump(work_phase)
+        return WorkPhaseSchema(many=True).dump(results)
     except Exception:
         db.session.rollback()
-def update_phase_status(work_phase_id, data):
-    try:
-        new_status = data.get("phase_status")
-        if not new_status:
-            raise ValueError("phase_status is required")
-        work_phase = work_phase_repository.update_phase_status(work_phase_id, new_status)
-        return WorkPhaseSchema().dump(work_phase)
-    except Exception:
         raise
+
 
 def delete_work_phase(work_phase_ids):
     try:
