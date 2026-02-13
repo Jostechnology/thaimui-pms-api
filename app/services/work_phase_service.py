@@ -33,6 +33,9 @@ def update_work_phase(work_phase_id, data):
         work_phase = work_phase_repository.get_work_phase_by_id(work_phase_id)
         if not work_phase:
             raise Exception("Work phase not found")
+        
+        if "phase_name" in data:
+            work_phase.phase_name = data["phase_name"]
 
         if "phase_status" in data:
             work_phase.phase_status = data["phase_status"]
