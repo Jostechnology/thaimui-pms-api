@@ -10,12 +10,6 @@ def create_work_phase(data):
     except Exception:
         raise
 
-def edit_work_phase(work_phase_id, data):
-    try:
-        work_phase = work_phase_repository.edit_work_phase(work_phase_id, data)
-        return WorkPhaseSchema().dump(work_phase)
-    except Exception:
-        raise
 
 def update_phase_status(work_phase_id, data):
     try:

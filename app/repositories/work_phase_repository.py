@@ -30,49 +30,6 @@ def create_work_phase(items):
         db.session.rollback()
         raise
 
-
-def edit_work_phase(work_phase_id, data):
-    try:
-        work_phase = WorkPhase.query.get(work_phase_id)
-        if not work_phase:
-            raise Exception("Work phase not found")
-
-        work_phase.phase_name = data.get("phase_name", work_phase.phase_name)
-        work_phase.start_date = data.get("start_date", work_phase.start_date)
-
-        # Update phase_status if provided — validate against allowed values
-        if "phase_status" in data:
-            incoming = data.get("phase_status")
-            if incoming not in VALID_PHASE_STATUSES:
-                raise ValueError(f"Invalid phase_status '{incoming}'. Must be one of: {', '.join(VALID_PHASE_STATUSES)}")
-            work_phase.phase_status = incoming
-
-        # Update WorkAssignment
-        employee_id_list = data.get("employee_id_list", [])
-        existing_assignments = WorkAssignment.query.filter_by(work_phase_id=work_phase_id).all()
-        existing_employee_ids = {assignment.employee_id for assignment in existing_assignments}
-
-        # Add new assignments
-        for employee_id in employee_id_list:
-            if employee_id not in existing_employee_ids:
-                new_assignment = WorkAssignment(
-                    work_phase_id=work_phase_id,
-                    employee_id=employee_id,
-                )
-                db.session.add(new_assignment)
-
-        # Remove old assignments
-        for assignment in existing_assignments:
-            if assignment.employee_id not in employee_id_list:
-                db.session.delete(assignment)
-
-        db.session.commit()
-        return work_phase
-    except Exception:
-        db.session.rollback()
-        raise
-
-
 def update_phase_status(work_phase_id, new_status):
     try:
         work_phase = WorkPhase.query.get(work_phase_id)
