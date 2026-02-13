@@ -43,4 +43,20 @@ def update_work_phase(work_phase):
     except Exception:
         db.session.rollback()
         raise
+def delete_work_phase(work_phase_ids):
+    try:
+        for work_phase_id in work_phase_ids:
+            work_phase = WorkPhase.query.get(work_phase_id)
+            if not work_phase:
+                raise Exception(f"Work phase id {work_phase_id} not found")
+
+            # Clear relationship first to avoid StaleDataError
+            work_phase.employee_list.clear()
+            db.session.delete(work_phase)
+
+        db.session.commit()
+        return {"message": f"Deleted {len(work_phase_ids)} work phase(s) successfully"}
+    except Exception:
+        db.session.rollback()
+        raise
 

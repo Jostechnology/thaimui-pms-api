@@ -57,4 +57,19 @@ def update_work_phase(work_phase_id, data):
         return WorkPhaseSchema().dump(work_phase)
     except Exception:
         db.session.rollback()
+def update_phase_status(work_phase_id, data):
+    try:
+        new_status = data.get("phase_status")
+        if not new_status:
+            raise ValueError("phase_status is required")
+        work_phase = work_phase_repository.update_phase_status(work_phase_id, new_status)
+        return WorkPhaseSchema().dump(work_phase)
+    except Exception:
+        raise
+
+def delete_work_phase(work_phase_ids):
+    try:
+        result = work_phase_repository.delete_work_phase(work_phase_ids)
+        return result
+    except Exception:
         raise
