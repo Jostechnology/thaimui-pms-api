@@ -9,3 +9,12 @@ def create_work_phase(data):
         return WorkPhaseSchema(many=True).dump(work_phases)
     except Exception:
         raise
+
+
+
+def delete_work_phase(work_phase_id):
+    try:
+        work_phase_repository.delete_work_phase(work_phase_id)
+        return {"message": "Work phase deleted successfully"}
+    except Exception:
+        raise

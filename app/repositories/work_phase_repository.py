@@ -30,3 +30,19 @@ def create_work_phase(items):
         db.session.rollback()
         raise
 
+
+
+def delete_work_phase(work_phase_id):
+    try:
+        work_phase = WorkPhase.query.get(work_phase_id)
+        if not work_phase:
+            raise Exception("Work phase not found")
+
+        # Delete related WorkAssignments first
+        WorkAssignment.query.filter_by(work_phase_id=work_phase_id).delete()
+        db.session.delete(work_phase)
+        db.session.commit()
+        return {"message": "Work phase deleted successfully"}
+    except Exception:
+        db.session.rollback()
+        raise
