@@ -1,7 +1,8 @@
 import traceback
 from app.exception import AppException
+from app.extensions import init_center_service
 from flask import Flask, jsonify
-from app.config import connectdb
+from app.config import CENTER_ACCESS_KEY, CENTER_URL, connectdb
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
@@ -30,6 +31,8 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 ma = Marshmallow(app)
+
+init_center_service(CENTER_ACCESS_KEY, CENTER_URL)
 
 @app.errorhandler(AppException)
 def handle_app_exception(e):
@@ -61,6 +64,7 @@ from .controllers import employee_controller
 from .controllers import sales_item_controller
 from .controllers import material_list_controller
 from .controllers import work_phase_controller
+from .controllers import sales_order_controller
 
 with app.app_context():
     db.create_all()

@@ -172,3 +172,8 @@ class MaterialList(AuditMixin):
     item_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
+
+class QCWorkOrder(AuditMixin):
+    __tablename__ = "t_qc_work_order"
+    qc_work_order_id = db.Column(db.Integer, primary_key=True)
+    
