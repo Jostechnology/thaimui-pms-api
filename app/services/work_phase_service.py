@@ -27,9 +27,9 @@ def update_phase_status(work_phase_id, data):
     except Exception:
         raise
 
-def delete_work_phase(work_phase_id):
+def delete_work_phase(work_phase_ids):
     try:
-        work_phase_repository.delete_work_phase(work_phase_id)
-        return {"message": "Work phase deleted successfully"}
+        result = work_phase_repository.delete_work_phase(work_phase_ids)
+        return result
     except Exception:
         raise
