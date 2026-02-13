@@ -120,6 +120,11 @@ class WorkOrder(AuditMixin):
     status = db.Column(db.String(50), nullable=False , default='Ready')
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
+    sales_item = db.relationship(
+        "SalesItem",
+        back_populates="work_order",
+        uselist=False
+    )
 
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
@@ -161,7 +166,7 @@ class SalesItem(AuditMixin):
     doc_num = db.Column(db.String(50), nullable=False)
     material_list = db.relationship('MaterialList', backref='sales_item', lazy='selectin')
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'))
-    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref='sales_item', lazy='selectin')
+    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='sales_item', lazy='selectin')
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"
     material_list_id = db.Column(db.Integer, primary_key=True)
