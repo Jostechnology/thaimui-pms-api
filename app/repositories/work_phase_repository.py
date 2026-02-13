@@ -70,17 +70,19 @@ def delete_work_assignments_by_phase(work_phase_id):
         raise
 
 
-def delete_work_phase(work_phase_id):
+def delete_work_phase(work_phase_ids):
     try:
-        work_phase = WorkPhase.query.get(work_phase_id)
-        if not work_phase:
-            raise Exception("Work phase not found")
+        for work_phase_id in work_phase_ids:
+            work_phase = WorkPhase.query.get(work_phase_id)
+            if not work_phase:
+                raise Exception(f"Work phase id {work_phase_id} not found")
 
-        # Delete related WorkAssignments first
-        WorkAssignment.query.filter_by(work_phase_id=work_phase_id).delete()
-        db.session.delete(work_phase)
+            # Clear relationship first to avoid StaleDataError
+            work_phase.employee_list.clear()
+            db.session.delete(work_phase)
+
         db.session.commit()
-        return {"message": "Work phase deleted successfully"}
+        return {"message": f"Deleted {len(work_phase_ids)} work phase(s) successfully"}
     except Exception:
         db.session.rollback()
         raise

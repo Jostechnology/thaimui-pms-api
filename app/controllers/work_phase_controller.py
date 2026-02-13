@@ -29,12 +29,17 @@ def api_update_work_phase(work_phase_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/delete_work_phase/<int:work_phase_id>", methods=["DELETE"])
+@app.route("/api/delete_work_phase", methods=["DELETE"])
 @verify_required
-def api_delete_work_phase(work_phase_id):
+def api_delete_work_phase():
     try:
-        result = delete_work_phase(work_phase_id)
+        data = request.get_json()
+        work_phase_ids = data.get("work_phase_ids", [])
+        if not work_phase_ids:
+            return jsonify({"error": "work_phase_ids is required", "success": False}), 400
+        result = delete_work_phase(work_phase_ids)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
