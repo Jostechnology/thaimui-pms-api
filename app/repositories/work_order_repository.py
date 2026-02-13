@@ -18,13 +18,8 @@ def get_work_order_by_id(work_order_id):
     except Exception:
         raise
 
-def create_work_order(data):
+def create_work_order(work_order):
     try:
-        work_order = WorkOrder(
-            doc_num=data.get("doc_num"),
-            doc_entry=data.get("doc_entry"),
-            status=data.get("status", "Ready"),
-        )
         db.session.add(work_order)
         db.session.flush()
         return work_order

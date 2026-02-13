@@ -2,6 +2,7 @@ import base64
 from copy import deepcopy
 import json
 from app.app import db
+from app.con_sqlalchemy import Role
 from app.exception import NotFoundError
 from app.repositories import module_repository, role_repository, user_repository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
@@ -11,10 +12,16 @@ from app.exception import AppException
 
 def create_role(role_data: dict):
     try:
-        new_role = role_repository.create_role(role_data)
+        new_role = Role(
+            role_code=role_data.get("role_code"),
+            role_name=role_data.get("role_name"),
+            description=role_data.get("description"),
+            active_flag=role_data.get("active_flag", True)
+        )
+        new_role = role_repository.create_role(new_role)
         
         # Add permissions
-        module_list = role_data.get("module_list")
+        module_list = role_data.get("module_list", [])
         if module_list:
             upsert_data = {
                 "role_id": new_role.role_id,
@@ -22,8 +29,10 @@ def create_role(role_data: dict):
             }
             upsert_role_permission(upsert_data)
 
+        db.session.commit()
         return RoleSchema().dump(new_role)
     except Exception as e:
+        db.session.rollback()
         raise e
 
 
