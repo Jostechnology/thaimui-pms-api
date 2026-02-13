@@ -126,6 +126,8 @@ class WorkOrder(AuditMixin):
         uselist=False
     )
 
+VALID_PHASE_STATUSES = ["Pending", "InProgress", "Completed", "Cancel"]
+
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
