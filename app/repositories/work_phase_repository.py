@@ -2,30 +2,60 @@ from app.con_sqlalchemy import WorkPhase, WorkAssignment
 from app.app import db
 
 
-def create_work_phase(items):
+def create_work_phase(work_phase):
     try:
-        work_phases = []
-        for data in items:
-            work_phase = WorkPhase(
-                work_order_id=data.get("work_order_id"),
-                phase_name=data.get("phase_name"),
-                start_date=data.get("start_date"),
-            )
-            db.session.add(work_phase)
-            db.session.flush()  # get work_phase_id before committing
-            # Create WorkAssignment for each employee
-            employee_id_list = data.get("employee_id_list", [])
-            for employee_id in employee_id_list:
-                assignment = WorkAssignment(
-                    work_phase_id=work_phase.work_phase_id,
-                    employee_id=employee_id,
-                )
-                db.session.add(assignment)
+        db.session.add(work_phase)
+        db.session.flush()
+        return work_phase
+    except Exception:
+        db.session.rollback()
+        raise
 
-            work_phases.append(work_phase)
+
+def create_work_assignment(assignment):
+    try:
+        db.session.add(assignment)
+        db.session.flush()
+        return assignment
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def get_work_phase_by_id(work_phase_id):
+    return WorkPhase.query.get(work_phase_id)
+
+
+def delete_work_assignments_by_phase(work_phase_id):
+    try:
+        WorkAssignment.query.filter_by(work_phase_id=work_phase_id).delete()
+        db.session.flush()
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def update_work_phase(work_phase):
+    try:
+        db.session.flush()
+        db.session.refresh(work_phase)
+        return work_phase
+    except Exception:
+        db.session.rollback()
+        raise
+def delete_work_phase(work_phase_ids):
+    try:
+        for work_phase_id in work_phase_ids:
+            work_phase = WorkPhase.query.get(work_phase_id)
+            if not work_phase:
+                raise Exception(f"Work phase id {work_phase_id} not found")
+
+            # Clear relationship first to avoid StaleDataError
+            work_phase.employee_list.clear()
+            db.session.delete(work_phase)
 
         db.session.commit()
-        return work_phases
+        return {"message": f"Deleted {len(work_phase_ids)} work phase(s) successfully"}
     except Exception:
         db.session.rollback()
         raise

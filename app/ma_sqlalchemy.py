@@ -80,7 +80,8 @@ class WorkOrderSchema(Schema):
     created_date = fields.DateTime()
     status = fields.String()
     current_phase = fields.Nested(WorkPhaseSchema())
-    sales_item = fields.List(fields.Nested(SalesItemSchema()))
+    work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
+    sales_item = fields.Nested(SalesItemSchema())
 
 class MaterialListSchema(Schema):
     material_list_id = fields.Integer()

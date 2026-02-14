@@ -20,17 +20,8 @@ def get_all_sales_items(page, limit, search):
         raise
 
 
-def create_sales_item(data):
+def create_sales_item(sales_item):
     try:
-        sales_item = SalesItem(
-            item_code=data.get("item_code"),
-            item_num=data.get("item_num"),
-            item_name=data.get("item_name"),
-            item_description=data.get("item_description"),
-            cost_price=data.get("cost_price"),
-            unit_price=data.get("unit_price"),
-            doc_num=data.get("doc_num"),
-        )
         db.session.add(sales_item)
         db.session.flush()
         return sales_item
