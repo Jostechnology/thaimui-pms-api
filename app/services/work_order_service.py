@@ -1,6 +1,6 @@
 from app.con_sqlalchemy import MaterialList, SalesItem, WorkOrder
 from app.ma_sqlalchemy import WorkOrderSchema
-from app.repositories import material_list_repository, work_order_repository, sales_item_repository
+from app.repositories import work_order_repository
 from app.app import db
 
 
@@ -24,37 +24,48 @@ def get_work_order_by_id(work_order_id):
 def create_work_order(data):
     try:
         work_order_list = []
+
         for item in data.get("items", []):
+            # 1) สร้าง MaterialList ก่อน
+            # 2) ยัดเข้า SalesItem.material_list
+            # 3) ผูก SalesItem เข้า WorkOrder ผ่าน relationship
+            # SQLAlchemy cascade (save-update) จะ add ทุกอย่างให้อัตโนมัติ
+
             work_order = WorkOrder(
                 doc_num=item.get("doc_num"),
                 doc_entry=item.get("doc_entry"),
                 status=item.get("status", "Ready"),
             )
-            work_order = work_order_repository.create_work_order(work_order)
-            for sale_item in item.get("sales_item_list", []):
-                new_sale_item = SalesItem(
-                    item_code=sale_item.get("item_code"),
-                    item_num=sale_item.get("item_num"),
-                    item_name=sale_item.get("item_name"),
-                    item_description=sale_item.get("item_description"),
-                    cost_price=sale_item.get("cost_price"),
-                    unit_price=sale_item.get("unit_price"),
-                    doc_num=sale_item.get("doc_num"),
-                    work_order_id=work_order.work_order_id,
-                )
-                new_sale_item = sales_item_repository.create_sales_item(new_sale_item)
-                for material in sale_item.get("material_list", []):
-                    new_material = MaterialList(
-                        sales_item_id=new_sale_item.sales_item_id,
-                        item_code=material.get("item_code"),
-                        item_name=material.get("item_name"),
-                        item_description=material.get("item_description"),
-                        item_num=material.get("item_num"),
-                        cost_price=material.get("cost_price"),
-                        unit_price=material.get("unit_price"),
+
+            for sale_item_data in item.get("sales_item_list", []):
+                materials = [
+                    MaterialList(
+                        item_code=m.get("item_code"),
+                        item_name=m.get("item_name"),
+                        item_description=m.get("item_description"),
+                        item_num=m.get("item_num"),
+                        cost_price=m.get("cost_price"),
+                        unit_price=m.get("unit_price"),
                     )
-                    material_list_repository.create_material_list(new_material)
+                    for m in sale_item_data.get("material_list", [])
+                ]
+
+                SalesItem(
+                    item_code=sale_item_data.get("item_code"),
+                    item_num=sale_item_data.get("item_num"),
+                    item_name=sale_item_data.get("item_name"),
+                    item_description=sale_item_data.get("item_description"),
+                    cost_price=sale_item_data.get("cost_price"),
+                    unit_price=sale_item_data.get("unit_price"),
+                    doc_num=sale_item_data.get("doc_num"),
+                    material_list=materials,
+                    work_order=work_order,
+                )
+
             work_order_list.append(work_order)
+
+        # add ทุก WorkOrder → cascade จะลากทุก SalesItem + MaterialList เข้า session
+        db.session.add_all(work_order_list)
         db.session.commit()
         return WorkOrderSchema(many=True).dump(work_order_list)
     except Exception:

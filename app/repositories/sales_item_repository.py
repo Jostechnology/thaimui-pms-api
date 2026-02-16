@@ -21,10 +21,5 @@ def get_all_sales_items(page, limit, search):
 
 
 def create_sales_item(sales_item):
-    try:
-        db.session.add(sales_item)
-        db.session.flush()
-        return sales_item
-    except Exception:
-        db.session.rollback()
-        raise
+    db.session.add(sales_item)
+    return sales_item
