@@ -47,14 +47,17 @@ class RolePermissionSchema(SQLAlchemyAutoSchema):
 
 
 
-
 class EmployeeSchema(Schema):
     employee_id = fields.Integer()
     employee_first_name = fields.String()
     employee_last_name = fields.String()
+    phone_number = fields.String()
+    email = fields.String()
     citizen_id = fields.String()
     status = fields.String()
+    address = fields.String()
     user_id = fields.Integer()
+    is_active = fields.Boolean()
 
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()

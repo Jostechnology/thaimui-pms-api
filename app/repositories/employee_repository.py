@@ -20,3 +20,26 @@ def create_employee(employee):
     except Exception:
         db.session.rollback()
         raise
+
+def update_employee(employee):
+    try:
+        db.session.flush()
+        db.session.refresh(employee)
+        return employee
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_employee(employee_id):
+    try:
+        employee = Employee.query.get(employee_id)
+        if not employee:
+            raise Exception(f"Employee id {employee_id} not found")
+
+        db.session.delete(employee)
+        db.session.commit()
+        return {"message": f"Deleted employee id {employee_id} successfully"}
+    except Exception:
+        db.session.rollback()
+        raise

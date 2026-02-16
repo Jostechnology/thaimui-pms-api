@@ -150,6 +150,7 @@ class Employee(AuditMixin):
     address = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), nullable=False , default='ว่างงาน')
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
 
 class WorkAssignment(AuditMixin):
     __tablename__ = "t_work_assignment"
