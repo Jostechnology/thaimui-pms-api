@@ -1,3 +1,4 @@
+import enum
 from app.app import db
 from datetime import date, datetime, timezone, timedelta
 from sqlalchemy import event
@@ -127,7 +128,7 @@ class WorkOrder(AuditMixin):
         uselist=False
     )
 
-VALID_PHASE_STATUSES = ["Pending", "InProgress", "Completed", "Cancel"]
+VALID_PHASE_STATUSES = ["Pending", "InProgress", "Paused", "Completed", "Cancel"]
 
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
@@ -139,6 +140,21 @@ class WorkPhase(AuditMixin):
     end_date = db.Column(db.DateTime)
     employee_list = db.relationship('Employee', secondary='t_work_assignment', backref='work_phases', lazy='selectin')
     work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref='work_phases', lazy='selectin')
+    breaks = db.relationship('WorkPhaseBreak', backref='work_phase', lazy='selectin', order_by='WorkPhaseBreak.break_start')
+
+class BreakType(enum.Enum):
+    LUNCH = "Lunch"
+    SHORT_BREAK = "Short Break"
+    OTHER = "Other"
+
+class WorkPhaseBreak(AuditMixin):
+    __tablename__ = "t_work_phase_break"
+    break_id = db.Column(db.Integer, primary_key=True)
+    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=False)
+    break_start = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    break_end = db.Column(db.DateTime, nullable=True)
+    break_type = db.Column(db.Enum(BreakType), nullable=False, default=BreakType.OTHER)
+    
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
     employee_id = db.Column(db.Integer, primary_key=True)
