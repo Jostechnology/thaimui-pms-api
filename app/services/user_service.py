@@ -2,12 +2,11 @@ import base64
 from copy import deepcopy
 import json
 from app.app import db
+from app.exception import AppException, MissingFieldsError, NotFoundError, UniqueError
 from app.con_sqlalchemy import Role
-from app.exception import NotFoundError
 from app.repositories import module_repository, role_repository, user_repository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
 from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
-from app.exception import AppException
 
 
 def create_role(role_data: dict):
@@ -195,16 +194,17 @@ def create_module(data):
             sort_order = sort_order.sort_order + 1 if sort_order else 1
 
         if not module_name or not module_code:
-            return {"error": "Missing module_name or module_code"}, 400
+            raise MissingFieldsError("Missing module_name or module_code")
 
         existing = module_repository.get_module_by_code(module_code)
         if existing:
-            return {"error": "Module code already exists"}, 400
+            raise UniqueError("Module Already exists")
+        
 
         if parent_id:
             parent = module_repository.get_module_by_id(parent_id)
             if not parent:
-                return {"error": "Parent module not found"}, 400
+                raise NotFoundError("Parent module not found")
 
         create_obj = {
             "module_name" : module_name,
@@ -305,11 +305,11 @@ def edit_module(module_id,data):
         permission_list = data.get("permission_list", [])
 
         if not module_name or not module_code:
-            return {"error": "Missing module_name or module_code"}, 400
+            raise MissingFieldsError("Missing module_name or module_code")
 
         existing = module_repository.get_module_by_code(module_code)
         if existing and existing.module_id != module_id:
-            return {"error": "Module code already exists"}, 400
+            raise UniqueError("Module code already exists")
 
         module.module_name = module_name
         module.module_code = module_code
@@ -354,8 +354,7 @@ def delete_module(module_id):
     try:
         module = module_repository.get_module_by_id(module_id)
         if not module:
-            return {"error": "Module not found"}, 404
-
+            raise NotFoundError("Module not found")
 
         module_repository.delete_module_by_id(module_id)
         db.session.commit()
@@ -419,7 +418,7 @@ def upsert_role_permission(data):
         module_list = data.get("module_list")
 
         if not role_id or not isinstance(module_list, list):
-            return {"error": "Missing role_id or module_list"}, 400
+            raise MissingFieldsError("Missing role_id or module_list")
 
         permission_id_list = []
         for module in module_list:
@@ -464,10 +463,10 @@ def create_user(data):
         password = data.get("password")
         role_id = data.get("role_id")
         if not username or not password:
-            return {"error": "Missing username, password, or role_id"}, 400
+            raise MissingFieldsError("Missing username, password, or role_id")
 
         if user_repository.check_username_exist(username):
-            return {"error": "Username already exists"}, 400
+            raise UniqueError("User already Exists")
 
         hashed_password = hash_bcrypt(password)
 
@@ -529,7 +528,7 @@ def change_user_role(data):
 
         user = user_repository.get_user_by_username(username)
         if not user:
-            return {"error": "User not found"}, 404
+            raise NotFoundError("User not found")
         
         role_update = user_repository.change_user_role(username, role_id)
         db.session.add(role_update)
@@ -547,23 +546,23 @@ def change_user_password(data):
 
         user = user_repository.get_user_by_username(username)
         if not user:
-            return {"error": "User not found", "success": False}, 404
+            raise NotFoundError("User not found")
         
         if not username or not new_password_raw or not old_password_raw:
-            return {"error": "Missing required fields (username, new_password, old_password)", "success": False}, 400
+            raise MissingFieldsError("Missing required fields (username, new_password, old_password)")
         
         if not verify_bcrypt(old_password_raw, user.password):
-            return {"error": "รหัสผ่านเดิมไม่ถูกต้อง", "success": False}, 400
+            raise ValueError("รหัสผ่านเดิมไม่ถูกต้อง")
         
         if old_password_raw == new_password_raw:
-            return {"error": "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม", "success": False}, 400
+            raise ValueError("รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม")
 
         hashed_new_password = hash_bcrypt(new_password_raw)
 
         user_repository.update_user_password(username, hashed_new_password)
         
         db.session.commit()
-        return {"message": "เปลี่ยนรหัสผ่านสำเร็จ", "success": True}, 200
+        return {"message": "เปลี่ยนรหัสผ่านสำเร็จ", "success": True}
 
     except AppException:
         db.session.rollback()
@@ -584,7 +583,7 @@ def ban_user(data):
 
         user = user_repository.get_user_by_username(username)
         if not user:
-            return {"error": "ไม่พบผู้ใช้งานนี้ในระบบ", "success": False}, 404
+            return NotFoundError("ไม่พบผู้ใช้งานนี้ในระบบ")
 
         user.is_active = is_active
         
@@ -598,7 +597,7 @@ def ban_user(data):
         return {
             "message": f"ดำเนินการ{status_msg}ผู้ใช้ {username} สำเร็จ",
             "success": True
-        }, 200
+        }
 
     except AppException:
         db.session.rollback()

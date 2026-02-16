@@ -93,3 +93,7 @@ class MaterialListSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     created_date = fields.DateTime()
+
+class SalesOrderSearchSchena(Schema):
+    doc_num = fields.String()
+    doc_entry = fields.String()

@@ -115,8 +115,9 @@ class RolePermission(BaseModel):
 class WorkOrder(AuditMixin):
     __tablename__ = "t_work_order"
     work_order_id = db.Column(db.Integer, primary_key=True)
-    doc_num = db.Column(db.String(50), nullable=False)
-    doc_entry = db.Column(db.String(50), nullable=False)
+    doc_num = db.Column(db.Integer, nullable=False)
+    doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
+    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='work_orders', lazy='selectin')
     status = db.Column(db.String(50), nullable=False , default='Ready')
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
@@ -165,10 +166,13 @@ class SalesItem(AuditMixin):
     item_description = db.Column(db.String(500))
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
-    doc_num = db.Column(db.String(50), nullable=False)
+    doc_num = db.Column(db.Integer, nullable=False)
+    doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
+    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='selectin')
     material_list = db.relationship('MaterialList', backref='sales_item', lazy='selectin')
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'))
     work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='sales_item', lazy='selectin')
+
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"
     material_list_id = db.Column(db.Integer, primary_key=True)
@@ -179,3 +183,24 @@ class MaterialList(AuditMixin):
     item_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
+
+class QCWorkOrder(AuditMixin):
+    __tablename__ = "t_qc_work_order"
+    qc_work_order_id = db.Column(db.Integer, primary_key=True)
+
+class SalesOrder(AuditMixin):
+    __tablename__ = "t_sales_order"
+    doc_entry = db.Column(db.Integer, primary_key=True)
+    doc_num = db.Column(db.Integer, nullable=False, unique=True)
+    sales_items = db.relationship(
+        "SalesItem",
+        back_populates="sales_order",
+        lazy='selectin'
+    )
+    work_orders = db.relationship(
+        "WorkOrder",
+        back_populates="sales_order",
+        lazy='selectin'
+    )
+
+    
