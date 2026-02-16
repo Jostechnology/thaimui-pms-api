@@ -1,7 +1,7 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.services.work_phase_service import create_work_phase, update_work_phase , delete_work_phase
+from app.services.work_phase_service import create_work_phase, update_work_phase, delete_work_phase
 
 @app.route("/api/create_work_phase", methods=["POST"])
 @verify_required
@@ -21,6 +21,8 @@ def api_update_work_phase():
         data = request.get_json()
         result = update_work_phase(data)
         return jsonify({"data": result, "success": True}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e), "success": False}), 400
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
