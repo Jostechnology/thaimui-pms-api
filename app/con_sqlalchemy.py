@@ -154,7 +154,15 @@ class WorkPhaseBreak(AuditMixin):
     break_start = db.Column(db.DateTime, nullable=False, default=bangkok_now)
     break_end = db.Column(db.DateTime, nullable=True)
     break_type = db.Column(db.Enum(BreakType), nullable=False, default=BreakType.OTHER)
-    
+
+
+class EmployeeStatus(enum.Enum):
+    UNEMPLOYED = 'ว่างงาน'
+    PROBATION = 'ทดลองงาน'
+    FULL_TIME = 'พนักงานประจำ'
+    RESIGNED = 'ลาออก'
+    TERMINATED = 'เลิกจ้าง'
+
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
     employee_id = db.Column(db.Integer, primary_key=True)
@@ -164,9 +172,24 @@ class Employee(AuditMixin):
     phone_number = db.Column(db.String(10), nullable=True)
     email = db.Column(db.String(100), nullable=True)
     address = db.Column(db.String(255), nullable=True)
-    status = db.Column(db.String(50), nullable=False , default='ว่างงาน')
+    status = db.Column(
+       db.Enum(EmployeeStatus, name="employee_status_enum", validate_strings=True),
+        nullable=False,
+        default=EmployeeStatus.UNEMPLOYED
+    )
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    salary_base = db.Column(db.Float, nullable=False, default=0.0)
+
+class EmployeeSalaryHistory(AuditMixin):
+    __tablename__ = "t_employee_salary_history"
+    salary_history_id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
+    old_salary = db.Column(db.Float, nullable=False)
+    new_salary = db.Column(db.Float, nullable=False)
+    effective_date = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    remark= db.Column(db.String(255), nullable=True)
+
 
 class WorkAssignment(AuditMixin):
     __tablename__ = "t_work_assignment"
