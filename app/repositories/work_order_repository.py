@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkOrder, SalesItem
+from app.con_sqlalchemy import WorkOrder, WorkOrderStatus
 from app.app import db
 
 def get_all_work_orders(page, limit, search,filter):

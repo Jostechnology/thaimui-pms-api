@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import RolePermission
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, WorkOrderStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -54,7 +54,7 @@ class EmployeeSchema(Schema):
     phone_number = fields.String()
     email = fields.String()
     citizen_id = fields.String()
-    status = fields.String()
+    status = fields.Enum(EmployeeStatus)
     address = fields.String()
     user_id = fields.Integer()
     is_active = fields.Boolean()
@@ -74,18 +74,13 @@ class WorkPhaseBreakSchema(Schema):
     work_phase_id = fields.Integer()
     break_start = fields.DateTime()
     break_end = fields.DateTime(allow_none=True)
-    break_type = fields.Method("get_break_type")
-
-    def get_break_type(self, obj):
-        if obj.break_type:
-            return obj.break_type.value
-        return "Other"
+    break_type = fields.Enum(BreakType)
 
 class WorkPhaseSchema(Schema):
     work_phase_id = fields.Integer()
     work_order_id = fields.Integer()
     phase_name = fields.String()
-    phase_status = fields.String()
+    phase_status = fields.Enum(PhaseStatus)
     start_date = fields.DateTime()
     end_date = fields.DateTime()
     created_date = fields.DateTime()
@@ -95,7 +90,7 @@ class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.String()
     created_date = fields.DateTime()
-    status = fields.String()
+    status = fields.Enum(WorkOrderStatus)
     current_phase = fields.Nested(WorkPhaseSchema())
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     sales_item = fields.Nested(SalesItemSchema())
