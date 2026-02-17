@@ -1,5 +1,7 @@
+from app.con_sqlalchemy import MaterialList
 from app.ma_sqlalchemy import MaterialListSchema
 from app.repositories import material_list_repository
+from app.app import db
 
 
 def get_all_material_lists(data):
@@ -15,7 +17,17 @@ def get_all_material_lists(data):
 
 def create_material_list(data):
     try:
-        material = material_list_repository.create_material_list(data)
+        material = MaterialList(
+            sales_item_id=data.get("sales_item_id"),
+            item_code=data.get("item_code"),
+            item_name=data.get("item_name"),
+            item_description=data.get("item_description"),
+            item_num=data.get("item_num"),
+            cost_price=data.get("cost_price"),
+            unit_price=data.get("unit_price"),
+        )
+        material = material_list_repository.create_material_list(material)
+        db.session.commit()
         return MaterialListSchema().dump(material)
     except Exception:
         raise

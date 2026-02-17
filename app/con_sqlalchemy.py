@@ -1,3 +1,4 @@
+import enum
 from app.app import db
 from datetime import date, datetime, timezone, timedelta
 from sqlalchemy import event
@@ -115,11 +116,19 @@ class RolePermission(BaseModel):
 class WorkOrder(AuditMixin):
     __tablename__ = "t_work_order"
     work_order_id = db.Column(db.Integer, primary_key=True)
-    doc_num = db.Column(db.String(50), nullable=False)
-    doc_entry = db.Column(db.String(50), nullable=False)
+    doc_num = db.Column(db.Integer, nullable=False)
+    doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
+    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='work_orders', lazy='selectin')
     status = db.Column(db.String(50), nullable=False , default='Ready')
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
+    sales_item = db.relationship(
+        "SalesItem",
+        back_populates="work_order",
+        uselist=False
+    )
+
+VALID_PHASE_STATUSES = ["Pending", "InProgress", "Paused", "Completed", "Cancel"]
 
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
@@ -131,6 +140,29 @@ class WorkPhase(AuditMixin):
     end_date = db.Column(db.DateTime)
     employee_list = db.relationship('Employee', secondary='t_work_assignment', backref='work_phases', lazy='selectin')
     work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref='work_phases', lazy='selectin')
+    breaks = db.relationship('WorkPhaseBreak', backref='work_phase', lazy='selectin', order_by='WorkPhaseBreak.break_start')
+
+class BreakType(enum.Enum):
+    LUNCH = "Lunch"
+    SHORT_BREAK = "Short Break"
+    OTHER = "Other"
+
+class WorkPhaseBreak(AuditMixin):
+    __tablename__ = "t_work_phase_break"
+    break_id = db.Column(db.Integer, primary_key=True)
+    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=False)
+    break_start = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    break_end = db.Column(db.DateTime, nullable=True)
+    break_type = db.Column(db.Enum(BreakType), nullable=False, default=BreakType.OTHER)
+
+
+class EmployeeStatus(enum.Enum):
+    UNEMPLOYED = 'ว่างงาน'
+    PROBATION = 'ทดลองงาน'
+    FULL_TIME = 'พนักงานประจำ'
+    RESIGNED = 'ลาออก'
+    TERMINATED = 'เลิกจ้าง'
+
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
     employee_id = db.Column(db.Integer, primary_key=True)
@@ -140,8 +172,24 @@ class Employee(AuditMixin):
     phone_number = db.Column(db.String(10), nullable=True)
     email = db.Column(db.String(100), nullable=True)
     address = db.Column(db.String(255), nullable=True)
-    status = db.Column(db.String(50), nullable=False , default='ว่างงาน')
+    status = db.Column(
+       db.Enum(EmployeeStatus, name="employee_status_enum", validate_strings=True),
+        nullable=False,
+        default=EmployeeStatus.UNEMPLOYED
+    )
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    salary_base = db.Column(db.Float, nullable=False, default=0.0)
+
+class EmployeeSalaryHistory(AuditMixin):
+    __tablename__ = "t_employee_salary_history"
+    salary_history_id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
+    old_salary = db.Column(db.Float, nullable=False)
+    new_salary = db.Column(db.Float, nullable=False)
+    effective_date = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    remark= db.Column(db.String(255), nullable=True)
+
 
 class WorkAssignment(AuditMixin):
     __tablename__ = "t_work_assignment"
@@ -158,10 +206,13 @@ class SalesItem(AuditMixin):
     item_description = db.Column(db.String(500))
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
-    doc_num = db.Column(db.String(50), nullable=False)
+    doc_num = db.Column(db.Integer, nullable=False)
+    doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
+    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='selectin')
     material_list = db.relationship('MaterialList', backref='sales_item', lazy='selectin')
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'))
-    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref='sales_item', lazy='selectin')
+    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='sales_item', lazy='selectin')
+
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"
     material_list_id = db.Column(db.Integer, primary_key=True)
@@ -172,3 +223,33 @@ class MaterialList(AuditMixin):
     item_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
+
+class QCWorkOrder(AuditMixin):
+    __tablename__ = "t_qc_work_order"
+    qc_work_order_id = db.Column(db.Integer, primary_key=True)
+
+class SalesOrder(AuditMixin):
+    __tablename__ = "t_sales_order"
+    doc_entry = db.Column(db.Integer, primary_key=True)
+    doc_num = db.Column(db.Integer, nullable=False, unique=True)
+    card_code = db.Column(db.String(20), nullable=False)
+    card_name = db.Column(db.String(200), nullable=False)
+    slp_code = db.Column(db.String(20), nullable=False)
+    slp_name = db.Column(db.String(200), nullable=False)
+    bpl_code = db.Column(db.String(20), nullable=False)
+    bpl_name = db.Column(db.String(200), nullable=False)
+    group_code = db.Column(db.String(20), nullable=False)
+    group_name = db.Column(db.String(200), nullable=False)
+
+    sales_items = db.relationship(
+        "SalesItem",
+        back_populates="sales_order",
+        lazy='selectin'
+    )
+    work_orders = db.relationship(
+        "WorkOrder",
+        back_populates="sales_order",
+        lazy='selectin'
+    )
+
+    

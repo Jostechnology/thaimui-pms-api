@@ -10,17 +10,11 @@ def get_all_roles():
         raise
 
 
-def create_role(role_data: dict):
+def create_role(role):
     try:
-        new_role = Role(
-            role_code=role_data.get("role_code"),
-            role_name=role_data.get("role_name"),
-            description=role_data.get("description"),
-            active_flag=role_data.get("active_flag", True)
-        )
-        db.session.add(new_role)
-        db.session.commit()
-        return new_role
+        db.session.add(role)
+        db.session.flush()
+        return role
     except Exception:
         db.session.rollback()
         raise
