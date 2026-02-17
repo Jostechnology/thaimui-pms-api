@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PhaseStatus, WorkPhase, WorkAssignment, BreakType, bangkok_now
+from app.con_sqlalchemy import PhaseStatus, WorkOrderStatus, WorkPhase, WorkAssignment, BreakType, bangkok_now
 from app.ma_sqlalchemy import WorkPhaseSchema, WorkOrderSchema
 from app.repositories import work_order_repository, work_phase_repository
 from app.app import db
@@ -55,13 +55,14 @@ def update_work_phase(data):
                 new_status = item["phase_status"]
                 current_status = work_phase.phase_status
                 break_type_str = item.get("break_type", "Other")
+                work_order.status = WorkOrderStatus.กำลังดำเนินการ
 
                 now = bangkok_now()
 
                 if current_status == PhaseStatus.รอดำเนินการ and new_status == PhaseStatus.กำลังดำเนินการ:
                     work_phase.phase_status = PhaseStatus.กำลังดำเนินการ
                     work_phase.start_date = now
-                    work_order.current_phase = work_phase 
+                    work_order.current_phase = work_phase
 
                 elif current_status == PhaseStatus.กำลังดำเนินการ and new_status == PhaseStatus.หยุดชั่วคราว:
                     work_phase.phase_status = PhaseStatus.หยุดชั่วคราว
