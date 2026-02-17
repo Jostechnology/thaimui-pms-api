@@ -17,12 +17,3 @@ def get_work_order_by_id(work_order_id):
         return work_order
     except Exception:
         raise
-
-def create_work_order(work_order):
-    try:
-        db.session.add(work_order)
-        db.session.flush()
-        return work_order
-    except Exception:
-        db.session.rollback()
-        raise

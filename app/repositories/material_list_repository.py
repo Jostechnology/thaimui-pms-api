@@ -20,10 +20,5 @@ def get_all_material_lists(page, limit, search):
 
 
 def create_material_list(material):
-    try:
-        db.session.add(material)
-        db.session.flush()
-        return material
-    except Exception:
-        db.session.rollback()
-        raise
+    db.session.add(material)
+    return material
