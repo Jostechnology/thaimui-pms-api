@@ -47,14 +47,17 @@ class RolePermissionSchema(SQLAlchemyAutoSchema):
 
 
 
-
 class EmployeeSchema(Schema):
     employee_id = fields.Integer()
     employee_first_name = fields.String()
     employee_last_name = fields.String()
+    phone_number = fields.String()
+    email = fields.String()
     citizen_id = fields.String()
     status = fields.String()
+    address = fields.String()
     user_id = fields.Integer()
+    is_active = fields.Boolean()
 
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
@@ -65,6 +68,19 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.String()
+    
+class WorkPhaseBreakSchema(Schema):
+    break_id = fields.Integer()
+    work_phase_id = fields.Integer()
+    break_start = fields.DateTime()
+    break_end = fields.DateTime(allow_none=True)
+    break_type = fields.Method("get_break_type")
+
+    def get_break_type(self, obj):
+        if obj.break_type:
+            return obj.break_type.value
+        return "Other"
+
 class WorkPhaseSchema(Schema):
     work_phase_id = fields.Integer()
     work_order_id = fields.Integer()
@@ -74,6 +90,7 @@ class WorkPhaseSchema(Schema):
     end_date = fields.DateTime()
     created_date = fields.DateTime()
     employee_list = fields.List(fields.Nested(EmployeeSchema()))
+    breaks = fields.List(fields.Nested(WorkPhaseBreakSchema()))
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.String()
