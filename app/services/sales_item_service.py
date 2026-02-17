@@ -1,6 +1,7 @@
 from app.con_sqlalchemy import SalesItem
 from app.ma_sqlalchemy import SalesItemSchema
 from app.repositories import sales_item_repository
+from app.app import db
 
 
 def get_all_sales_items(data):
@@ -26,6 +27,8 @@ def create_sales_item(data):
             doc_num=data.get("doc_num"),
         )
         sales_item = sales_item_repository.create_sales_item(sales_item)
+        db.session.commit()
         return SalesItemSchema().dump(sales_item)
     except Exception:
+        db.session.rollback()
         raise

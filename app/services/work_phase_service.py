@@ -7,9 +7,13 @@ from app.app import db
 def create_work_phase(data):
     try:
         work_phases = []
-        for item in data.get("items", []):
+        items = data.get("items", [])
+        work_order_id = items[0].get("work_order_id") if items else None
+        work_order = work_order_repository.get_work_order_by_id(work_order_id)
+        work_order.status = "Working"
+        for item in items:
             work_phase = WorkPhase(
-                work_order_id=item.get("work_order_id"),
+                work_order_id=work_order_id,
                 phase_name=item.get("phase_name"),
                 start_date=item.get("start_date"),
             )
