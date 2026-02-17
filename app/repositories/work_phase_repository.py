@@ -2,25 +2,32 @@ from app.con_sqlalchemy import WorkPhase, WorkAssignment, WorkPhaseBreak, bangko
 from app.app import db
 
 
-def create_work_phase(work_phase):
+def save_work_phase(work_phase):
     try:
         db.session.add(work_phase)
-        db.session.flush()
-        return work_phase
     except Exception:
         db.session.rollback()
         raise
 
-
-def create_work_assignment(assignment):
+def delete_all_work_assignments(work_assignments):
+    try:
+        for assignment in work_assignments:
+            db.session.delete(assignment)
+    except Exception:
+        db.session.rollback()
+        raise
+def save_work_assignment(assignment):
     try:
         db.session.add(assignment)
-        db.session.flush()
-        return assignment
     except Exception:
         db.session.rollback()
         raise
-
+def save_all_work_assignments(assignments):
+    try:
+        db.session.add_all(assignments)
+    except Exception:
+        db.session.rollback()
+        raise
 
 def get_work_phase_by_id(work_phase_id):
     return WorkPhase.query.get(work_phase_id)
@@ -31,38 +38,16 @@ def get_work_phases_by_order_id(work_order_id):
     return WorkPhase.query.filter_by(work_order_id=work_order_id).order_by(WorkPhase.work_phase_id).all()
 
 
-def delete_work_assignments_by_phase(work_phase_id):
-    try:
-        WorkAssignment.query.filter_by(work_phase_id=work_phase_id).delete()
-        db.session.flush()
-    except Exception:
-        db.session.rollback()
-        raise
-
-
-def update_work_phase(work_phase):
-    try:
-        db.session.flush()
-        db.session.refresh(work_phase)
-        return work_phase
-    except Exception:
-        db.session.rollback()
-        raise
+def get_work_assignments_by_phase(work_phase_id):
+    return WorkAssignment.query.filter_by(work_phase_id=work_phase_id).all()
 
 
 def delete_work_phase(work_phase_ids):
     try:
-        for work_phase_id in work_phase_ids:
-            work_phase = WorkPhase.query.get(work_phase_id)
-            if not work_phase:
-                raise Exception(f"Work phase id {work_phase_id} not found")
-
-            # Clear relationship first to avoid StaleDataError
-            work_phase.employee_list.clear()
-            db.session.delete(work_phase)
-
-        db.session.commit()
-        return {"message": f"Deleted {len(work_phase_ids)} work phase(s) successfully"}
+        delete_count = (
+            WorkPhase.query.filter(WorkPhase.work_phase_id.in_(work_phase_ids)).delete(synchronize_session=False)
+        )
+        return delete_count
     except Exception:
         db.session.rollback()
         raise
