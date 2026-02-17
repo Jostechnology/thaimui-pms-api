@@ -71,6 +71,8 @@ jobs:
         run: sudo apt-get install -y sshpass
 
       # SSH to Dev Server (ORS server)
+      # docker-compose exec thaumui-pms-api flask db upgrade | To auto upgrade db
+
       - name: Deploy to Dev Server
         run: |
           PASS=$(printf '%s' '${{ secrets.DEV_DEPLOY_PASSWORD }}')
@@ -100,8 +102,6 @@ jobs:
           echo "Rebuilding containers..."
           docker-compose down
           docker-compose up -d
-
-          docker compose exec thaumui-pms-api flask db upgrade
 
           echo "✅ Deploy completed successfully."
           EOF
