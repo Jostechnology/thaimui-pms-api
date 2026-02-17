@@ -3,6 +3,7 @@ from app.ma_sqlalchemy import SalesOrderSearchSchema
 from app.repositories import sales_order_repository
 from app.extensions import center_service
 from app.app import db
+from app.services import work_order_service
 
 
 def search_sales_order(data):
@@ -20,6 +21,20 @@ def get_sales_order_detail(doc_entry):
     try:
         result = sales_order_repository.get_sales_order_detail(doc_entry)
         return result
+    except Exception:
+        db.session.rollback()
+        raise
+
+def get_test_sales_order():
+    try:
+        response = center_service.request(
+            method="POST",
+            endpoint="/api/ORDR/get_test_quick",
+        )
+        data = {"items" : response["json"]}
+        print(data)
+        work_order_service.create_work_order(data)
+        db.session.commit()
     except Exception:
         db.session.rollback()
         raise
