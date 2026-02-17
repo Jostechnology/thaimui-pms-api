@@ -16,6 +16,7 @@ def create_work_phase(data):
                 work_order_id=work_order_id,
                 phase_name=item.get("phase_name"),
                 start_date=item.get("start_date"),
+                phase_status="รอดำเนินการ",
             )
             work_phase = work_phase_repository.create_work_phase(work_phase)
             for employee_id in item.get("employee_id_list", []):
