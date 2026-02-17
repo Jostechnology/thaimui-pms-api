@@ -91,6 +91,8 @@ jobs:
           echo 'connection_string=${{ vars.CONNECTION_STRING_DEV }}' >> .env
           echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY_DEV }}' >> .env
           echo 'CENTER_ACCESS_KEY=${{ secrets.CENTER_ACCESS_KEY_DEV }}' >> .env
+          echo 'CENTER_URL=${{ vars.CENTER_URL_DEV }}' >> .env
+
 
           echo "Logging in to GitLab Container Registry"
           docker login -u ${{ secrets.GITLAB_USERNAME }} -p ${{ secrets.GITLAB_ACCESS_TOKEN }} registry.gitlab.com
