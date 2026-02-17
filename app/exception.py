@@ -31,3 +31,7 @@ class AuthorizationError(AppException):
 class MissingFieldsError(AppException):
     status_code = 400
     message = "Missing Fields"
+
+class OuterServicesError(AppException):
+    status_code = 500
+    message = "OUTER SERVICES ERROR"
