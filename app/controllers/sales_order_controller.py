@@ -2,6 +2,7 @@ from app.api_auth import verify_required
 from app.app import app
 from app.exception import AppException
 from flask import request, jsonify
+from app.ma_sqlalchemy import SalesOrderSchema
 from app.services.sales_order_service import search_sales_order, get_sales_order_detail
 
 
@@ -28,7 +29,8 @@ def api_get_by_doc_entry():
         docEntry = data.get("doc_entry")
 
         result = get_sales_order_detail(docEntry)
-        return jsonify({"data": result, "success": True}), 200
+        data = SalesOrderSchema.dump(result)
+        return jsonify({"data": data, "success": True}), 200
     except AppException as e:
         return jsonify({"error" : e.message}), e.status_code
     except Exception as e:
