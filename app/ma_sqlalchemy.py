@@ -67,7 +67,7 @@ class SalesItemSchema(Schema):
     item_description = fields.String()
     cost_price = fields.Float()
     unit_price = fields.Float()
-    doc_num = fields.String()
+    doc_num = fields.Int()
     
 class WorkPhaseBreakSchema(Schema):
     break_id = fields.Integer()
@@ -93,7 +93,7 @@ class WorkPhaseSchema(Schema):
     breaks = fields.List(fields.Nested(WorkPhaseBreakSchema()))
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
-    doc_num = fields.String()
+    doc_num = fields.Int()
     created_date = fields.DateTime()
     status = fields.String()
     current_phase = fields.Nested(WorkPhaseSchema())
@@ -111,6 +111,18 @@ class MaterialListSchema(Schema):
     unit_price = fields.Float()
     created_date = fields.DateTime()
 
-class SalesOrderSearchSchena(Schema):
-    doc_num = fields.String()
-    doc_entry = fields.String()
+class SalesOrderSearchSchema(Schema):
+    doc_num = fields.Int()
+    doc_entry = fields.Int()
+
+class SalesOrderSchema(Schema):
+    doc_num = fields.Int()
+    doc_entry = fields.Int()
+    card_code = fields.String()
+    card_name = fields.String()
+    slp_code = fields.String()
+    slp_name = fields.String()
+    bpl_code = fields.String()
+    bpl_name = fields.String()
+    group_code = fields.String()
+    group_name = fields.String()

@@ -1,7 +1,8 @@
-from app.con_sqlalchemy import Employee
+from app.con_sqlalchemy import Employee, User, EmployeeStatus
 from app.ma_sqlalchemy import EmployeeSchema
 from app.repositories import employee_repository
 from app.app import db
+from flask import g
 
 def get_all_employees(data):
     try:
@@ -14,6 +15,24 @@ def get_all_employees(data):
 
 def create_employee(data):
     try:
+        def _to_employee_status(val):
+            if val is None:
+                return EmployeeStatus.UNEMPLOYED
+            if isinstance(val, EmployeeStatus):
+                return val
+            if isinstance(val, str):
+                s = val.strip()
+                # try match by enum name
+                try:
+                    return EmployeeStatus[s.upper()]
+                except Exception:
+                    pass
+                # try match by enum value (Thai labels)
+                for m in EmployeeStatus:
+                    if m.value == s:
+                        return m
+            raise ValueError(f"Invalid status: {val}")
+
         employee = Employee(
             employee_first_name=data.get("employee_first_name"),
             employee_last_name=data.get("employee_last_name"),
@@ -21,10 +40,20 @@ def create_employee(data):
             phone_number=data.get("phone_number"),
             email=data.get("email"),
             address=data.get("address"),
-            status=data.get("status", "ว่างงาน"),
+            status=_to_employee_status(data.get("status")),
             user_id=data.get("user_id"),
             is_active=data.get("is_active", True)
         )
+        # If user_id wasn't provided by client, try to map from authenticated username
+        if not employee.user_id:
+            username = getattr(g, "username", None)
+            if username:
+                user = User.query.filter_by(username=username).first()
+                if user:
+                    employee.user_id = user.user_id
+        # If still no user_id, raise a clear exception so client can correct input
+        if not employee.user_id:
+            raise Exception("user_id is required to create an employee. Provide user_id or ensure the authenticated user maps to an existing user record.")
         employee = employee_repository.create_employee(employee)
         return EmployeeSchema().dump(employee)
     except Exception:
@@ -43,7 +72,12 @@ def update_employee(employee_id, data):
         employee.phone_number = data.get("phone_number", employee.phone_number)
         employee.email = data.get("email", employee.email)
         employee.address = data.get("address", employee.address)
-        employee.status = data.get("status", employee.status)
+        if "status" in data:
+            # convert incoming status to Enum member (keep existing if invalid)
+            try:
+                employee.status = _to_employee_status(data.get("status"))
+            except Exception:
+                pass
         employee.user_id = data.get("user_id", employee.user_id)
 
         db.session.flush()

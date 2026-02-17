@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, WorkOrder
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder
 from app.ma_sqlalchemy import WorkOrderSchema
 from app.repositories import work_order_repository
 from app.app import db
@@ -9,7 +9,8 @@ def get_all_work_orders(data):
         page = data.get("page", 1)
         limit = data.get("limit", 10)
         search = data.get("search", "")
-        result = work_order_repository.get_all_work_orders(page, limit, search)
+        filter = data.get("filter", "")
+        result = work_order_repository.get_all_work_orders(page, limit, search,filter)
         return {"items": WorkOrderSchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
     except Exception:
         raise
@@ -23,7 +24,7 @@ def get_work_order_by_id(work_order_id):
 
 def create_work_order(data):
     try:
-        work_order_list = []
+        sales_order_list = []
 
         for item in data.get("items", []):
             # 1) สร้าง MaterialList ก่อน
@@ -31,10 +32,23 @@ def create_work_order(data):
             # 3) ผูก SalesItem เข้า WorkOrder ผ่าน relationship
             # SQLAlchemy cascade (save-update) จะ add ทุกอย่างให้อัตโนมัติ
 
-            work_order = WorkOrder(
-                doc_num=item.get("doc_num"),
-                doc_entry=item.get("doc_entry"),
-                status=item.get("status", "Ready"),
+            # work_order = WorkOrder(
+            #     doc_num=item.get("doc_num"),
+            #     doc_entry=item.get("doc_entry"),
+            #     status=item.get("status", "Ready"),
+            # )
+
+            sales_order = SalesOrder(
+                doc_entry = item.get("doc_entry"),
+                doc_num = item.get("doc_num"),
+                card_code = item.get("card_code"),
+                card_name = item.get("card_name"),
+                slp_code = item.get("slp_code"),
+                slp_name = item.get("slp_name"),
+                bpl_code = item.get("bpl_code"),
+                bpl_name = item.get("bpl_name"),
+                group_code = item.get("group_code"),
+                group_name = item.get("group_name"),
             )
 
             for sale_item_data in item.get("sales_item_list", []):
@@ -59,15 +73,15 @@ def create_work_order(data):
                     unit_price=sale_item_data.get("unit_price"),
                     doc_num=sale_item_data.get("doc_num"),
                     material_list=materials,
-                    work_order=work_order,
+                    sales_order=sales_order
                 )
 
-            work_order_list.append(work_order)
+            sales_order_list.append(sales_order)
 
         # add ทุก WorkOrder → cascade จะลากทุก SalesItem + MaterialList เข้า session
-        db.session.add_all(work_order_list)
+        db.session.add_all(sales_order_list)
         db.session.commit()
-        return WorkOrderSchema(many=True).dump(work_order_list)
+        return True
     except Exception:
         db.session.rollback()
         raise
