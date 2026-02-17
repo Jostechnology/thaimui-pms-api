@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PhaseStatus, WorkOrderStatus, WorkPhase, WorkAssignment, BreakType, bangkok_now
+from app.con_sqlalchemy import PhaseStatus, WorkOrderStatus, WorkPhase, WorkAssignment, BreakType, WorkPhaseBreak, bangkok_now
 from app.ma_sqlalchemy import WorkPhaseSchema, WorkOrderSchema
 from app.repositories import work_order_repository, work_phase_repository
 from app.app import db
@@ -44,6 +44,8 @@ def update_work_phase(data):
         for item in data.get("items", []):
             work_phase_id = item.get("work_phase_id")
             work_phase = work_phase_repository.get_work_phase_by_id(work_phase_id)
+            if work_phase.phase_status == PhaseStatus.เสร็จสิ้น:
+                raise ValueError(f"Cannot update completed work phase id {work_phase_id}")
             if not work_phase:
                 raise NotFoundError(f"Work phase id {work_phase_id} not found")
             
@@ -53,30 +55,35 @@ def update_work_phase(data):
             # --- Status transition with Pause/Resume logic ---
             if "phase_status" in item:
                 new_status = item["phase_status"]
+                new_status = PhaseStatus(new_status) if isinstance(new_status, str) else new_status
                 current_status = work_phase.phase_status
                 break_type_str = item.get("break_type", "Other")
                 work_order.status = WorkOrderStatus.กำลังดำเนินการ
 
                 now = bangkok_now()
-
                 if current_status == PhaseStatus.รอดำเนินการ and new_status == PhaseStatus.กำลังดำเนินการ:
                     work_phase.phase_status = PhaseStatus.กำลังดำเนินการ
                     work_phase.start_date = now
                     work_order.current_phase = work_phase
-
+                
                 elif current_status == PhaseStatus.กำลังดำเนินการ and new_status == PhaseStatus.หยุดชั่วคราว:
                     work_phase.phase_status = PhaseStatus.หยุดชั่วคราว
-                    bt = _parse_break_type(break_type_str)
-                    work_phase_repository.create_break(work_phase_id, bt)
+                    work_phase_break = WorkPhaseBreak(
+                        work_phase_id=work_phase_id,
+                        break_start=now,
+                        break_type=BreakType(break_type_str)
+                    )
+                    
+                    work_phase_repository.save_break(work_phase_break)
 
                 elif current_status == PhaseStatus.หยุดชั่วคราว and new_status == PhaseStatus.กำลังดำเนินการ:
                     work_phase.phase_status = PhaseStatus.กำลังดำเนินการ
-                    work_phase_repository.close_active_break(work_phase_id)
+                    stop_break(work_phase_id)
 
                 elif new_status == PhaseStatus.เสร็จสิ้น:
                     work_phase.phase_status = PhaseStatus.เสร็จสิ้น
                     work_phase.end_date = now
-                    work_phase_repository.close_active_break(work_phase_id)
+                    stop_break(work_phase_id)
 
                 else:
                     work_phase.phase_status = new_status
@@ -125,12 +132,12 @@ def delete_work_phase(work_phase_ids):
         db.session.rollback()
         raise
 
-
-def _parse_break_type(break_type_str):
-    """Convert string to BreakType enum"""
-    mapping = {
-        "Lunch": BreakType.LUNCH,
-        "Short Break": BreakType.SHORT_BREAK,
-        "Other": BreakType.OTHER,
-    }
-    return mapping.get(break_type_str, BreakType.OTHER)
+def stop_break(work_phase_id):
+    try:
+        active_break = work_phase_repository.get_active_break(work_phase_id)
+        if active_break:
+            active_break.break_end = bangkok_now()
+            work_phase_repository.save_break(active_break)
+    except Exception:
+        db.session.rollback()
+        raise

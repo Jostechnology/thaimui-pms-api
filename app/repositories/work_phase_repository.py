@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkPhase, WorkAssignment, WorkPhaseBreak, bangkok_now
+from app.con_sqlalchemy import WorkPhase, WorkAssignment, WorkPhaseBreak, bangkok_now, BreakType
 from app.app import db
 
 
@@ -55,17 +55,13 @@ def delete_work_phase(work_phase_ids):
 
 # --- Break Management ---
 
-def create_break(work_phase_id, break_type=None):
-    """Create a new break record (break_end is NULL = active break)"""
-    from app.con_sqlalchemy import BreakType
-    new_break = WorkPhaseBreak(
-        work_phase_id=work_phase_id,
-        break_start=bangkok_now(),
-        break_type=break_type or BreakType.OTHER,
-    )
-    db.session.add(new_break)
-    db.session.flush()
-    return new_break
+def save_break(work_phase_break):
+    try:
+        db.session.add(work_phase_break)
+        return work_phase_break
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def get_active_break(work_phase_id):
@@ -75,12 +71,3 @@ def get_active_break(work_phase_id):
         break_end=None
     ).first()
 
-
-def close_active_break(work_phase_id):
-    """Close any active break by setting break_end to now"""
-    active_break = get_active_break(work_phase_id)
-    if active_break:
-        active_break.break_end = bangkok_now()
-        db.session.flush()
-        return active_break
-    return None
