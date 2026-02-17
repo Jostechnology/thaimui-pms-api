@@ -101,6 +101,8 @@ jobs:
           docker-compose down
           docker-compose up -d
 
+          docker compose exec thaumui-pms-api flask db upgrade
+
           echo "✅ Deploy completed successfully."
           EOF
 
