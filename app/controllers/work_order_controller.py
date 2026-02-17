@@ -10,7 +10,8 @@ def api_get_work_order_list():
         page = request.args.get("page", 1, type=int)
         limit = request.args.get("limit", 10, type=int)
         search = request.args.get("search", "", type=str)
-        data = {"page": page, "limit": limit, "search": search}
+        filter = request.args.get("filter", "", type=str)
+        data = {"page": page, "limit": limit, "search": search, "filter": filter}
         
         result = get_all_work_orders(data)
         return jsonify({"data": result, "success": True}), 200  
