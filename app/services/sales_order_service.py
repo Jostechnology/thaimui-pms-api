@@ -20,7 +20,12 @@ def search_sales_order(data):
 def get_sales_order_detail(doc_entry):
     try:
         result = sales_order_repository.get_sales_order_detail(doc_entry)
-        return result
+        items = result.sales_items
+        
+        materials = []
+        for i in items:
+            materials.extend(i.material_list)
+        return result, items, materials
     except Exception:
         db.session.rollback()
         raise
