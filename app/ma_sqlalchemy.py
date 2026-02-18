@@ -126,3 +126,5 @@ class SalesOrderSchema(Schema):
     bpl_name = fields.String()
     group_code = fields.String()
     group_name = fields.String()
+
+
