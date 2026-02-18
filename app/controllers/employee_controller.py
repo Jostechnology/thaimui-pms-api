@@ -1,16 +1,30 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.services.employee_service import delete_employee, get_all_employees, create_employee, update_employee
+from app.services.employee_service import delete_employee, get_all_employees, create_employee, get_employee_by_id, update_employee
+
+
 
 @app.route("/api/get_employee_list", methods=["GET"])
 @verify_required
 def api_get_employee_list():
     try:
         search = request.args.get("search", "", type=str)
-        data = {"search": search}
+        status = request.args.get("status", "", type=str)
+        data = {"search": search, "status": status}
         
         result = get_all_employees(data)
+        return jsonify({"data": result, "success": True}), 200  
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/get_employee_id/<int:employee_id>", methods=["GET"])
+@verify_required
+def api_get_employee_by_id(employee_id):
+    try:
+        result = get_employee_by_id(employee_id)
         return jsonify({"data": result, "success": True}), 200  
     except Exception as e:
         print(f"Error: {str(e)}")
@@ -29,24 +43,30 @@ def api_create_employee():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/update_employee", methods=["PUT"])
+@app.route("/api/update_employee/<int:employee_id>", methods=["PUT"])
 @verify_required
-def api_update_employee():
+def api_update_employee(employee_id):
     try:
-        data = request.get_json()
-        result = update_employee(data)
+        data = request.get_json() or {}
+        result = update_employee(employee_id, data)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/delete_employee", methods=["DELETE"])
+@app.route("/api/delete_employee/<int:employee_id>", methods=["DELETE"])
 @verify_required
-def api_delete_employee():
+def api_delete_employee(employee_id):
     try:
-        data = request.get_json()
-        employee_ids = data.get("employee_ids", [])
-        result = delete_employee(employee_ids)
+        data = request.get_json() or {}
+        employee_ids = data.get("employee_ids")
+        if employee_ids:
+            results = []
+            for eid in employee_ids:
+                results.append(delete_employee(eid))
+            result = {"deleted": len(results)}
+        else:
+            result = delete_employee(employee_id)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         print(f"Error: {str(e)}")

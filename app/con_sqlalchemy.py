@@ -115,7 +115,7 @@ class RolePermission(BaseModel):
 
 class WorkOrderStatus(enum.Enum):
     พร้อม = 'พร้อม'
-    กำลังดำเนินการ = 'กำลังดำเนินการ'
+    กำลังดําเนินการ = 'กำลังดําเนินการ'
     เสร็จสิ้น = 'เสร็จสิ้น'
 
 class WorkOrder(AuditMixin):
@@ -125,11 +125,7 @@ class WorkOrder(AuditMixin):
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='work_orders', lazy='selectin')
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.พร้อม)
-    current_phase_id = db.Column(
-        db.Integer,
-        db.ForeignKey('t_work_phase.work_phase_id', use_alter=True, name='fk_work_order_current_phase', ondelete='SET NULL'),
-        nullable=True,
-    )
+    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     sales_item = db.relationship(
         "SalesItem",
@@ -138,8 +134,8 @@ class WorkOrder(AuditMixin):
     )
 
 class PhaseStatus(enum.Enum):
-    รอดำเนินการ = 'รอดำเนินการ'
-    กำลังดำเนินการ = 'กำลังดำเนินการ'
+    รอดําเนินการ = 'รอดําเนินการ'
+    กำลังดําเนินการ = 'กำลังดําเนินการ'
     หยุดชั่วคราว = 'หยุดชั่วคราว'
     เสร็จสิ้น = 'เสร็จสิ้น'
 
@@ -148,7 +144,7 @@ class WorkPhase(AuditMixin):
     work_phase_id = db.Column(db.Integer, primary_key=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'), nullable=False)
     phase_name = db.Column(db.String(100), nullable=False)
-    phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.รอดำเนินการ)
+    phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.รอดําเนินการ)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
     employee_list = db.relationship('Employee', secondary='t_work_assignment', backref='work_phases', lazy='selectin')
@@ -197,11 +193,10 @@ def validate_break_remark_before_update(mapper, connection, target):
 
 class EmployeeStatus(enum.Enum):
     ว่างงาน = 'ว่างงาน'
-    ทดลองงาน = 'ทดลองงาน'
-    พนักงานประจำ = 'พนักงานประจำ'
-    ลาออก = 'ลาออก'
-    เลิกจ้าง = 'เลิกจ้าง'
-
+    ทำงานอยู่ = 'ทำงานอยู่'
+    หยุดงาน = 'หยุดงาน'
+    ลางาน = 'ลางาน'
+    
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
     employee_id = db.Column(db.Integer, primary_key=True)
