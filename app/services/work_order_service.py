@@ -35,7 +35,6 @@ def create_work_order(data):
             work_order = WorkOrder(
                 doc_num=item.get("doc_num"),
                 doc_entry=item.get("doc_entry"),
-                status=item.get("status", "Ready"),
             )
 
             for sale_item_data in item.get("sales_item_list", []):

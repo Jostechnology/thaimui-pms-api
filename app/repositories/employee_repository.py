@@ -15,7 +15,6 @@ def get_all_employees(search):
 def create_employee(employee):
     try:
         db.session.add(employee)
-        db.session.flush()
         return employee
     except Exception:
         db.session.rollback()

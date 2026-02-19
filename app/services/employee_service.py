@@ -17,7 +17,7 @@ def create_employee(data):
     try:
         def _to_employee_status(val):
             if val is None:
-                return EmployeeStatus.UNEMPLOYED
+                return EmployeeStatus.ว่างงาน
             if isinstance(val, EmployeeStatus):
                 return val
             if isinstance(val, str):
@@ -55,8 +55,10 @@ def create_employee(data):
         if not employee.user_id:
             raise Exception("user_id is required to create an employee. Provide user_id or ensure the authenticated user maps to an existing user record.")
         employee = employee_repository.create_employee(employee)
+        db.session.commit()
         return EmployeeSchema().dump(employee)
     except Exception:
+        db.session.rollback()
         raise
 
 

@@ -14,8 +14,6 @@ def create_work_phase(data):
             work_phase = WorkPhase(
                 work_order_id=work_order_id,
                 phase_name=item.get("phase_name"),
-                start_date=item.get("start_date"),
-                phase_status="รอดำเนินการ",
             )
             work_phase_repository.save_work_phase(work_phase)
             if item.get("employee_id_list") == [] or item.get("employee_id_list") is None:
@@ -55,18 +53,23 @@ def update_work_phase(data):
             # --- Status transition with Pause/Resume logic ---
             if "phase_status" in item:
                 new_status = item["phase_status"]
-                new_status = PhaseStatus(new_status) if isinstance(new_status, str) else new_status
                 current_status = work_phase.phase_status
-                break_type_str = item.get("break_type", "Other")
-                work_order.status = WorkOrderStatus.กำลังดำเนินการ
-
+                break_type_str = item.get("break_type", "พักเบรค")
+                if new_status == "กําลังดําเนินการ" :
+                    new_status = PhaseStatus.กำลังดําเนินการ
+                elif new_status == "รอดําเนินการ" :
+                    new_status = PhaseStatus.รอดําเนินการ
+                else:
+                    new_status = PhaseStatus(new_status)
                 now = bangkok_now()
-                if current_status == PhaseStatus.รอดำเนินการ and new_status == PhaseStatus.กำลังดำเนินการ:
-                    work_phase.phase_status = PhaseStatus.กำลังดำเนินการ
+                if current_status == PhaseStatus.รอดําเนินการ and new_status == PhaseStatus.กำลังดําเนินการ:
+                    work_phase.phase_status = PhaseStatus.กำลังดําเนินการ
+                    work_phase.start_date = now
                     work_phase.start_date = now
                     work_order.current_phase = work_phase
+                    work_order.status = WorkOrderStatus.กำลังดําเนินการ
                 
-                elif current_status == PhaseStatus.กำลังดำเนินการ and new_status == PhaseStatus.หยุดชั่วคราว:
+                elif current_status == PhaseStatus.กำลังดําเนินการ and new_status == PhaseStatus.หยุดชั่วคราว:
                     work_phase.phase_status = PhaseStatus.หยุดชั่วคราว
                     work_phase_break = WorkPhaseBreak(
                         work_phase_id=work_phase_id,
@@ -76,8 +79,8 @@ def update_work_phase(data):
                     
                     work_phase_repository.save_break(work_phase_break)
 
-                elif current_status == PhaseStatus.หยุดชั่วคราว and new_status == PhaseStatus.กำลังดำเนินการ:
-                    work_phase.phase_status = PhaseStatus.กำลังดำเนินการ
+                elif current_status == PhaseStatus.หยุดชั่วคราว and new_status == PhaseStatus.กำลังดําเนินการ:
+                    work_phase.phase_status = PhaseStatus.กำลังดําเนินการ
                     stop_break(work_phase_id)
 
                 elif new_status == PhaseStatus.เสร็จสิ้น:
@@ -86,10 +89,8 @@ def update_work_phase(data):
                     stop_break(work_phase_id)
 
                 else:
+                    print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                     work_phase.phase_status = new_status
-
-            if "end_date" in item:
-                work_phase.end_date = item["end_date"]
             if "employee_id_list" in item:
                 new_employee_ids = set(item["employee_id_list"])
                 existing_assignments = work_phase_repository.get_work_assignments_by_phase(work_phase_id)
