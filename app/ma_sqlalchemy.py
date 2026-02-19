@@ -59,6 +59,14 @@ class EmployeeSchema(Schema):
     is_active = fields.Boolean()
     salary_base = fields.Float()
 
+class EmployeeSalaryHistorySchema(Schema):
+    salary_history_id = fields.Integer()
+    employee_id = fields.Integer()
+    old_salary = fields.Float()
+    new_salary = fields.Float()
+    effective_date = fields.DateTime()
+    remark = fields.String()
+
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
     item_code = fields.String()
