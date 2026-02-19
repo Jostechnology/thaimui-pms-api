@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import Employee, EmployeeSalaryHistory
-
+from sqlalchemy import extract
 
 def get_employee_salary_list(search):
     try:
@@ -15,10 +15,17 @@ def get_employee_salary_list(search):
         raise
 
 
-def get_salary_history(employee_id):
+def get_salary_history(employee_id,month):
     try:
-        items = EmployeeSalaryHistory.query.filter_by(employee_id=employee_id).order_by(EmployeeSalaryHistory.effective_date.desc()).all()
-        return items
+        query = EmployeeSalaryHistory.query.filter_by(employee_id=employee_id).order_by(EmployeeSalaryHistory.effective_date.desc())
+
+        if month:
+            filter_year, filter_month = map(int, month.split('-'))
+            query = query.filter(
+                extract('year', EmployeeSalaryHistory.effective_date) == filter_year,
+                extract('month', EmployeeSalaryHistory.effective_date) == filter_month
+            )
+        return query.all()
     except Exception:
         raise
 
