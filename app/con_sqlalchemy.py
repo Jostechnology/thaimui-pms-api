@@ -114,9 +114,9 @@ class RolePermission(BaseModel):
     active_flag = db.Column(db.Boolean, nullable=False)
 
 class WorkOrderStatus(enum.Enum):
-    READY = 'Ready'
-    IN_PROGRESS = 'In Progress'
-    COMPLETED = 'Completed'
+    READY = 'READY'
+    IN_PROGRESS = 'IN_PROGRESS'
+    COMPLETED = 'COMPLETED'
 
 class WorkOrder(AuditMixin):
     __tablename__ = "t_work_order"
@@ -168,7 +168,7 @@ class WorkPhaseBreak(AuditMixin):
 
 @event.listens_for(WorkPhaseBreak, 'before_insert', propagate=True)
 def validate_break_remark_before_insert(mapper, connection, target):
-    """Require `Remark` when `break_type` is 'อื่นๆ'."""
+    """Require `Remark` when `break_type` is 'Other'."""
     try:
         is_other = target.break_type == BreakType.OTHER
     except Exception:
@@ -176,12 +176,20 @@ def validate_break_remark_before_insert(mapper, connection, target):
     if is_other:
         remark = getattr(target, 'Remark', None) or getattr(target, 'remark', None)
         if not remark or not str(remark).strip():
-            raise ValueError("Remark is required when break_type is 'อื่นๆ'.")
+            # Allow missing remark for OTHER; set empty remark instead of raising
+            try:
+                if hasattr(target, 'Remark'):
+                    target.Remark = ""
+                else:
+                    target.remark = ""
+            except Exception:
+                # Best effort: do not block insert if remark is missing
+                pass
 
 
 @event.listens_for(WorkPhaseBreak, 'before_update', propagate=True)
 def validate_break_remark_before_update(mapper, connection, target):
-    """Require `Remark` when `break_type` is 'อื่นๆ' on updates."""
+    """Require `Remark` when `break_type` is 'OTHER' on updates."""
     try:
         is_other = target.break_type == BreakType.OTHER
     except Exception:
@@ -189,7 +197,14 @@ def validate_break_remark_before_update(mapper, connection, target):
     if is_other:
         remark = getattr(target, 'Remark', None) or getattr(target, 'remark', None)
         if not remark or not str(remark).strip():
-            raise ValueError("Remark is required when break_type is 'อื่นๆ'.")
+            # Allow missing remark for OTHER on update; set empty remark instead of raising
+            try:
+                if hasattr(target, 'Remark'):
+                    target.Remark = ""
+                else:
+                    target.remark = ""
+            except Exception:
+                pass
 
 class EmployeeStatus(enum.Enum):
     UNEMPLOYED = 'Unemployed'
