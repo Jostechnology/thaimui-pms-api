@@ -12,8 +12,8 @@ def api_get_work_order_list():
         limit = request.args.get("limit", 10, type=int)
         search = request.args.get("search", "", type=str)
         filter = request.args.get("filter", None, type=WorkOrderStatus)
-        data = {"page": page, "limit": limit, "search": search, "filter": filter}
-        
+        month = request.args.get("month", "", type=str)
+        data = {"page": page, "limit": limit, "search": search, "filter": filter, "month": month}
         result = get_all_work_orders(data)
         return jsonify({"data": result, "success": True}), 200  
     except Exception as e:

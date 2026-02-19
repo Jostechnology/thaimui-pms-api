@@ -13,8 +13,7 @@ from app.services.employee_salary_service import (
 def api_get_employee_salary_list():
     try:
         search = request.args.get("search", "", type=str)
-        month = request.args.get("month", "", type=str)
-        data = {"search": search, "month": month}
+        data = {"search": search}
         result = get_employee_salary_list(data)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
@@ -26,7 +25,9 @@ def api_get_employee_salary_list():
 @verify_required
 def api_get_employee_salary_history(employee_id):
     try:
-        result = get_employee_salary_history(employee_id)
+        month = request.args.get("month", "", type=str)
+        data = {"employee_id": employee_id, "month": month}
+        result = get_employee_salary_history(data)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         print(str(e))

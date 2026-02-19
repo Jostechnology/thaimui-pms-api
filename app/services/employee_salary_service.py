@@ -9,21 +9,23 @@ from datetime import datetime
 def get_employee_salary_list(data):
 	try:
 		search = data.get("search", "")
-		# month parameter currently unused by backend; frontend may filter client-side
+		
 		items = employee_salary_repository.get_employee_salary_list(search)
-		# Return employee basic info + salary
 		return {"items": EmployeeSchema(many=True).dump(items)}
 	except Exception:
 		raise
 
 
-def get_employee_salary_history(employee_id):
+def get_employee_salary_history(data):
 	try:
 		# ensure employee exists
+		employee_id = data.get("employee_id")
+		month = data.get("month", "")
+		
 		employee = Employee.query.get(employee_id)
 		if not employee:
 			raise Exception(f"Employee id {employee_id} not found")
-		items = employee_salary_repository.get_salary_history(employee_id)
+		items = employee_salary_repository.get_salary_history(employee_id, month)
 		return {"items": EmployeeSalaryHistorySchema(many=True).dump(items)}
 	except Exception:
 		raise
