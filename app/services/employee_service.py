@@ -10,7 +10,7 @@ def _to_employee_status(val):
         # default to the first enum member that represents unemployed/idle
         for m in EmployeeStatus:
             # try to find a reasonable default by matching English-like names
-            if str(m.name).upper() in ("ว่างงาน"):
+            if str(m.name).upper() in ("UNEMPLOYED"):
                 return m
         # fallback to first member
         return list(EmployeeStatus)[0]

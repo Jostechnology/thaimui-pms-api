@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import Employee, User, EmployeeStatus, EmployeeSalaryHistory
+from app.con_sqlalchemy import Employee, User, EmployeeSalaryHistory
 from app.ma_sqlalchemy import EmployeeSalaryHistorySchema, EmployeeSchema
 from app.repositories import employee_salary_repository, employee_repository
 from app.app import db

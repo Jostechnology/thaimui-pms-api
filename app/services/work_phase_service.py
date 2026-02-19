@@ -16,7 +16,7 @@ def create_work_phase(data):
                 work_order_id=work_order_id,
                 phase_name=item.get("phase_name"),
                 start_date=item.get("start_date"),
-                phase_status=PhaseStatus.รอดําเนินการ,
+                phase_status=PhaseStatus.PENDING,
             )
             work_phase_repository.save_work_phase(work_phase)
             if item.get("employee_id_list") == [] or item.get("employee_id_list") is None:
@@ -55,26 +55,26 @@ def update_work_phase(data):
             if "phase_status" in item:
                 new_status = _parse_phase_status(item["phase_status"])
                 current_status = work_phase.phase_status
-                break_type_str = item.get("break_type", "พักเบรค")
+                break_type_str = item.get("break_type", "LUNCHBREAK")  
 
                 now = bangkok_now()
 
-                if current_status == PhaseStatus.รอดําเนินการ and new_status == PhaseStatus.กำลังดําเนินการ:
-                    work_phase.phase_status = PhaseStatus.กำลังดําเนินการ
+                if current_status == PhaseStatus.PENDING and new_status == PhaseStatus.IN_PROGRESS:
+                    work_phase.phase_status = PhaseStatus.IN_PROGRESS
                     work_phase.start_date = now
                     work_order.current_phase = work_phase 
 
-                elif current_status == PhaseStatus.กำลังดําเนินการ and new_status == PhaseStatus.หยุดชั่วคราว:
-                    work_phase.phase_status = PhaseStatus.หยุดชั่วคราว
+                elif current_status == PhaseStatus.IN_PROGRESS and new_status == PhaseStatus.PAUSED:
+                    work_phase.phase_status = PhaseStatus.PAUSED
                     bt = _parse_break_type(break_type_str)
                     work_phase_repository.create_break(work_phase_id, bt)
 
-                elif current_status == PhaseStatus.หยุดชั่วคราว and new_status == PhaseStatus.กำลังดําเนินการ:
-                    work_phase.phase_status = PhaseStatus.กำลังดําเนินการ
+                elif current_status == PhaseStatus.PAUSED and new_status == PhaseStatus.IN_PROGRESS:
+                    work_phase.phase_status = PhaseStatus.IN_PROGRESS
                     work_phase_repository.close_active_break(work_phase_id)
 
-                elif new_status == PhaseStatus.เสร็จสิ้น:
-                    work_phase.phase_status = PhaseStatus.เสร็จสิ้น
+                elif new_status == PhaseStatus.COMPLETED:
+                    work_phase.phase_status = PhaseStatus.COMPLETED
                     work_phase.end_date = now
                     work_phase_repository.close_active_break(work_phase_id)
 
@@ -119,7 +119,7 @@ def delete_work_phase(work_phase_ids):
             wp = work_phase_repository.get_work_phase_by_id(wp_id)
             if not wp:
                 raise Exception(f"Work phase id {wp_id} not found")
-            if wp.phase_status == PhaseStatus.เสร็จสิ้น:
+            if wp.phase_status == PhaseStatus.COMPLETED:
                 raise ValueError(f"Cannot delete completed work phase id {wp_id}")
         result = work_phase_repository.delete_work_phase(work_phase_ids)
         db.session.commit()
@@ -132,7 +132,7 @@ def delete_work_phase(work_phase_ids):
 def _parse_break_type(break_type_str):
     """Convert string to BreakType enum, tolerant to different languages and Unicode forms."""
     if break_type_str is None:
-        return BreakType.อื่นๆ
+        return BreakType.OTHER
     s = str(break_type_str)
     s_norm = unicodedata.normalize("NFC", s).strip()
     for member in BreakType:
