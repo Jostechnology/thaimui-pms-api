@@ -278,6 +278,15 @@ class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
     doc_entry = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
+    card_code = db.Column(db.String(20), nullable=False)
+    card_name = db.Column(db.String(200), nullable=False)
+    slp_code = db.Column(db.String(20), nullable=False)
+    slp_name = db.Column(db.String(200), nullable=False)
+    bpl_code = db.Column(db.String(20), nullable=False)
+    bpl_name = db.Column(db.String(200), nullable=False)
+    group_code = db.Column(db.String(20), nullable=False)
+    group_name = db.Column(db.String(200), nullable=False)
+
     sales_items = db.relationship(
         "SalesItem",
         back_populates="sales_order",

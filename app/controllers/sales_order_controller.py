@@ -1,8 +1,10 @@
+import traceback
 from app.api_auth import verify_required
 from app.app import app
 from app.exception import AppException
 from flask import request, jsonify
-from app.services.sales_order_service import search_sales_order, get_sales_order_detail
+from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema
+from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail
 
 
 @app.route("/api/search_sales_order", methods=["GET"])
@@ -20,16 +22,38 @@ def api_search_sales_order():
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/sales_order/get_by_doc_entry", methods=["POST"])
+@app.route("/api/sales_order/get_by_doc_entry/<int:doc_entry>", methods=["GET"])
 @verify_required
-def api_get_by_doc_entry():
+def api_get_by_doc_entry(doc_entry):
     try:
-        data = request.get_json()
-        docEntry = data.get("doc_entry")
 
-        result = get_sales_order_detail(docEntry)
-        return jsonify({"data": result, "success": True}), 200
+        sales_order, items, materials = get_sales_order_detail(doc_entry)
+        so_schema = SalesOrderSchema()
+        item_schema = SalesItemSchema(many=True)
+        mat_schema = MaterialListSchema(many=True)
+        sales_order_data = so_schema.dump(sales_order)
+        sales_items_data = item_schema.dump(items)
+        material_list_data = mat_schema.dump(materials)
+
+        data = sales_order_data
+        data["items"] = sales_items_data
+        data["material_list"] = material_list_data
+        return jsonify({"data": data, "success": True}), 200
     except AppException as e:
         return jsonify({"error" : e.message}), e.status_code
     except Exception as e:
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/sales_order/get_test_quick", methods=["POST"])
+@verify_required
+def api_get_sales_order_test_quick():
+    try:
+        get_test_sales_order()
+        return jsonify({"success": True}), 200
+    except AppException as e:
+        return jsonify({"error" : e.message}), e.status_code
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+

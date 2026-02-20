@@ -22,3 +22,11 @@ def get_all_material_lists(page, limit, search):
 def create_material_list(material):
     db.session.add(material)
     return material
+
+def get_material_list_of_items(item_ids : list[int]):
+    try:
+        query = db.session.query(MaterialList).filter(MaterialList.sales_item_id.in_(item_ids))
+        materials = query.all()
+        return materials
+    except Exception:
+        raise 
