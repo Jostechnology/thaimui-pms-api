@@ -65,6 +65,7 @@ from .controllers import sales_item_controller
 from .controllers import material_list_controller
 from .controllers import work_phase_controller
 from .controllers import sales_order_controller
+from .controllers import employee_salary
 
 with app.app_context():
     db.create_all()
