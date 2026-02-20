@@ -7,7 +7,7 @@ from flask import g
 
 def _to_employee_status(val):
     if val is None:
-        # default to the first enum member that represents unemployed/idle
+        # default to the first enum member that represents UNEMPLOYED/idle
         for m in EmployeeStatus:
             # try to find a reasonable default by matching English-like names
             if str(m.name).upper() in ("UNEMPLOYED"):
@@ -87,6 +87,7 @@ def create_employee(data):
         db.session.commit()
         return EmployeeSchema().dump(employee)
     except Exception:
+        db.session.rollback()
         raise
 
 

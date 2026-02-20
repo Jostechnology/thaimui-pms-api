@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PhaseStatus, WorkPhase, WorkAssignment, BreakType, bangkok_now
+from app.con_sqlalchemy import PhaseStatus, WorkOrderStatus, WorkPhase, WorkAssignment, BreakType, WorkPhaseBreak, bangkok_now
 import unicodedata
 from app.ma_sqlalchemy import WorkPhaseSchema, WorkOrderSchema
 from app.repositories import work_order_repository, work_phase_repository
@@ -15,8 +15,6 @@ def create_work_phase(data):
             work_phase = WorkPhase(
                 work_order_id=work_order_id,
                 phase_name=item.get("phase_name"),
-                start_date=item.get("start_date"),
-                phase_status=PhaseStatus.PENDING,
             )
             work_phase_repository.save_work_phase(work_phase)
             if item.get("employee_id_list") == [] or item.get("employee_id_list") is None:
@@ -45,6 +43,8 @@ def update_work_phase(data):
         for item in data.get("items", []):
             work_phase_id = item.get("work_phase_id")
             work_phase = work_phase_repository.get_work_phase_by_id(work_phase_id)
+            if work_phase.phase_status == PhaseStatus.COMPLETED:
+                raise ValueError(f"Cannot update COMPLETED work phase id {work_phase_id}")
             if not work_phase:
                 raise NotFoundError(f"Work phase id {work_phase_id} not found")
             
@@ -53,36 +53,38 @@ def update_work_phase(data):
 
             # --- Status transition with Pause/Resume logic ---
             if "phase_status" in item:
-                new_status = _parse_phase_status(item["phase_status"])
                 current_status = work_phase.phase_status
-                break_type_str = item.get("break_type", "LUNCHBREAK")  
-
+                break_type_str = item.get("break_type", "พักเบรค")
+                new_status = PhaseStatus(item["phase_status"])
                 now = bangkok_now()
-
-                if current_status == PhaseStatus.PENDING and new_status == PhaseStatus.IN_PROGRESS:
-                    work_phase.phase_status = PhaseStatus.IN_PROGRESS
+                if current_status == PhaseStatus.PENDING and new_status == PhaseStatus.INPROGRESS:
+                    work_phase.phase_status = PhaseStatus.INPROGRESS
                     work_phase.start_date = now
-                    work_order.current_phase = work_phase 
-
-                elif current_status == PhaseStatus.IN_PROGRESS and new_status == PhaseStatus.PAUSED:
+                    work_phase.start_date = now
+                    work_order.current_phase = work_phase
+                    work_order.status = WorkOrderStatus.INPROGRESS
+                
+                elif current_status == PhaseStatus.INPROGRESS and new_status == PhaseStatus.PAUSED:
                     work_phase.phase_status = PhaseStatus.PAUSED
-                    bt = _parse_break_type(break_type_str)
-                    work_phase_repository.create_break(work_phase_id, bt)
+                    work_phase_break = WorkPhaseBreak(
+                        work_phase_id=work_phase_id,
+                        break_start=now,
+                        break_type=BreakType(break_type_str)
+                    )
+                    
+                    work_phase_repository.save_break(work_phase_break)
 
-                elif current_status == PhaseStatus.PAUSED and new_status == PhaseStatus.IN_PROGRESS:
-                    work_phase.phase_status = PhaseStatus.IN_PROGRESS
-                    work_phase_repository.close_active_break(work_phase_id)
+                elif current_status == PhaseStatus.PAUSED and new_status == PhaseStatus.INPROGRESS:
+                    work_phase.phase_status = PhaseStatus.INPROGRESS
+                    stop_break(work_phase_id)
 
                 elif new_status == PhaseStatus.COMPLETED:
                     work_phase.phase_status = PhaseStatus.COMPLETED
                     work_phase.end_date = now
-                    work_phase_repository.close_active_break(work_phase_id)
+                    stop_break(work_phase_id)
 
                 else:
-                    raise ValueError(f"Invalid status transition: {current_status.value} → {new_status.value}")
-
-            if "end_date" in item:
-                work_phase.end_date = item["end_date"]
+                    work_phase.phase_status = new_status
             if "employee_id_list" in item:
                 new_employee_ids = set(item["employee_id_list"])
                 existing_assignments = work_phase_repository.get_work_assignments_by_phase(work_phase_id)
@@ -120,7 +122,7 @@ def delete_work_phase(work_phase_ids):
             if not wp:
                 raise Exception(f"Work phase id {wp_id} not found")
             if wp.phase_status == PhaseStatus.COMPLETED:
-                raise ValueError(f"Cannot delete completed work phase id {wp_id}")
+                raise ValueError(f"Cannot delete COMPLETED work phase id {wp_id}")
         result = work_phase_repository.delete_work_phase(work_phase_ids)
         db.session.commit()
         return result
@@ -128,41 +130,12 @@ def delete_work_phase(work_phase_ids):
         db.session.rollback()
         raise
 
-
-def _parse_break_type(break_type_str):
-    """Convert string to BreakType enum, tolerant to different languages and Unicode forms."""
-    if break_type_str is None:
-        return BreakType.OTHER
-    s = str(break_type_str)
-    s_norm = unicodedata.normalize("NFC", s).strip()
-    for member in BreakType:
-        if unicodedata.normalize("NFC", str(member.value)) == s_norm or unicodedata.normalize("NFC", str(member.name)) == s_norm:
-            return member
-    # common English fallbacks
-    lowered = s_norm.lower()
-    if "lunch" in lowered:
-        return BreakType.พักกลางวัน
-    if "short" in lowered or "break" in lowered:
-        return BreakType.พักเบรค
-    return BreakType.อื่นๆ
-
-
-def _parse_phase_status(status):
-    """Coerce a string or enum-like value to a PhaseStatus enum member.
-
-    Performs Unicode NFC normalization to handle composed/decomposed Thai characters.
-    """
-    if status is None:
-        return None
-    if isinstance(status, PhaseStatus):
-        return status
-    s = str(status).strip()
-    s_norm = unicodedata.normalize("NFC", s)
-    for member in PhaseStatus:
-        if unicodedata.normalize("NFC", str(member.value)) == s_norm or unicodedata.normalize("NFC", str(member.name)) == s_norm:
-            return member
-    # last attempt: try constructing by value
+def stop_break(work_phase_id):
     try:
-        return PhaseStatus(s)
+        active_break = work_phase_repository.get_active_break(work_phase_id)
+        if active_break:
+            active_break.break_end = bangkok_now()
+            work_phase_repository.save_break(active_break)
     except Exception:
-        raise ValueError(f"{s!r} is not a valid PhaseStatus")
+        db.session.rollback()
+        raise

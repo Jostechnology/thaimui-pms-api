@@ -115,7 +115,7 @@ class RolePermission(BaseModel):
 
 class WorkOrderStatus(enum.Enum):
     READY = 'READY'
-    IN_PROGRESS = 'IN_PROGRESS'
+    INPROGRESS = 'INPROGRESS'
     COMPLETED = 'COMPLETED'
 
 class WorkOrder(AuditMixin):
@@ -134,10 +134,10 @@ class WorkOrder(AuditMixin):
     )
 
 class PhaseStatus(enum.Enum):
-    PENDING = 'Pending'
-    IN_PROGRESS = 'In Progress'
-    PAUSED = 'Paused'
-    COMPLETED = 'Completed'
+    PENDING = 'PENDING'
+    INPROGRESS = 'INPROGRESS'
+    PAUSED = 'PAUSED'
+    COMPLETED = 'COMPLETED'
 
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
@@ -207,10 +207,10 @@ def validate_break_remark_before_update(mapper, connection, target):
                 pass
 
 class EmployeeStatus(enum.Enum):
-    UNEMPLOYED = 'Unemployed'
+    UNEMPLOYED = 'UNEMPLOYED'
     ACTIVE = 'Active'
-    ON_LEAVE = 'On Leave'
-    SUSPENDED = 'Suspended'
+    ONLEAVE = 'ONLEAVE'
+    SUSPENDED = 'SUSPENDED'
     
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
