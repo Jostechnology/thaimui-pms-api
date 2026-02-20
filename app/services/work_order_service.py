@@ -10,7 +10,8 @@ def get_all_work_orders(data):
         limit = data.get("limit", 10)
         search = data.get("search", "")
         filter = data.get("filter", "")
-        result = work_order_repository.get_all_work_orders(page, limit, search,filter)
+        month = data.get("month", "")
+        result = work_order_repository.get_all_work_orders(page, limit, search,filter, month)
         return {"items": WorkOrderSchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
     except Exception:
         raise

@@ -2,6 +2,7 @@ from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
 from app.services.work_order_service import get_all_work_orders, create_work_order, get_work_order_by_id
+from app.con_sqlalchemy import WorkOrderStatus
 
 @app.route("/api/get_work_order_list", methods=["GET"])
 @verify_required
@@ -10,9 +11,9 @@ def api_get_work_order_list():
         page = request.args.get("page", 1, type=int)
         limit = request.args.get("limit", 10, type=int)
         search = request.args.get("search", "", type=str)
-        filter = request.args.get("filter", "", type=str)
-        data = {"page": page, "limit": limit, "search": search, "filter": filter}
-        
+        filter = request.args.get("filter", None, type=WorkOrderStatus)
+        month = request.args.get("month", "", type=str)
+        data = {"page": page, "limit": limit, "search": search, "filter": filter, "month": month}
         result = get_all_work_orders(data)
         return jsonify({"data": result, "success": True}), 200  
     except Exception as e:

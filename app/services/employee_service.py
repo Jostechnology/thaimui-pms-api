@@ -4,34 +4,62 @@ from app.repositories import employee_repository
 from app.app import db
 from flask import g
 
+
+def _to_employee_status(val):
+    if val is None:
+        # default to the first enum member that represents unemployed/idle
+        for m in EmployeeStatus:
+            # try to find a reasonable default by matching English-like names
+            if str(m.name).upper() in ("UNEMPLOYED"):
+                return m
+        # fallback to first member
+        return list(EmployeeStatus)[0]
+    if isinstance(val, EmployeeStatus):
+        return val
+    if isinstance(val, str):
+        s = val.strip()
+        # try match by enum name
+        try:
+            return EmployeeStatus[s.upper()]
+        except Exception:
+            pass
+        # try match by enum value (Thai labels)
+        for m in EmployeeStatus:
+            if m.value == s:
+                return m
+    raise ValueError(f"Invalid status: {val}")
+
 def get_all_employees(data):
     try:
         search = data.get("search", "")
-        items = employee_repository.get_all_employees(search)
+        status = data.get("status", "")
+        items = employee_repository.get_all_employees(search, status)
         return {"items": EmployeeSchema(many=True).dump(items)}
+    except Exception:
+        raise
+
+def get_employee_by_id(employee_id):
+    try:
+        employee = Employee.query.get(employee_id)
+        if not employee:
+            raise Exception(f"Employee id {employee_id} not found")
+        return EmployeeSchema().dump(employee)
+    except Exception:
+        raise
+    
+def get_employee_by_id(employee_id):
+    try:
+        employee = Employee.query.get(employee_id)
+        if not employee:
+            raise Exception(f"Employee id {employee_id} not found")
+        return EmployeeSchema().dump(employee)
     except Exception:
         raise
 
 
 def create_employee(data):
     try:
-        def _to_employee_status(val):
-            if val is None:
-                return EmployeeStatus.UNEMPLOYED
-            if isinstance(val, EmployeeStatus):
-                return val
-            if isinstance(val, str):
-                s = val.strip()
-                # try match by enum name
-                try:
-                    return EmployeeStatus[s.upper()]
-                except Exception:
-                    pass
-                # try match by enum value (Thai labels)
-                for m in EmployeeStatus:
-                    if m.value == s:
-                        return m
-            raise ValueError(f"Invalid status: {val}")
+        # Use module-level helper `_to_employee_status`
 
         employee = Employee(
             employee_first_name=data.get("employee_first_name"),
@@ -42,6 +70,7 @@ def create_employee(data):
             address=data.get("address"),
             status=_to_employee_status(data.get("status")),
             user_id=data.get("user_id"),
+            salary_base=data.get("salary_base", 0.0),
             is_active=data.get("is_active", True)
         )
         # If user_id wasn't provided by client, try to map from authenticated username
@@ -55,6 +84,7 @@ def create_employee(data):
         if not employee.user_id:
             raise Exception("user_id is required to create an employee. Provide user_id or ensure the authenticated user maps to an existing user record.")
         employee = employee_repository.create_employee(employee)
+        db.session.commit()
         return EmployeeSchema().dump(employee)
     except Exception:
         raise
@@ -79,9 +109,9 @@ def update_employee(employee_id, data):
             except Exception:
                 pass
         employee.user_id = data.get("user_id", employee.user_id)
-
         db.session.flush()
         db.session.refresh(employee)
+        db.session.commit()
         return EmployeeSchema().dump(employee)
     except Exception:
         db.session.rollback()
