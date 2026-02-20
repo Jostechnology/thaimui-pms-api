@@ -113,13 +113,18 @@ class RolePermission(BaseModel):
     permission_id = db.Column(db.Integer, db.ForeignKey('m_permission.permission_id'), nullable=False)
     active_flag = db.Column(db.Boolean, nullable=False)
 
+class WorkOrderStatus(enum.Enum):
+    READY = 'READY'
+    INPROGRESS = 'INPROGRESS'
+    COMPLETED = 'COMPLETED'
+
 class WorkOrder(AuditMixin):
     __tablename__ = "t_work_order"
     work_order_id = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='work_orders', lazy='selectin')
-    status = db.Column(db.String(50), nullable=False , default='Ready')
+    status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     sales_item = db.relationship(
@@ -128,14 +133,18 @@ class WorkOrder(AuditMixin):
         uselist=False
     )
 
-VALID_PHASE_STATUSES = ["Pending", "InProgress", "Paused", "Completed", "Cancel"]
+class PhaseStatus(enum.Enum):
+    PENDING = 'PENDING'
+    INPROGRESS = 'INPROGRESS'
+    PAUSED = 'PAUSED'
+    COMPLETED = 'COMPLETED'
 
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'), nullable=False)
     phase_name = db.Column(db.String(100), nullable=False)
-    phase_status = db.Column(db.String(50), nullable=False , default='Pending')
+    phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.PENDING)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
     employee_list = db.relationship('Employee', secondary='t_work_assignment', backref='work_phases', lazy='selectin')
@@ -143,26 +152,66 @@ class WorkPhase(AuditMixin):
     breaks = db.relationship('WorkPhaseBreak', backref='work_phase', lazy='selectin', order_by='WorkPhaseBreak.break_start')
 
 class BreakType(enum.Enum):
-    LUNCH = "Lunch"
-    SHORT_BREAK = "Short Break"
-    OTHER = "Other"
+    LUNCHBREAK = "LUNCHBREAK"
+    RESTBREAK = "RESTBREAK"
+    OTHER = "OTHER"
 
 class WorkPhaseBreak(AuditMixin):
     __tablename__ = "t_work_phase_break"
     break_id = db.Column(db.Integer, primary_key=True)
-    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=False)
+    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
     break_start = db.Column(db.DateTime, nullable=False, default=bangkok_now)
     break_end = db.Column(db.DateTime, nullable=True)
     break_type = db.Column(db.Enum(BreakType), nullable=False, default=BreakType.OTHER)
+    Remark = db.Column(db.String(255), nullable=True)
 
+
+@event.listens_for(WorkPhaseBreak, 'before_insert', propagate=True)
+def validate_break_remark_before_insert(mapper, connection, target):
+    """Require `Remark` when `break_type` is 'Other'."""
+    try:
+        is_other = target.break_type == BreakType.OTHER
+    except Exception:
+        is_other = False
+    if is_other:
+        remark = getattr(target, 'Remark', None) or getattr(target, 'remark', None)
+        if not remark or not str(remark).strip():
+            # Allow missing remark for OTHER; set empty remark instead of raising
+            try:
+                if hasattr(target, 'Remark'):
+                    target.Remark = ""
+                else:
+                    target.remark = ""
+            except Exception:
+                # Best effort: do not block insert if remark is missing
+                pass
+
+
+@event.listens_for(WorkPhaseBreak, 'before_update', propagate=True)
+def validate_break_remark_before_update(mapper, connection, target):
+    """Require `Remark` when `break_type` is 'OTHER' on updates."""
+    try:
+        is_other = target.break_type == BreakType.OTHER
+    except Exception:
+        is_other = False
+    if is_other:
+        remark = getattr(target, 'Remark', None) or getattr(target, 'remark', None)
+        if not remark or not str(remark).strip():
+            # Allow missing remark for OTHER on update; set empty remark instead of raising
+            try:
+                if hasattr(target, 'Remark'):
+                    target.Remark = ""
+                else:
+                    target.remark = ""
+            except Exception:
+                pass
 
 class EmployeeStatus(enum.Enum):
-    UNEMPLOYED = 'ว่างงาน'
-    PROBATION = 'ทดลองงาน'
-    FULL_TIME = 'พนักงานประจำ'
-    RESIGNED = 'ลาออก'
-    TERMINATED = 'เลิกจ้าง'
-
+    UNEMPLOYED = 'UNEMPLOYED'
+    ACTIVE = 'Active'
+    ONLEAVE = 'ONLEAVE'
+    SUSPENDED = 'SUSPENDED'
+    
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
     employee_id = db.Column(db.Integer, primary_key=True)
@@ -172,11 +221,7 @@ class Employee(AuditMixin):
     phone_number = db.Column(db.String(10), nullable=True)
     email = db.Column(db.String(100), nullable=True)
     address = db.Column(db.String(255), nullable=True)
-    status = db.Column(
-       db.Enum(EmployeeStatus, name="employee_status_enum", validate_strings=True),
-        nullable=False,
-        default=EmployeeStatus.UNEMPLOYED
-    )
+    status = db.Column(db.Enum(EmployeeStatus),nullable=False,default=EmployeeStatus.UNEMPLOYED)
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     salary_base = db.Column(db.Float, nullable=False, default=0.0)
@@ -194,9 +239,10 @@ class EmployeeSalaryHistory(AuditMixin):
 class WorkAssignment(AuditMixin):
     __tablename__ = "t_work_assignment"
     work_assignment_id = db.Column(db.Integer, primary_key=True)
-    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=False)
+    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
     employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
-
+    work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], backref=db.backref('assignments', overlaps='employee_list,work_phases'), lazy='selectin', overlaps='employee_list,work_phases')
+    employee = db.relationship('Employee', foreign_keys=[employee_id], backref=db.backref('assignments', overlaps='employee_list,work_phases'), lazy='selectin', overlaps='employee_list,work_phases')
 class SalesItem(AuditMixin):
     __tablename__ = "t_sales_items"
     sales_item_id = db.Column(db.Integer, primary_key=True)

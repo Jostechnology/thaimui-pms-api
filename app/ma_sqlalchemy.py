@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import RolePermission
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, WorkOrderStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -46,7 +46,6 @@ class RolePermissionSchema(SQLAlchemyAutoSchema):
 
 
 
-
 class EmployeeSchema(Schema):
     employee_id = fields.Integer()
     employee_first_name = fields.String()
@@ -54,10 +53,19 @@ class EmployeeSchema(Schema):
     phone_number = fields.String()
     email = fields.String()
     citizen_id = fields.String()
-    status = fields.String()
+    status = fields.Enum(EmployeeStatus)
     address = fields.String()
     user_id = fields.Integer()
     is_active = fields.Boolean()
+    salary_base = fields.Float()
+
+class EmployeeSalaryHistorySchema(Schema):
+    salary_history_id = fields.Integer()
+    employee_id = fields.Integer()
+    old_salary = fields.Float()
+    new_salary = fields.Float()
+    effective_date = fields.DateTime()
+    remark = fields.String()
 
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
@@ -74,18 +82,13 @@ class WorkPhaseBreakSchema(Schema):
     work_phase_id = fields.Integer()
     break_start = fields.DateTime()
     break_end = fields.DateTime(allow_none=True)
-    break_type = fields.Method("get_break_type")
-
-    def get_break_type(self, obj):
-        if obj.break_type:
-            return obj.break_type.value
-        return "Other"
+    break_type = fields.Enum(BreakType)
 
 class WorkPhaseSchema(Schema):
     work_phase_id = fields.Integer()
     work_order_id = fields.Integer()
     phase_name = fields.String()
-    phase_status = fields.String()
+    phase_status = fields.Enum(PhaseStatus)
     start_date = fields.DateTime()
     end_date = fields.DateTime()
     created_date = fields.DateTime()
@@ -95,7 +98,7 @@ class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.Int()
     created_date = fields.DateTime()
-    status = fields.String()
+    status = fields.Enum(WorkOrderStatus)
     current_phase = fields.Nested(WorkPhaseSchema())
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     sales_item = fields.Nested(SalesItemSchema())
