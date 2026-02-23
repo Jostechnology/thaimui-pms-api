@@ -30,6 +30,26 @@ def get_salary_history(employee_id,month):
         raise
 
 
+def get_salary_at_date(employee_id, target_date):
+    """Get the employee's effective salary at a specific date.
+    Returns the new_salary from the most recent salary history record
+    where effective_date <= target_date. Returns None if no history found.
+    """
+    try:
+        record = (
+            EmployeeSalaryHistory.query
+            .filter(
+                EmployeeSalaryHistory.employee_id == employee_id,
+                EmployeeSalaryHistory.effective_date <= target_date
+            )
+            .order_by(EmployeeSalaryHistory.effective_date.desc())
+            .first()
+        )
+        return record.new_salary if record else None
+    except Exception:
+        raise
+
+
 def create_salary_history(history):
     try:
         # history is an instance of EmployeeSalaryHistory
