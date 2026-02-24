@@ -18,8 +18,9 @@ def get_all_sales_items(page, limit, search):
         return {"items": result.items, "total_pages": result.pages}
     except Exception:
         raise
-
-
-def create_sales_item(sales_item):
-    db.session.add(sales_item)
-    return sales_item
+def get_sales_item_by_id(sales_item_id):
+    try:
+        sales_item = SalesItem.query.get(sales_item_id)
+        return sales_item
+    except Exception:
+        raise

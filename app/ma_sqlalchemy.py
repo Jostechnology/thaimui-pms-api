@@ -66,7 +66,16 @@ class EmployeeSalaryHistorySchema(Schema):
     new_salary = fields.Float()
     effective_date = fields.DateTime()
     remark = fields.String()
-
+class MaterialListSchema(Schema):
+    material_list_id = fields.Integer()
+    sales_item_id = fields.Integer()
+    item_code = fields.String()
+    item_name = fields.String()
+    item_description = fields.String()
+    item_num = fields.Integer()
+    cost_price = fields.Float()
+    unit_price = fields.Float()
+    created_date = fields.DateTime()
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
     item_code = fields.String()
@@ -76,6 +85,7 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.Int()
+    material_list = fields.List(fields.Nested(MaterialListSchema()))
     
 class WorkPhaseBreakSchema(Schema):
     break_id = fields.Integer()
@@ -103,16 +113,7 @@ class WorkOrderSchema(Schema):
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     sales_item = fields.Nested(SalesItemSchema())
 
-class MaterialListSchema(Schema):
-    material_list_id = fields.Integer()
-    sales_item_id = fields.Integer()
-    item_code = fields.String()
-    item_name = fields.String()
-    item_description = fields.String()
-    item_num = fields.Integer()
-    cost_price = fields.Float()
-    unit_price = fields.Float()
-    created_date = fields.DateTime()
+
 
 class SalesOrderSearchSchema(Schema):
     doc_num = fields.Int()

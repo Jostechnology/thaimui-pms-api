@@ -123,15 +123,12 @@ class WorkOrder(AuditMixin):
     work_order_id = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
-    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='work_orders', lazy='selectin')
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
-    sales_item = db.relationship(
-        "SalesItem",
-        back_populates="work_order",
-        uselist=False
-    )
+    sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
+    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order', lazy='selectin')
+    item_components = db.relationship('ItemComponent', back_populates='work_order', lazy='selectin')
 
 class PhaseStatus(enum.Enum):
     PENDING = 'PENDING'
@@ -243,9 +240,15 @@ class WorkAssignment(AuditMixin):
     employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
     work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], backref=db.backref('assignments', overlaps='employee_list,work_phases'), lazy='selectin', overlaps='employee_list,work_phases')
     employee = db.relationship('Employee', foreign_keys=[employee_id], backref=db.backref('assignments', overlaps='employee_list,work_phases'), lazy='selectin', overlaps='employee_list,work_phases')
+
+class SalesItemStatus(enum.Enum):
+    PENDING = 'PENDING'
+    INPROGRESS = 'INPROGRESS'
+    COMPLETED = 'COMPLETED'
 class SalesItem(AuditMixin):
     __tablename__ = "t_sales_items"
     sales_item_id = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.Enum(SalesItemStatus), nullable=False , default=SalesItemStatus.PENDING)
     item_code = db.Column(db.String(50), nullable=False)
     item_num = db.Column(db.Integer, nullable=False)
     item_name = db.Column(db.String(255), nullable=False)
@@ -256,8 +259,9 @@ class SalesItem(AuditMixin):
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='selectin')
     material_list = db.relationship('MaterialList', backref='sales_item', lazy='selectin')
-    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'))
-    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='sales_item', lazy='selectin')
+    work_order = db.relationship('WorkOrder', back_populates='sales_item', lazy='selectin', uselist=False)
+    
+    
 
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"
@@ -269,6 +273,7 @@ class MaterialList(AuditMixin):
     item_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
+    component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='selectin')
 
 class QCWorkOrder(AuditMixin):
     __tablename__ = "t_qc_work_order"
@@ -292,10 +297,22 @@ class SalesOrder(AuditMixin):
         back_populates="sales_order",
         lazy='selectin'
     )
-    work_orders = db.relationship(
-        "WorkOrder",
-        back_populates="sales_order",
-        lazy='selectin'
+class ItemComponent(AuditMixin):
+    __tablename__ = "t_item_component"
+    item_component_id = db.Column(db.Integer, primary_key=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False)
+    work_order = db.relationship('WorkOrder', back_populates='item_components', lazy='selectin')
+    material_usages = db.relationship(
+        "ComponentMaterialUsage",
+        back_populates="item_component",
     )
 
-    
+
+class ComponentMaterialUsage(BaseModel):
+    __tablename__ = "t_component_material_usage"
+    usage_id = db.Column(db.Integer, primary_key=True)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
+    material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='CASCADE'), nullable=False)
+    quantity_used = db.Column(db.Integer, nullable=False)
+    item_component = db.relationship("ItemComponent", back_populates="material_usages", lazy='selectin')
+    material_list = db.relationship("MaterialList", back_populates="component_usages", lazy='selectin')
