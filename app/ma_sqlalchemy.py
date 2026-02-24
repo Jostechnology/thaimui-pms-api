@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, WorkOrderStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, WorkOrderStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -130,4 +130,15 @@ class SalesOrderSchema(Schema):
     group_code = fields.String()
     group_name = fields.String()
 
-
+class QCWorkOrderSchema(Schema):
+    qc_work_order_id = fields.Integer()
+    work_order_id = fields.Integer()
+    qc_status = fields.Enum(QCWorkOrderStatus)
+    qc_date = fields.DateTime()
+    qc_by = fields.String()
+    remark = fields.String()
+    form_data = fields.Dict()
+    created_date = fields.DateTime()
+    updated_date = fields.DateTime()
+    created_by = fields.String()
+    updated_by = fields.String()

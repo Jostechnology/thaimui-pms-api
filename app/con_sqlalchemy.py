@@ -116,6 +116,8 @@ class RolePermission(BaseModel):
 class WorkOrderStatus(enum.Enum):
     READY = 'READY'
     INPROGRESS = 'INPROGRESS'
+    WAIT_TEST = 'WAIT_TEST'
+    TESTING = 'TESTING'
     COMPLETED = 'COMPLETED'
 
 class WorkOrder(AuditMixin):
@@ -270,9 +272,22 @@ class MaterialList(AuditMixin):
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
 
+class QCWorkOrderStatus(enum.Enum):
+    PENDING = 'PENDING'
+    INPROGRESS = 'INPROGRESS'
+    PASSED = 'PASSED'
+    FAILED = 'FAILED'
+
 class QCWorkOrder(AuditMixin):
     __tablename__ = "t_qc_work_order"
     qc_work_order_id = db.Column(db.Integer, primary_key=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False, unique=True)
+    qc_status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
+    qc_date = db.Column(db.DateTime, nullable=True)
+    qc_by = db.Column(db.String(100), nullable=True)
+    remark = db.Column(db.String(500), nullable=True)
+    form_data = db.Column(db.JSON, nullable=True)
+    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref=db.backref('qc_work_order', uselist=False), lazy='selectin')
 
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
