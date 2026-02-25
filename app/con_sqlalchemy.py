@@ -289,6 +289,50 @@ class QCWorkOrder(AuditMixin):
     form_data = db.Column(db.JSON, nullable=True)
     work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], backref=db.backref('qc_work_order', uselist=False), lazy='selectin')
 
+
+class CertificationStatus(enum.Enum):
+    PASSED = 'PASSED'
+    FAILED = 'FAILED'
+class QCCertification(AuditMixin):
+    __tablename__ = "t_qc_certification"
+    qc_certification_id = db.Column(db.Integer, primary_key=True)
+
+    certification_number = db.Column(db.String(255), nullable=False)
+    certification_date = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    standard_reference = db.Column(db.String(255), nullable=True)
+    remark = db.Column(db.String(500), nullable=True)
+    test_method = db.Column(db.String(255), nullable=True)
+    certification_status = db.Column(db.Enum(CertificationStatus), nullable=False, default=CertificationStatus.PASSED)
+    authorize_signature = db.Column(db.String(255), nullable=True)
+
+    qc_work_order_id = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='CASCADE'), nullable=False)
+    qc_work_order = db.relationship('QCWorkOrder', foreign_keys=[qc_work_order_id], backref=db.backref('qc_certifications', lazy='selectin'), lazy='selectin')
+
+    # สิ่งที่เพิ่ม: Relationship ไปหาตารางลูก (QCCheckItem)
+    # cascade='all, delete-orphan' หมายความว่า ถ้าลบใบ Cert นี้ทิ้ง รายการเทสข้างในจะถูกลบทิ้งไปด้วยอัตโนมัติ
+    check_items = db.relationship('QCCheckItem', backref='certification', cascade='all, delete-orphan', lazy='selectin')
+
+
+class QCCheckItem(AuditMixin):
+    __tablename__ = "t_qc_check_item"
+    test_id = db.Column(db.Integer, primary_key=True)
+    
+    # สิ่งที่เพิ่ม: 1. Foreign Key ผูกกับตารางแม่ (QCCertification)
+    qc_certification_id = db.Column(db.Integer, db.ForeignKey('t_qc_certification.qc_certification_id', ondelete='CASCADE'), nullable=False)
+
+    # ฟิลด์เก็บข้อมูลตามหน้า UI
+    item_no = db.Column(db.String(50), nullable=True)       # ลำดับที่ เช่น "01", "02" (Frontend ส่งมา)
+    test_number = db.Column(db.String(255), nullable=False) # เลข Test No. (ระบบรันให้)
+    ref_number = db.Column(db.String(255), nullable=True)   # รหัสอ้างอิง (User กรอก)
+    description = db.Column(db.Text, nullable=True)         # รายละเอียดสินค้าแบบยาวๆ (Frontend ส่งมา)
+    wll = db.Column(db.Float, nullable=True)                # ค่า W.L.L.
+    load_test = db.Column(db.Float, nullable=True)          # ค่า Load Test
+
+
+
+
+  
+
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
     doc_entry = db.Column(db.Integer, primary_key=True)
