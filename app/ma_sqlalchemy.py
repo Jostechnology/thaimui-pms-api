@@ -142,3 +142,45 @@ class QCWorkOrderSchema(Schema):
     updated_date = fields.DateTime()
     created_by = fields.String()
     updated_by = fields.String()
+
+
+# 1. Schema สำหรับตารางลูก (รายการสินค้า/รายการเทส)
+class QCCheckItemSchema(Schema):
+    test_id = fields.Integer(dump_only=True)
+    qc_certification_id = fields.Integer()
+    
+    item_no = fields.String()
+    test_number = fields.String()
+    ref_number = fields.String()
+    description = fields.String()
+    wll = fields.Float()
+    load_test = fields.Float()
+    
+    # AuditMixin Fields
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)
+
+# 2. Schema สำหรับตารางแม่ (ใบรับรอง)
+class QCCertificateSchema(Schema):
+    qc_certification_id = fields.Integer(dump_only=True)
+    qc_work_order_id = fields.Integer()
+    
+    # อิงตาม Model ล่าสุดของพี่ที่ใช้คำว่า certification_number และมี standard_reference
+    certification_number = fields.String() 
+    certification_date = fields.DateTime()
+    standard_reference = fields.String()
+    test_method = fields.String()
+    certification_status = fields.String() # Enum จะถูกแปลงเป็น Text (String) ให้ Frontend
+    remark = fields.String()
+    authorize_signature = fields.String()
+    
+    # 3. สิ่งสำคัญ: เชื่อม Schema ลูกเข้ากับ Schema แม่แบบ One-to-Many
+    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
+    
+    # AuditMixin Fields
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)
