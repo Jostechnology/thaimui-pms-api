@@ -130,18 +130,66 @@ class SalesOrderSchema(Schema):
     group_code = fields.String()
     group_name = fields.String()
 
+class SalesItemSchema(Schema):
+    sales_item_id    = fields.Integer()
+    item_code        = fields.String()
+    item_num         = fields.Integer()
+    item_name        = fields.String()
+    item_description = fields.String()
+    doc_num          = fields.Integer()
+    doc_entry        = fields.Integer()
+    work_order_id    = fields.Integer()
+
+class QCFormSchema(Schema):
+    qc_form_id              = fields.Integer()
+    qc_work_order_id        = fields.Integer()
+    std_ptt                 = fields.Boolean()
+    std_chevron             = fields.Boolean()
+    std_valeur              = fields.Boolean()
+    std_ophir               = fields.Boolean()
+    std_three_spec          = fields.Boolean()
+    std_others              = fields.Boolean()
+    std_others_text         = fields.String()
+    cert_inhouse            = fields.Boolean()
+    cert_third_party        = fields.Boolean()
+    cert_ndt                = fields.Boolean()
+    cert_others             = fields.Boolean()
+    cert_others_text        = fields.String()
+    serial_tag              = fields.Boolean()
+    serial_imprint          = fields.Boolean()
+    serial_continue         = fields.Boolean()
+    serial_others           = fields.Boolean()
+    serial_others_text      = fields.String()
+    general_remark          = fields.String()
+    details                 = fields.String()
+    customer_receipt_number = fields.String()
+
+
+class QCItemSchema(Schema):
+    qc_item_id       = fields.Integer()
+    qc_work_order_id = fields.Integer()
+    item_order       = fields.Integer()
+    item_code        = fields.String()
+    description      = fields.String()
+    wll              = fields.String()
+    quantity         = fields.String()
+    serial_no        = fields.String()
+    item_remark      = fields.String()
+
+
 class QCWorkOrderSchema(Schema):
     qc_work_order_id = fields.Integer()
-    work_order_id = fields.Integer()
+    sales_item_id = fields.Integer()
     qc_status = fields.Enum(QCWorkOrderStatus)
     qc_date = fields.DateTime()
     qc_by = fields.String()
     remark = fields.String()
-    form_data = fields.Dict()
     created_date = fields.DateTime()
     updated_date = fields.DateTime()
     created_by = fields.String()
     updated_by = fields.String()
+    qc_form = fields.Nested(QCFormSchema, allow_none=True)
+    qc_items = fields.List(fields.Nested(QCItemSchema))
 
 
 # 1. Schema สำหรับตารางลูก (รายการสินค้า/รายการเทส)
@@ -174,7 +222,7 @@ class QCCertificateSchema(Schema):
     test_method = fields.String()
     certification_status = fields.String() # Enum จะถูกแปลงเป็น Text (String) ให้ Frontend
     remark = fields.String()
-    
+   
     # 3. สิ่งสำคัญ: เชื่อม Schema ลูกเข้ากับ Schema แม่แบบ One-to-Many
     check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
     

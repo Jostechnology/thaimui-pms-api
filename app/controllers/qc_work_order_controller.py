@@ -7,10 +7,23 @@ from app.con_sqlalchemy import QCWorkOrderStatus
 from app.services.qc_work_order_service import (
     get_all_qc_work_orders,
     get_qc_work_order_by_id,
+    get_sales_items_for_qc,
     create_qc_work_order,
     update_qc_work_order,
     delete_qc_work_order,
 )
+
+
+@app.route("/api/get_sales_items_for_qc", methods=["GET"])
+@verify_required
+def api_get_sales_items_for_qc():
+    try:
+        search = request.args.get("search", "", type=str)
+        result = get_sales_items_for_qc(search)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/get_qc_work_order_list", methods=["GET"])
