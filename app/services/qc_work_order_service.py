@@ -1,11 +1,8 @@
-from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, WorkOrder, WorkOrderStatus
+from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus
 from app.ma_sqlalchemy import QCWorkOrderSchema
 from app.repositories import qc_work_order_repository
+from app.repositories import work_order_repository
 from app.app import db
-
-# สถานะที่อนุญาตให้สร้างใบสั่งเทส QC ได้
-_ALLOWED_STATUSES_FOR_QC = {WorkOrderStatus.WAIT_TEST, WorkOrderStatus.TESTING}
-
 
 def get_all_qc_work_orders(data):
     try:
@@ -30,45 +27,97 @@ def get_qc_work_order_by_id(qc_work_order_id):
         raise
 
 
+def get_sales_items_for_qc(search=""):
+    """ดึง SalesItem ที่พร้อมสร้าง QC (WorkOrder สถานะ WAIT_TEST/TESTING)"""
+    from app.ma_sqlalchemy import SalesItemSchema
+    try:
+        items = work_order_repository.get_sales_items_for_qc(search)
+        return SalesItemSchema(many=True).dump(items)
+    except Exception:
+        raise
+
+
+def _build_qc_form(qc_work_order_id, data):
+    return QCForm(
+        qc_work_order_id=qc_work_order_id,
+        std_ptt=data.get("ptt", False),
+        std_chevron=data.get("chevron", False),
+        std_valeur=data.get("valeur", False),
+        std_ophir=data.get("ophir", False),
+        std_three_spec=data.get("threeSpec", False),
+        std_others=data.get("standardOthers", False),
+        std_others_text=data.get("standardOthersText"),
+        cert_inhouse=data.get("inHouse", False),
+        cert_third_party=data.get("thirdParty", False),
+        cert_ndt=data.get("ndt", False),
+        cert_others=data.get("testingOthers", False),
+        cert_others_text=data.get("testingOthersText"),
+        serial_tag=data.get("serialTag", False),
+        serial_imprint=data.get("serialImprint", False),
+        serial_continue=data.get("continueSerial", False),
+        serial_others=data.get("serialOthers", False),
+        serial_others_text=data.get("serialOthersText"),
+        general_remark=data.get("generalRemark"),
+        details=data.get("details"),
+        customer_receipt_number=data.get("customerReceiptNumber"),
+    )
+
+
+def _build_qc_items(qc_work_order_id, items_data):
+    items = []
+    for idx, item in enumerate(items_data or []):
+        items.append(QCItem(
+            qc_work_order_id=qc_work_order_id,
+            item_order=idx + 1,
+            item_code=item.get("code"),
+            description=item.get("description"),
+            wll=item.get("wll"),
+            quantity=str(item.get("quantity", "")),
+            serial_no=item.get("serialNo"),
+            item_remark=item.get("remark"),
+        ))
+    return items
+
+
 def create_qc_work_order(data):
     try:
-        work_order_id = data.get("work_order_id")
-        
-        if not work_order_id and data.get("donEntry"):
-            work_order = db.session.query(WorkOrder).filter_by(doc_entry=data.get("donEntry")).first()
-            if work_order:
-                work_order_id = work_order.work_order_id
-            else:
-                raise Exception(f"ไม่พบ Work Order สำหรับ Sales Order (doc_entry: {data.get('donEntry')})")
-                
-        if not work_order_id:
-            raise Exception("กรุณาระบุ Work Order หรือ Sales Order")
+        sales_item_id = data.get("salesItemId") or data.get("sales_item_id")
+        if not sales_item_id:
+            raise Exception("กรุณาระบุ Sales Item")
 
-        # ตรวจสอบ status ของ Work Order ว่าพร้อมสร้างใบสั่งเทสหรือไม่
-        work_order_obj = db.session.query(WorkOrder).filter_by(work_order_id=work_order_id).first()
-        if not work_order_obj:
-            raise Exception(f"ไม่พบ Work Order ID: {work_order_id}")
-        if work_order_obj.status not in _ALLOWED_STATUSES_FOR_QC:
-            allowed_labels = ", ".join([s.value for s in _ALLOWED_STATUSES_FOR_QC])
+        # ตรวจสอบสถานะ WorkOrder ผ่าน SalesItem
+        sales_item = db.session.query(SalesItem).filter_by(sales_item_id=sales_item_id).first()
+        if not sales_item:
+            raise Exception(f"ไม่พบ Sales Item ID: {sales_item_id}")
+
+        work_order = sales_item.work_order
+        if not work_order:
+            raise Exception("Sales Item นี้ไม่มี Work Order ที่เชื่อมต่อ")
+
+        allowed = {WorkOrderStatus.WAIT_TEST, WorkOrderStatus.TESTING}
+        if work_order.status not in allowed:
+            allowed_labels = ", ".join([s.value for s in allowed])
             raise Exception(
-                f"ไม่สามารถสร้างใบสั่งเทสได้ เนื่องจาก Work Order มีสถานะ '{work_order_obj.status.value}' "
+                f"ไม่สามารถสร้างใบสั่งเทสได้ เนื่องจาก Work Order มีสถานะ '{work_order.status.value}' "
                 f"(ต้องเป็น {allowed_labels} เท่านั้น)"
             )
 
-        existing_qc = db.session.query(QCWorkOrder).filter_by(work_order_id=work_order_id).first()
-        if existing_qc:
-            raise Exception("Work Order นี้มีเอกสาร QC อยู่แล้ว ไม่สามารถสร้างเพิ่มได้")
-
         qc = QCWorkOrder(
-            work_order_id=work_order_id,
+            sales_item_id=sales_item_id,
             qc_status=QCWorkOrderStatus.PENDING,
             qc_date=data.get("qc_date"),
             qc_by=data.get("qc_by"),
             remark=data.get("remark"),
-            form_data=data,
         )
         qc = qc_work_order_repository.create_qc_work_order(qc)
+        db.session.flush()
+
+        db.session.add(_build_qc_form(qc.qc_work_order_id, data))
+        for item in _build_qc_items(qc.qc_work_order_id, data.get("items", [])):
+            db.session.add(item)
+
         db.session.commit()
+        db.session.refresh(qc)
         return QCWorkOrderSchema().dump(qc)
     except Exception as e:
         db.session.rollback()
@@ -100,10 +149,41 @@ def update_qc_work_order(qc_work_order_id, data):
             qc.qc_by = data.get("qc_by")
         if "remark" in data:
             qc.remark = data.get("remark")
-            
-        qc.form_data = data
+
+        if qc.qc_form:
+            form = qc.qc_form
+            form.std_ptt            = data.get("ptt", form.std_ptt)
+            form.std_chevron        = data.get("chevron", form.std_chevron)
+            form.std_valeur         = data.get("valeur", form.std_valeur)
+            form.std_ophir          = data.get("ophir", form.std_ophir)
+            form.std_three_spec     = data.get("threeSpec", form.std_three_spec)
+            form.std_others         = data.get("standardOthers", form.std_others)
+            form.std_others_text    = data.get("standardOthersText", form.std_others_text)
+            form.cert_inhouse       = data.get("inHouse", form.cert_inhouse)
+            form.cert_third_party   = data.get("thirdParty", form.cert_third_party)
+            form.cert_ndt           = data.get("ndt", form.cert_ndt)
+            form.cert_others        = data.get("testingOthers", form.cert_others)
+            form.cert_others_text   = data.get("testingOthersText", form.cert_others_text)
+            form.serial_tag         = data.get("serialTag", form.serial_tag)
+            form.serial_imprint     = data.get("serialImprint", form.serial_imprint)
+            form.serial_continue    = data.get("continueSerial", form.serial_continue)
+            form.serial_others      = data.get("serialOthers", form.serial_others)
+            form.serial_others_text = data.get("serialOthersText", form.serial_others_text)
+            form.general_remark     = data.get("generalRemark", form.general_remark)
+            form.details            = data.get("details", form.details)
+            form.customer_receipt_number = data.get("customerReceiptNumber", form.customer_receipt_number)
+        else:
+            db.session.add(_build_qc_form(qc_work_order_id, data))
+
+        if "items" in data:
+            for old_item in qc.qc_items:
+                db.session.delete(old_item)
+            db.session.flush()
+            for item in _build_qc_items(qc_work_order_id, data.get("items", [])):
+                db.session.add(item)
 
         db.session.commit()
+        db.session.refresh(qc)
         return QCWorkOrderSchema().dump(qc)
     except Exception:
         db.session.rollback()
