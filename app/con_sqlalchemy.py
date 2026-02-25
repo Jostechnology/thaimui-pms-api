@@ -303,8 +303,7 @@ class QCCertification(AuditMixin):
     remark = db.Column(db.String(500), nullable=True)
     test_method = db.Column(db.String(255), nullable=True)
     certification_status = db.Column(db.Enum(CertificationStatus), nullable=False, default=CertificationStatus.PASSED)
-    authorize_signature = db.Column(db.String(255), nullable=True)
-
+    
     qc_work_order_id = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='CASCADE'), nullable=False)
     qc_work_order = db.relationship('QCWorkOrder', foreign_keys=[qc_work_order_id], backref=db.backref('qc_certifications', lazy='selectin'), lazy='selectin')
 

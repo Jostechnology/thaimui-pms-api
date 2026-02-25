@@ -174,7 +174,6 @@ class QCCertificateSchema(Schema):
     test_method = fields.String()
     certification_status = fields.String() # Enum จะถูกแปลงเป็น Text (String) ให้ Frontend
     remark = fields.String()
-    authorize_signature = fields.String()
     
     # 3. สิ่งสำคัญ: เชื่อม Schema ลูกเข้ากับ Schema แม่แบบ One-to-Many
     check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
