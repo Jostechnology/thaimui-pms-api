@@ -39,28 +39,30 @@ def create_work_order(data):
         # สร้าง map ของ material_list ที่อยู่ใน SalesItem นี้
         material_map = {m.material_list_id: m for m in sales_item.material_list}
 
-        # ตรวจสอบว่า material แต่ละตัวอยู่ใน SalesItem และมีจำนวนเพียงพอ
+        # ตรวจสอบ material ทุกตัวในทุก component ว่ามีอยู่จริงและมีจำนวนเพียงพอ
         for comp in item_components_data:
-            material_list_id = comp.get("material_list_id")
-            quantity_used = comp.get("quantity_used", 0)
+            material_usage_list = comp.get("material_usage", [])
+            for usage in material_usage_list:
+                material_list_id = usage.get("material_list_id")
+                quantity_used = usage.get("quantity_used", 0)
 
-            if material_list_id not in material_map:
-                raise NotFoundError(
-                    f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้"
-                )
+                if material_list_id not in material_map:
+                    raise NotFoundError(
+                        f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้"
+                    )
 
-            material = material_map[material_list_id]
-            # คำนวณจำนวนที่ถูกใช้ไปแล้วจาก WorkOrder อื่น
-            already_used = sum(
-                usage.quantity_used for usage in material.component_usages
-            )
-            available = material.item_num - already_used
-            if quantity_used > available:
-                raise NotFoundError(
-                    f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
-                    f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
+                material = material_map[material_list_id]
+                # คำนวณจำนวนที่ถูกใช้ไปแล้วจาก WorkOrder อื่น
+                already_used = sum(
+                    u.quantity_used for u in material.component_usages
                 )
-            material.item_num -= quantity_used  # อัปเดตจำนวนคงเหลือใน MaterialList
+                available = material.item_num - already_used
+                if quantity_used > available:
+                    raise NotFoundError(
+                        f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
+                        f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
+                    )
+                material.item_num -= quantity_used  # อัปเดตจำนวนคงเหลือใน MaterialList
 
         # สร้าง WorkOrder
         work_order = WorkOrder(
@@ -71,14 +73,17 @@ def create_work_order(data):
 
         # สร้าง ItemComponent + ComponentMaterialUsage
         for comp in item_components_data:
-            item_component = ItemComponent()
+            item_component = ItemComponent(
+                component_name=comp.get("component_name", ""),
+            )
             work_order.item_components.append(item_component)
 
-            material_usage = ComponentMaterialUsage(
-                material_list_id=comp.get("material_list_id"),
-                quantity_used=comp.get("quantity_used"),
-            )
-            item_component.material_usages.append(material_usage)
+            for usage in comp.get("material_usage", []):
+                material_usage = ComponentMaterialUsage(
+                    material_list_id=usage.get("material_list_id"),
+                    quantity_used=usage.get("quantity_used"),
+                )
+                item_component.material_usages.append(material_usage)
 
         db.session.add(work_order)
         db.session.commit()

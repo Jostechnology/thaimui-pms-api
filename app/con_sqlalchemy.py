@@ -306,6 +306,7 @@ class ItemComponent(AuditMixin):
         "ComponentMaterialUsage",
         back_populates="item_component",
     )
+    component_name = db.Column(db.String(255), nullable=False)
 
 
 class ComponentMaterialUsage(BaseModel):
