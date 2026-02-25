@@ -5,7 +5,7 @@ from sqlalchemy import or_
 from app.exception import NotFoundError
 
 
-def get_all_qc_work_orders(page, limit, search):
+def get_all_qc_work_orders(page, limit, search, filter=None):
     try:
         query = db.session.query(QCWorkOrder)
         if search:
@@ -15,6 +15,8 @@ def get_all_qc_work_orders(page, limit, search):
                     QCWorkOrder.remark.ilike(f"%{search}%"),
                 )
             )
+        if filter:
+            query = query.filter(QCWorkOrder.qc_status == filter)
         result = query.order_by(QCWorkOrder.qc_work_order_id.desc()).paginate(
             page=page, per_page=limit, error_out=False
         )

@@ -3,6 +3,7 @@ from app.api_auth import verify_required
 from app.app import app
 from app.exception import AppException
 from flask import request, jsonify
+from app.con_sqlalchemy import QCWorkOrderStatus
 from app.services.qc_work_order_service import (
     get_all_qc_work_orders,
     get_qc_work_order_by_id,
@@ -12,14 +13,15 @@ from app.services.qc_work_order_service import (
 )
 
 
-@app.route("/api/qc_work_order/list", methods=["GET"])
+@app.route("/api/get_qc_work_order_list", methods=["GET"])
 @verify_required
 def api_get_qc_work_order_list():
     try:
         page = request.args.get("page", 1, type=int)
-        limit = request.args.get("limit", 10, type=int)
+        limit = request.args.get("pageConfig", 10, type=int)
         search = request.args.get("search", "", type=str)
-        data = {"page": page, "limit": limit, "search": search}
+        filter = request.args.get("filter", None, type=QCWorkOrderStatus)
+        data = {"page": page, "limit": limit, "search": search, "filter": filter}
         result = get_all_qc_work_orders(data)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:

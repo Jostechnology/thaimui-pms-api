@@ -12,7 +12,8 @@ def get_all_qc_work_orders(data):
         page = data.get("page", 1)
         limit = data.get("limit", 10)
         search = data.get("search", "")
-        result = qc_work_order_repository.get_all_qc_work_orders(page, limit, search)
+        filter = data.get("filter", None)
+        result = qc_work_order_repository.get_all_qc_work_orders(page, limit, search, filter)
         return {
             "items": QCWorkOrderSchema(many=True).dump(result["items"]),
             "total_pages": result["total_pages"],

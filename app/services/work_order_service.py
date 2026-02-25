@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder
-from app.ma_sqlalchemy import WorkOrderSchema
+from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema
 from app.repositories import work_order_repository
 from app.app import db
 
@@ -13,6 +13,13 @@ def get_all_work_orders(data):
         month = data.get("month", "")
         result = work_order_repository.get_all_work_orders(page, limit, search,filter, month)
         return {"items": WorkOrderSchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
+    except Exception:
+        raise
+
+def get_sales_orders_for_qc(search=""):
+    try:
+        items = work_order_repository.get_sales_orders_for_qc(search)
+        return SalesOrderSchema(many=True).dump(items)
     except Exception:
         raise
 
