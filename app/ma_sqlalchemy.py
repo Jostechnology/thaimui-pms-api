@@ -190,6 +190,18 @@ class QCWorkOrderSchema(Schema):
     updated_by = fields.String()
     qc_form = fields.Nested(QCFormSchema, allow_none=True)
     qc_items = fields.List(fields.Nested(QCItemSchema))
+    doc_entry = fields.Method("get_doc_entry")
+    sales_item_code = fields.Method("get_sales_item_code")
+    sales_item_name = fields.Method("get_sales_item_name")
+
+    def get_doc_entry(self, obj):
+        return obj.sales_item.doc_entry if obj.sales_item else None
+
+    def get_sales_item_code(self, obj):
+        return obj.sales_item.item_code if obj.sales_item else None
+
+    def get_sales_item_name(self, obj):
+        return obj.sales_item.item_name if obj.sales_item else None
 
 
 # 1. Schema สำหรับตารางลูก (รายการสินค้า/รายการเทส)
