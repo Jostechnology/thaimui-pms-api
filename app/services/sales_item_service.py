@@ -2,6 +2,7 @@ from app.con_sqlalchemy import SalesItem
 from app.ma_sqlalchemy import SalesItemSchema
 from app.repositories import sales_item_repository
 from app.app import db
+from app.exception import NotFoundError
 
 
 def get_all_sales_items(data):
@@ -14,7 +15,14 @@ def get_all_sales_items(data):
     except Exception:
         raise
 
-
+def get_sales_item_by_id(sales_item_id):
+    try:
+        sales_item = sales_item_repository.get_sales_item_by_id(sales_item_id)
+        if not sales_item:
+            raise NotFoundError(f"Sales item with id {sales_item_id} not found")
+        return sales_item
+    except Exception:
+        raise
 def create_sales_item(data):
     try:
         sales_item = SalesItem(

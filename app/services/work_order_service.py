@@ -1,8 +1,9 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder
 from app.ma_sqlalchemy import WorkOrderSchema
 from app.repositories import work_order_repository
 from app.app import db
-
+from app.services import sales_item_service
+from app.con_sqlalchemy import ComponentMaterialUsage, ItemComponent, WorkOrder
+from app.exception import NotFoundError, UniqueError
 
 def get_all_work_orders(data):
     try:
@@ -25,64 +26,68 @@ def get_work_order_by_id(work_order_id):
 
 def create_work_order(data):
     try:
-        sales_order_list = []
+        sales_item_id = data.get("sales_item_id")
+        item_components_data = data.get("item_components", [])
 
-        for item in data.get("items", []):
-            # 1) สร้าง MaterialList ก่อน
-            # 2) ยัดเข้า SalesItem.material_list
-            # 3) ผูก SalesItem เข้า WorkOrder ผ่าน relationship
-            # SQLAlchemy cascade (save-update) จะ add ทุกอย่างให้อัตโนมัติ
+        # ตรวจสอบว่า SalesItem มีอยู่จริง
+        sales_item = sales_item_service.get_sales_item_by_id(sales_item_id)
 
-            # work_order = WorkOrder(
-            #     doc_num=item.get("doc_num"),
-            #     doc_entry=item.get("doc_entry"),
-            #     status=item.get("status", "Ready"),
-            # )
+        # ตรวจสอบว่ายังไม่มี WorkOrder สำหรับ SalesItem นี้
+        if sales_item.work_order:
+            raise UniqueError("มี Work Order สำหรับ Sales Item นี้อยู่แล้ว")
 
-            sales_order = SalesOrder(
-                doc_entry = item.get("doc_entry"),
-                doc_num = item.get("doc_num"),
-                card_code = item.get("card_code"),
-                card_name = item.get("card_name"),
-                slp_code = item.get("slp_code"),
-                slp_name = item.get("slp_name"),
-                bpl_code = item.get("bpl_code"),
-                bpl_name = item.get("bpl_name"),
-                group_code = item.get("group_code"),
-                group_name = item.get("group_name"),
-            )
+        # สร้าง map ของ material_list ที่อยู่ใน SalesItem นี้
+        material_map = {m.material_list_id: m for m in sales_item.material_list}
 
-            for sale_item_data in item.get("sales_item_list", []):
-                materials = [
-                    MaterialList(
-                        item_code=m.get("item_code"),
-                        item_name=m.get("item_name"),
-                        item_description=m.get("item_description"),
-                        item_num=m.get("item_num"),
-                        cost_price=m.get("cost_price"),
-                        unit_price=m.get("unit_price"),
+        # ตรวจสอบ material ทุกตัวในทุก component ว่ามีอยู่จริงและมีจำนวนเพียงพอ
+        for comp in item_components_data:
+            material_usage_list = comp.get("material_usage", [])
+            for usage in material_usage_list:
+                material_list_id = usage.get("material_list_id")
+                quantity_used = usage.get("quantity_used", 0)
+
+                if material_list_id not in material_map:
+                    raise NotFoundError(
+                        f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้"
                     )
-                    for m in sale_item_data.get("material_list", [])
-                ]
 
-                SalesItem(
-                    item_code=sale_item_data.get("item_code"),
-                    item_num=sale_item_data.get("item_num"),
-                    item_name=sale_item_data.get("item_name"),
-                    item_description=sale_item_data.get("item_description"),
-                    cost_price=sale_item_data.get("cost_price"),
-                    unit_price=sale_item_data.get("unit_price"),
-                    doc_num=sale_item_data.get("doc_num"),
-                    material_list=materials,
-                    sales_order=sales_order
+                material = material_map[material_list_id]
+                # คำนวณจำนวนที่ถูกใช้ไปแล้วจาก WorkOrder อื่น
+                already_used = sum(
+                    u.quantity_used for u in material.component_usages
                 )
+                available = material.item_num - already_used
+                if quantity_used > available:
+                    raise NotFoundError(
+                        f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
+                        f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
+                    )
+                material.item_num -= quantity_used  # อัปเดตจำนวนคงเหลือใน MaterialList
 
-            sales_order_list.append(sales_order)
+        # สร้าง WorkOrder
+        work_order = WorkOrder(
+            doc_num=sales_item.doc_num,
+            doc_entry=sales_item.doc_entry,
+            sales_item_id=sales_item_id,
+        )
 
-        # add ทุก WorkOrder → cascade จะลากทุก SalesItem + MaterialList เข้า session
-        db.session.add_all(sales_order_list)
+        # สร้าง ItemComponent + ComponentMaterialUsage
+        for comp in item_components_data:
+            item_component = ItemComponent(
+                component_name=comp.get("component_name", ""),
+            )
+            work_order.item_components.append(item_component)
+
+            for usage in comp.get("material_usage", []):
+                material_usage = ComponentMaterialUsage(
+                    material_list_id=usage.get("material_list_id"),
+                    quantity_used=usage.get("quantity_used"),
+                )
+                item_component.material_usages.append(material_usage)
+
+        db.session.add(work_order)
         db.session.commit()
-        return True
+        return WorkOrderSchema().dump(work_order)
     except Exception:
         db.session.rollback()
         raise
