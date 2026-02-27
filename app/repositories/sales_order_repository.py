@@ -32,3 +32,4 @@ def get_sales_order_detail(doc_entry):
         return sales_order
     except Exception:
         raise
+

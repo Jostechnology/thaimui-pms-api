@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, WorkOrderStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, WorkOrderStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -66,7 +66,16 @@ class EmployeeSalaryHistorySchema(Schema):
     new_salary = fields.Float()
     effective_date = fields.DateTime()
     remark = fields.String()
-
+class MaterialListSchema(Schema):
+    material_list_id = fields.Integer()
+    sales_item_id = fields.Integer()
+    item_code = fields.String()
+    item_name = fields.String()
+    item_description = fields.String()
+    item_num = fields.Integer()
+    cost_price = fields.Float()
+    unit_price = fields.Float()
+    created_date = fields.DateTime()
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
     item_code = fields.String()
@@ -76,6 +85,7 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.Int()
+    material_list = fields.List(fields.Nested(MaterialListSchema()))
     
 class WorkPhaseBreakSchema(Schema):
     break_id = fields.Integer()
@@ -103,16 +113,7 @@ class WorkOrderSchema(Schema):
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     sales_item = fields.Nested(SalesItemSchema())
 
-class MaterialListSchema(Schema):
-    material_list_id = fields.Integer()
-    sales_item_id = fields.Integer()
-    item_code = fields.String()
-    item_name = fields.String()
-    item_description = fields.String()
-    item_num = fields.Integer()
-    cost_price = fields.Float()
-    unit_price = fields.Float()
-    created_date = fields.DateTime()
+
 
 class SalesOrderSearchSchema(Schema):
     doc_num = fields.Int()
@@ -130,4 +131,116 @@ class SalesOrderSchema(Schema):
     group_code = fields.String()
     group_name = fields.String()
 
+class SalesItemSchema(Schema):
+    sales_item_id    = fields.Integer()
+    item_code        = fields.String()
+    item_num         = fields.Integer()
+    item_name        = fields.String()
+    item_description = fields.String()
+    doc_num          = fields.Integer()
+    doc_entry        = fields.Integer()
+    work_order_id    = fields.Integer()
 
+class QCFormSchema(Schema):
+    qc_form_id              = fields.Integer()
+    qc_work_order_id        = fields.Integer()
+    std_ptt                 = fields.Boolean()
+    std_chevron             = fields.Boolean()
+    std_valeur              = fields.Boolean()
+    std_ophir               = fields.Boolean()
+    std_three_spec          = fields.Boolean()
+    std_others              = fields.Boolean()
+    std_others_text         = fields.String()
+    cert_inhouse            = fields.Boolean()
+    cert_third_party        = fields.Boolean()
+    cert_ndt                = fields.Boolean()
+    cert_others             = fields.Boolean()
+    cert_others_text        = fields.String()
+    serial_tag              = fields.Boolean()
+    serial_imprint          = fields.Boolean()
+    serial_continue         = fields.Boolean()
+    serial_others           = fields.Boolean()
+    serial_others_text      = fields.String()
+    general_remark          = fields.String()
+    details                 = fields.String()
+    customer_receipt_number = fields.String()
+
+
+class QCItemSchema(Schema):
+    qc_item_id       = fields.Integer()
+    qc_work_order_id = fields.Integer()
+    item_order       = fields.Integer()
+    item_code        = fields.String()
+    description      = fields.String()
+    wll              = fields.String()
+    quantity         = fields.String()
+    serial_no        = fields.String()
+    item_remark      = fields.String()
+
+
+class QCWorkOrderSchema(Schema):
+    qc_work_order_id = fields.Integer()
+    sales_item_id = fields.Integer()
+    qc_status = fields.Enum(QCWorkOrderStatus)
+    qc_date = fields.DateTime()
+    qc_by = fields.String()
+    remark = fields.String()
+    created_date = fields.DateTime()
+    updated_date = fields.DateTime()
+    created_by = fields.String()
+    updated_by = fields.String()
+    qc_form = fields.Nested(QCFormSchema, allow_none=True)
+    qc_items = fields.List(fields.Nested(QCItemSchema))
+    doc_entry = fields.Method("get_doc_entry")
+    sales_item_code = fields.Method("get_sales_item_code")
+    sales_item_name = fields.Method("get_sales_item_name")
+
+    def get_doc_entry(self, obj):
+        return obj.sales_item.doc_entry if obj.sales_item else None
+
+    def get_sales_item_code(self, obj):
+        return obj.sales_item.item_code if obj.sales_item else None
+
+    def get_sales_item_name(self, obj):
+        return obj.sales_item.item_name if obj.sales_item else None
+
+
+# 1. Schema สำหรับตารางลูก (รายการสินค้า/รายการเทส)
+class QCCheckItemSchema(Schema):
+    test_id = fields.Integer(dump_only=True)
+    qc_certification_id = fields.Integer()
+    
+    item_no = fields.String()
+    test_number = fields.String()
+    ref_number = fields.String()
+    description = fields.String()
+    wll = fields.Float()
+    load_test = fields.Float()
+    
+    # AuditMixin Fields
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)
+
+# 2. Schema สำหรับตารางแม่ (ใบรับรอง)
+class QCCertificateSchema(Schema):
+    qc_certification_id = fields.Integer(dump_only=True)
+    qc_work_order_id = fields.Integer()
+    
+    # อิงตาม Model ล่าสุดของพี่ที่ใช้คำว่า certification_number และมี standard_reference
+    certification_number = fields.String() 
+    certification_date = fields.DateTime()
+    standard_reference = fields.String()
+    test_method = fields.String()
+    certification_status = fields.String() # Enum จะถูกแปลงเป็น Text (String) ให้ Frontend
+    remark = fields.String()
+   
+    # 3. สิ่งสำคัญ: เชื่อม Schema ลูกเข้ากับ Schema แม่แบบ One-to-Many
+    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
+    
+    # AuditMixin Fields
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)

@@ -1,8 +1,8 @@
-from app.con_sqlalchemy import WorkOrder, WorkOrderStatus
+from app.con_sqlalchemy import WorkOrder, WorkOrderStatus, SalesOrder, SalesItem
 from app.app import db
-from sqlalchemy import extract
+from sqlalchemy import extract, or_
 
-def get_all_work_orders(page, limit, search,filter, month):
+def get_all_work_orders(page, limit, search, filter, month):
     try:
         query = WorkOrder.query
         if search:
@@ -24,5 +24,56 @@ def get_work_order_by_id(work_order_id):
     try:
         work_order = WorkOrder.query.get(work_order_id)
         return work_order
+    except Exception:
+        raise
+
+def get_sales_orders_for_qc(search=""):
+    """ดึง SalesOrder ที่ผูกกับ WorkOrder สถานะ WAIT_TEST หรือ TESTING เท่านั้น"""
+    try:
+        query = (
+            db.session.query(SalesOrder)
+            .join(WorkOrder, WorkOrder.doc_entry == SalesOrder.doc_entry)
+            .filter(
+                or_(
+                    WorkOrder.status == WorkOrderStatus.WAIT_TEST,
+                    WorkOrder.status == WorkOrderStatus.TESTING,
+                )
+            )
+        )
+        if search:
+            query = query.filter(
+                or_(
+                    SalesOrder.doc_num.ilike(f"%{search}%"),
+                    SalesOrder.card_name.ilike(f"%{search}%"),
+                    SalesOrder.card_code.ilike(f"%{search}%"),
+                )
+            )
+        return query.order_by(SalesOrder.doc_entry.desc()).all()
+    except Exception:
+        raise
+
+
+def get_sales_items_for_qc(search=""):
+    """ดึง SalesItem ที่ WorkOrder มีสถานะ WAIT_TEST หรือ TESTING"""
+    try:
+        query = (
+            db.session.query(SalesItem)
+            .join(WorkOrder, WorkOrder.work_order_id == SalesItem.work_order_id)
+            .filter(
+                or_(
+                    WorkOrder.status == WorkOrderStatus.WAIT_TEST,
+                    WorkOrder.status == WorkOrderStatus.TESTING,
+                )
+            )
+        )
+        if search:
+            query = query.filter(
+                or_(
+                    SalesItem.item_code.ilike(f"%{search}%"),
+                    SalesItem.item_name.ilike(f"%{search}%"),
+                    SalesItem.item_description.ilike(f"%{search}%"),
+                )
+            )
+        return query.order_by(SalesItem.sales_item_id.desc()).all()
     except Exception:
         raise
