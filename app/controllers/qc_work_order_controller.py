@@ -19,7 +19,8 @@ from app.services.qc_work_order_service import (
 def api_get_sales_items_for_qc():
     try:
         search = request.args.get("search", "", type=str)
-        result = get_sales_items_for_qc(search)
+        statuses = request.args.getlist("status", type=str)
+        result = get_sales_items_for_qc(search, statuses)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         traceback.print_exc()

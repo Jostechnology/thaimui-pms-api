@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus
 from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema
 from app.repositories import work_order_repository
 from app.app import db
@@ -18,9 +18,10 @@ def get_all_work_orders(data):
     except Exception:
         raise
 
-def get_sales_orders_for_qc(search=""):
+def get_sales_orders_for_qc(search="", statuses = []):
     try:
-        items = work_order_repository.get_sales_orders_for_qc(search)
+        statuses = [WorkOrderStatus(s) for s in statuses] if statuses else []
+        items = work_order_repository.get_sales_orders_for_qc(search, statuses)
         return SalesOrderSchema(many=True).dump(items)
     except Exception:
         raise

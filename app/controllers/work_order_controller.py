@@ -26,7 +26,8 @@ def api_get_work_order_list():
 def api_get_sales_orders_for_qc():
     try:
         search = request.args.get("search", "", type=str)
-        result = get_sales_orders_for_qc(search)
+        statuses = request.args.getlist("status", type=str)
+        result = get_sales_orders_for_qc(search, statuses)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         print(f"Error: {str(e)}")
