@@ -154,6 +154,7 @@ class SalesItemSchema(Schema):
     doc_num          = fields.Integer()
     doc_entry        = fields.Integer()
     work_order_id    = fields.Integer()
+    material_list    = fields.List(fields.Nested(MaterialListSchema()))
 
 class QCFormSchema(Schema):
     qc_form_id              = fields.Integer()
