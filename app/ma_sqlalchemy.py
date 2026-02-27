@@ -104,6 +104,19 @@ class WorkPhaseSchema(Schema):
     created_date = fields.DateTime()
     employee_list = fields.List(fields.Nested(EmployeeSchema()))
     breaks = fields.List(fields.Nested(WorkPhaseBreakSchema()))
+class ComponentMaterialUsageSchema(Schema):
+    usage_id = fields.Integer()
+    item_component_id = fields.Integer()
+    material_list_id = fields.Integer()
+    quantity_used = fields.Integer()
+    material_list = fields.Nested(MaterialListSchema())
+
+class ItemComponentSchema(Schema):
+    item_component_id = fields.Integer()
+    work_order_id = fields.Integer()
+    component_name = fields.String()
+    material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
+
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.Int()
@@ -112,6 +125,7 @@ class WorkOrderSchema(Schema):
     current_phase = fields.Nested(WorkPhaseSchema())
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     sales_item = fields.Nested(SalesItemSchema())
+    item_components = fields.List(fields.Nested(ItemComponentSchema()))
 
 
 
