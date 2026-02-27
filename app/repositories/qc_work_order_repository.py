@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder
+from app.con_sqlalchemy import QCWorkOrder, SalesOrder
 from app.app import db
 from sqlalchemy import or_
 
@@ -55,5 +55,25 @@ def delete_qc_work_order(qc_work_order_id):
             raise NotFoundError(f"ไม่พบ QC Work Order ID -> {qc_work_order_id}")
         db.session.delete(qc)
         return qc
+    except Exception:
+        raise
+
+
+def search_qc_work_orders(page, limit, search):
+    try:
+        query = (
+            db.session.query(QCWorkOrder.qc_work_order_id, QCWorkOrder.qc_by)
+            .filter(
+                or_(
+                    QCWorkOrder.qc_work_order_id.ilike(f"%{search}%"),
+                    QCWorkOrder.qc_by.ilike(f"%{search}%")
+                )
+            )
+            .distinct()
+        )
+
+        result = query.paginate(page=page, per_page=limit, error_out=False)
+        return result.items
+
     except Exception:
         raise
