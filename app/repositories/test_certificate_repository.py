@@ -34,3 +34,11 @@ def get_test_certificate_by_id(qc_certification_id):
         return query.first()
     except Exception:
         raise
+
+def update_test_certificate(test_certificate):
+    try:
+        db.session.flush()
+        db.session.refresh(test_certificate)
+        return test_certificate
+    except Exception:
+        raise
