@@ -1,7 +1,7 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.services.work_order_service import get_all_work_orders, create_work_order, get_work_order_by_id
+from app.services.work_order_service import get_all_work_orders, create_work_order, get_work_order_by_id, get_sales_orders_for_qc
 from app.con_sqlalchemy import WorkOrderStatus
 
 @app.route("/api/get_work_order_list", methods=["GET"])
@@ -20,6 +20,17 @@ def api_get_work_order_list():
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/api/get_sales_orders_for_qc", methods=["GET"])
+@verify_required
+def api_get_sales_orders_for_qc():
+    try:
+        search = request.args.get("search", "", type=str)
+        result = get_sales_orders_for_qc(search)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/get_work_order_by_id/<int:work_order_id>", methods=["GET"])
