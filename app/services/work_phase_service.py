@@ -1,10 +1,97 @@
 from app.con_sqlalchemy import PhaseStatus, WorkOrderStatus, WorkPhase, WorkAssignment, BreakType, WorkPhaseBreak, bangkok_now
 import unicodedata
 from app.ma_sqlalchemy import WorkPhaseSchema, WorkOrderSchema
-from app.repositories import work_order_repository, work_phase_repository
+from app.repositories import work_order_repository, work_phase_repository, employee_salary_repository
 from app.app import db
 from app.exception import MissingFieldsError, NotFoundError
 
+
+def get_work_phase_detail(work_phase_id):
+    """Get detailed work phase info with per-employee labor cost breakdown."""
+    try:
+        work_phase = work_phase_repository.get_work_phase_by_id(work_phase_id)
+        if not work_phase:
+            raise NotFoundError(f"Work phase id {work_phase_id} not found")
+
+        now = bangkok_now()
+
+        # Calculate phase working time in seconds
+        if work_phase.start_date:
+            end = work_phase.end_date or now
+            total_phase_ms = max(0, (end - work_phase.start_date).total_seconds() * 1000)
+            # Subtract breaks
+            break_ms = 0
+            if work_phase.breaks:
+                for b in work_phase.breaks:
+                    b_start = b.break_start
+                    b_end = b.break_end or now
+                    break_ms += max(0, (b_end - b_start).total_seconds() * 1000)
+            work_ms = max(0, total_phase_ms - break_ms)
+        else:
+            work_ms = 0
+
+        total_time_spent_seconds = work_ms / 1000
+        num_employees = len(work_phase.employee_list) if work_phase.employee_list else 1
+
+        # Per-employee time (split evenly)
+        per_employee_seconds = total_time_spent_seconds / num_employees if num_employees > 0 else 0
+
+        employee_breakdown = []
+        total_labor_cost = 0.0
+
+        for emp in work_phase.employee_list:
+            # Get salary at the time the phase was created
+            salary = employee_salary_repository.get_salary_at_date(emp.employee_id, work_phase.created_date)
+            if salary is None:
+                salary = emp.salary_base or 0.0
+
+            # hourly_rate = monthly_salary / 30 days / 8 hours
+            hourly_rate = salary / 30 / 8 if salary > 0 else 0.0
+            net_cost = round(hourly_rate * (per_employee_seconds / 3600), 2)
+            total_labor_cost += net_cost
+
+            employee_breakdown.append({
+                "employee_id": emp.employee_id,
+                "employee_first_name": emp.employee_first_name,
+                "employee_last_name": emp.employee_last_name,
+                "status": emp.status.value if hasattr(emp.status, 'value') else str(emp.status),
+                "salary_at_phase": salary,
+                "hourly_rate": round(hourly_rate, 2),
+                "time_spent_seconds": round(per_employee_seconds, 2),
+                "net_cost": net_cost,
+            })
+
+        # Get work order info
+        work_order = work_order_repository.get_work_order_by_id(work_phase.work_order_id)
+
+        # Serialize breaks
+        breaks_data = []
+        if work_phase.breaks:
+            for b in work_phase.breaks:
+                breaks_data.append({
+                    "break_id": b.break_id,
+                    "work_phase_id": b.work_phase_id,
+                    "break_start": b.break_start.isoformat() if b.break_start else None,
+                    "break_end": b.break_end.isoformat() if b.break_end else None,
+                    "break_type": b.break_type.value if hasattr(b.break_type, 'value') else str(b.break_type),
+                })
+
+        return {
+            "work_phase_id": work_phase.work_phase_id,
+            "phase_name": work_phase.phase_name,
+            "phase_status": work_phase.phase_status.value if hasattr(work_phase.phase_status, 'value') else str(work_phase.phase_status),
+            "created_date": work_phase.created_date.isoformat() if work_phase.created_date else None,
+            "start_date": work_phase.start_date.isoformat() if work_phase.start_date else None,
+            "end_date": work_phase.end_date.isoformat() if work_phase.end_date else None,
+            "work_order_id": work_phase.work_order_id,
+            "doc_num": str(work_order.doc_num) if work_order else "",
+            "total_time_spent_seconds": round(total_time_spent_seconds, 2),
+            "total_labor_cost": round(total_labor_cost, 2),
+            "employee_breakdown": employee_breakdown,
+            "breaks": breaks_data,
+        }
+    except Exception:
+        raise
 
 def create_work_phase(data):
     try:
