@@ -3,6 +3,7 @@ from app.ma_sqlalchemy import QCWorkOrderSchema
 from app.repositories import qc_work_order_repository
 from app.repositories import work_order_repository
 from app.app import db
+from app.ma_sqlalchemy import SalesItemSchema
 
 def get_all_qc_work_orders(data):
     try:
@@ -28,7 +29,7 @@ def get_qc_work_order_by_id(qc_work_order_id):
 
 
 def get_sales_items_for_qc(search="", statuses = []):
-    from app.ma_sqlalchemy import SalesItemSchema
+    
     try:
         statuses = [WorkOrderStatus(s) for s in statuses] if statuses else []
         items = work_order_repository.get_sales_items_for_qc(search, statuses)
