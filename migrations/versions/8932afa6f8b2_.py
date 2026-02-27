@@ -9,6 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
 
+from migrations.utils import column_exists
+
 # revision identifiers, used by Alembic.
 revision = '8932afa6f8b2'
 down_revision = 'fe21e2325aca'
@@ -25,7 +27,8 @@ def upgrade():
                existing_nullable=False)
 
     with op.batch_alter_table('t_sales_order', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('card_code', sa.String(length=20), nullable=False))
+        if not column_exists('t_sales_order', 'card_code'):
+            batch_op.add_column(sa.Column('card_code', sa.String(length=20), nullable=False))
         batch_op.add_column(sa.Column('card_name', sa.String(length=200), nullable=False))
         batch_op.add_column(sa.Column('slp_code', sa.String(length=20), nullable=False))
         batch_op.add_column(sa.Column('slp_name', sa.String(length=200), nullable=False))
