@@ -36,9 +36,10 @@ def get_test_sales_order():
             method="POST",
             endpoint="/api/ORDR/get_test_quick",
         )
-        data = {"items" : response["json"]}
+        data = response["json"]
         print(data)
-        create_sales_order(data)
+        for so in data:  
+            create_sales_order(so)
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -65,7 +66,9 @@ def create_sales_order(data):
                 item_name=item.get("item_name"),
                 item_num=item.get("item_num"),
                 unit_price=item.get("unit_price"),
-                cost_price=item.get("cost_price")
+                cost_price=item.get("cost_price"),
+                doc_num=item.get("doc_num"),
+                doc_entry=item.get("doc_entry")
             )
             sales_order.sales_items.append(sales_item)
 
@@ -76,7 +79,8 @@ def create_sales_order(data):
                     item_description=mat.get("item_description"),
                     item_num=mat.get("item_num"),
                     unit_price=mat.get("unit_price"),
-                    cost_price=mat.get("cost_price")
+                    cost_price=mat.get("cost_price"),
+                    
                 )
                 sales_item.material_list.append(material_list)
 
