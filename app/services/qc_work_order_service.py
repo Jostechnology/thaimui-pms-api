@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus
-from app.ma_sqlalchemy import QCWorkOrderSchema
+from app.ma_sqlalchemy import QCWorkOrderSchema,search_qc_work_order_schema
 from app.repositories import qc_work_order_repository
 from app.repositories import work_order_repository
 from app.app import db
@@ -197,4 +197,15 @@ def delete_qc_work_order(qc_work_order_id):
         return {"message": f"ลบ QC Work Order ID {qc_work_order_id} สำเร็จ"}
     except Exception:
         db.session.rollback()
+        raise
+
+def search_qc_work_orders(data):
+    try:
+        page = data.get("page", 1)
+        limit = data.get("limit", 10)
+        search = data.get("search", "")
+        result = qc_work_order_repository.search_qc_work_orders(page, limit, search)
+        qc_work_orders = search_qc_work_order_schema(many=True).dump(result)
+        return qc_work_orders
+    except Exception:
         raise

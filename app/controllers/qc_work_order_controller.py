@@ -9,6 +9,7 @@ from app.services.qc_work_order_service import (
     get_qc_work_order_by_id,
     get_sales_items_for_qc,
     create_qc_work_order,
+    search_qc_work_orders,
     update_qc_work_order,
     delete_qc_work_order,
 )
@@ -93,4 +94,20 @@ def api_delete_qc_work_order(qc_work_order_id):
         return jsonify({"error": e.message}), e.status_code
     except Exception as e:
         traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/search_qc_work_order", methods=["GET"])
+@verify_required
+def api_search_qc_work_order():
+    try:
+        page = request.args.get("page", 1, type=int)
+        limit = request.args.get("limit", 10, type=int)
+        search = request.args.get("search", "", type=str)
+        data = {"page": page, "limit": limit, "search": search}
+
+        result = search_qc_work_orders(data)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
