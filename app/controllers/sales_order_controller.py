@@ -22,6 +22,22 @@ def api_search_sales_order():
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/sales_order/get_all", methods=["GET"])
+@verify_required
+def api_get_all_sales_orders():
+    try:
+        from app.services.sales_order_service import get_all_sales_orders
+        page = request.args.get("page", 1, type=int)
+        limit = request.args.get("limit", 10, type=int)
+        search = request.args.get("search", "", type=str)
+        data = {"page": page, "limit": limit, "search": search}
+
+        result = get_all_sales_orders(data)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/sales_order/get_by_doc_entry/<int:doc_entry>", methods=["GET"])
 @verify_required
 def api_get_by_doc_entry(doc_entry):

@@ -75,7 +75,9 @@ class SalesItemSchema(Schema):
     item_description = fields.String()
     cost_price = fields.Float()
     unit_price = fields.Float()
-    doc_num = fields.Int()
+    doc_num = fields.Integer()
+    doc_entry = fields.Integer()
+    work_order_id = fields.Integer()
     
 class WorkPhaseBreakSchema(Schema):
     break_id = fields.Integer()
@@ -129,16 +131,19 @@ class SalesOrderSchema(Schema):
     bpl_name = fields.String()
     group_code = fields.String()
     group_name = fields.String()
+    created_date = fields.DateTime()
 
-class SalesItemSchema(Schema):
-    sales_item_id    = fields.Integer()
-    item_code        = fields.String()
-    item_num         = fields.Integer()
-    item_name        = fields.String()
-    item_description = fields.String()
-    doc_num          = fields.Integer()
-    doc_entry        = fields.Integer()
-    work_order_id    = fields.Integer()
+class SalesOrderListSchema(SalesOrderSchema):
+    sales_items_count = fields.Method("get_items_count")
+    work_orders_count = fields.Method("get_wo_count")
+
+    def get_items_count(self, obj):
+        return len(obj.sales_items) if obj.sales_items else 0
+
+    def get_wo_count(self, obj):
+        return len(obj.work_orders) if obj.work_orders else 0
+
+
 
 class QCFormSchema(Schema):
     qc_form_id              = fields.Integer()
