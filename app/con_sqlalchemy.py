@@ -359,9 +359,7 @@ class QCCertification(AuditMixin):
     certification_status = db.Column(db.Enum(CertificationStatus), nullable=False, default=CertificationStatus.PASSED)
     qc_work_order_id = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='CASCADE'), nullable=False)
     qc_work_order = db.relationship('QCWorkOrder', foreign_keys=[qc_work_order_id], backref=db.backref('qc_certifications', lazy='selectin'), lazy='selectin')
-
-    # สิ่งที่เพิ่ม: Relationship ไปหาตารางลูก (QCCheckItem)
-    # cascade='all, delete-orphan' หมายความว่า ถ้าลบใบ Cert นี้ทิ้ง รายการเทสข้างในจะถูกลบทิ้งไปด้วยอัตโนมัติ
+    
     check_items = db.relationship('QCCheckItem', backref='certification', cascade='all, delete-orphan', lazy='selectin')
 
 
