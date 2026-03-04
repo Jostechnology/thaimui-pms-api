@@ -234,3 +234,30 @@ class QCCertificateSchema(Schema):
     updated_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)
     updated_by = fields.String(dump_only=True)
+
+class ProductSchema(Schema):
+    product_id = fields.Integer(dump_only=True)
+    product_code = fields.String()
+    product_name = fields.String()
+    description = fields.String()
+
+class PBITransactionSchema(Schema):
+    pbi_transaction_id = fields.Integer(dump_only=True)
+    product_backoffice_inventory_id = fields.Integer()
+    amount = fields.Integer()
+    type = fields.String()
+    related_document_code = fields.String()
+    created_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)     
+
+class ProductBackofficeInventorySchema(Schema):
+    product_backoffice_inventory_id = fields.Integer(dump_only=True)
+    product_backoffice_inventory_code = fields.String()
+    product_id = fields.Integer()
+    original_num = fields.Integer()
+    current_num = fields.Integer()
+    cost_per_piece = fields.Float()
+    batch_number = fields.String()
+    
+    product = fields.Nested(ProductSchema, dump_only=True)
+    transactions = fields.Nested(PBITransactionSchema, many=True, dump_only=True)

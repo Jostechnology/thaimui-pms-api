@@ -1,7 +1,7 @@
 import enum
 from app.app import db
 from datetime import date, datetime, timezone, timedelta
-from sqlalchemy import event
+from sqlalchemy import event , Numeric
 from flask import g
 
 def bangkok_now():
@@ -401,4 +401,41 @@ class SalesOrder(AuditMixin):
         lazy='selectin'
     )
 
+
+class Product(AuditMixin):
+    __tablename__ = "m_product"
     
+    product_id = db.Column(db.Integer, primary_key=True)
+    product_code = db.Column(db.String(128), nullable=False, unique=True) 
+    product_name = db.Column(db.String(255), nullable=False)            
+    description = db.Column(db.Text, nullable=True)                     
+
+class ProductBackofficeInventory(AuditMixin):
+    __tablename__ = "t_product_backoffice_inventory"
+
+    product_backoffice_inventory_id = db.Column(db.Integer, primary_key=True)
+    product_backoffice_inventory_code = db.Column(db.String(128), nullable=False, unique=True) 
+    
+    product_id = db.Column(db.Integer, db.ForeignKey("m_product.product_id", ondelete="CASCADE"), nullable=False)
+    
+    original_num = db.Column(db.Integer, nullable=False, default=0) 
+    current_num = db.Column(db.Integer, nullable=False, default=0) 
+    cost_per_piece = db.Column(Numeric(10, 2), nullable=False, default=0.00)
+    batch_number = db.Column(db.String(80), nullable=False)        
+
+    product = db.relationship("Product", lazy="selectin", backref=db.backref('inventories', lazy='selectin'))
+
+
+class PBI_Transaction(AuditMixin):
+    __tablename__ = "t_pbi_transaction"
+
+    pbi_transaction_id = db.Column(db.Integer, primary_key=True)
+    
+    product_backoffice_inventory_id = db.Column(db.Integer, db.ForeignKey("t_product_backoffice_inventory.product_backoffice_inventory_id", ondelete="CASCADE"), nullable=False)
+    
+    amount = db.Column(db.Integer, nullable=False)                
+    type = db.Column(db.String(24), nullable=False)                 
+    related_document_code = db.Column(db.String(128), nullable=False)
+
+    # Relationship เชื่อมกลับไปหากระบะสต๊อก
+    inventory = db.relationship("ProductBackofficeInventory", lazy="selectin", backref=db.backref("transactions", lazy="selectin"))
