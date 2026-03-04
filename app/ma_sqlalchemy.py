@@ -191,6 +191,9 @@ class QCItemSchema(Schema):
     serial_no        = fields.String()
     item_remark      = fields.String()
 
+class search_qc_work_order_schema(Schema):
+    qc_work_order_id = fields.Integer()
+    qc_by = fields.String()
 
 class QCWorkOrderSchema(Schema):
     qc_work_order_id = fields.Integer()
