@@ -1,204 +1,55 @@
-from app.con_sqlalchemy import ProductBackofficeInventory, PBI_Transaction,Product
-from app.repositories import inventory_repository
-from app.app import db
-from sqlalchemy import func
 import datetime
+from app.con_sqlalchemy import MaterialTransaction
+from app.repositories import material_repository 
 
-def remove_inventory(inventory_id, amount, document_code):
+def record_material_usage_service(material_list_id, amount, action_type, document_code, user_name="System"):
     try:
-        inv = inventory_repository.get_inventory_by_id(inventory_id)
-        if not inv:
-            raise Exception(f"ไม่พบข้อมูลสต๊อก ID: {inventory_id}")
+        mat = material_repository.get_material_by_id(material_list_id)
+        if not mat:
+            return {"success": False, "message": f"ไม่พบรายการวัสดุ ID: {material_list_id}"}
 
-        if inv.current_num < amount:
-            raise Exception(f"สต๊อกไม่พอเบิก! มีของเหลือแค่ {inv.current_num} ชิ้น แต่พยายามเบิก {amount} ชิ้น")
+        if amount <= 0:
+            return {"success": False, "message": "จำนวนต้องมากกว่า 0"}
+        if action_type not in ["ADD", "REMOVE"]:
+            return {"success": False, "message": "ประเภทต้องเป็น ADD หรือ REMOVE เท่านั้น"}
 
-        #ลงมือตัดสต๊อกตารางแม่
-        inv.current_num -= amount
-
-        #ลงมือจดสมุดประวัติ
-        transaction = PBI_Transaction(
-            product_backoffice_inventory_id=inventory_id,
+        transaction = MaterialTransaction(
+            material_list_id=material_list_id,
             amount=amount,
-            type="REMOVE", # ระบุให้ชัดเจนว่าเป็นการเบิกออก
-            related_document_code=document_code
+            type=action_type, 
+            related_document_code=document_code,
+            created_by=user_name,
+            created_date=datetime.datetime.now()
         )
         
-        # จับยัดประวัติลง Database
-        db.session.add(transaction)
+        material_repository.save_material_transaction(transaction)
 
-        db.session.commit()
-
-        return {
-            "success": True, 
-            "message": f"เบิกสินค้าสำเร็จ เลหือสต๊อก {inv.current_num} ชิ้น",
-            "transaction_id": transaction.pbi_transaction_id
-        }
+        action_text = "เบิกออก" if action_type == "REMOVE" else "รับคืน"
+        return {"success": True, "message": f"บันทึกประวัติการ{action_text} จำนวน {amount} ชิ้น สำเร็จ!"}
 
     except Exception as e:
-        db.session.rollback()
-        raise Exception(str(e))
+        material_repository.rollback_transaction()
+        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
 
-def get_material_usage_summary(document_code):
+
+def get_material_tracking_summary(sales_item_id):
     try:
-        # โดยจัดกลุ่มตามสินค้า (inventory_id)
-        usage_data = db.session.query(
-            PBI_Transaction.product_backoffice_inventory_id,
-            func.sum(PBI_Transaction.amount).label('total_used')
-        ).filter(
-            PBI_Transaction.related_document_code == document_code,
-            PBI_Transaction.type == 'REMOVE'
-        ).group_by(
-            PBI_Transaction.product_backoffice_inventory_id
-        ).all()
+        summary_query = material_repository.get_tracking_summary_query(sales_item_id)
 
-        # จัดฟอร์แมต JSON เตรียมส่งให้เพื่อนเอาไปวาดกราฟ หรือลงตาราง
         result = []
-        for row in usage_data:
+        for row in summary_query:
+            actual_used = int(row.total_removed - row.total_added)
+            variance = int(actual_used - row.planned_qty)
             result.append({
-                "inventory_id": row.product_backoffice_inventory_id,
-                "total_used": row.total_used 
+                "material_list_id": row.material_list_id,
+                "item_code": row.item_code,
+                "item_name": row.item_name,
+                "planned_qty": row.planned_qty,
+                "actual_used": actual_used,
+                "variance": variance
             })
 
-        return result
-    except Exception as e:
-        raise Exception(f"ไม่สามารถดึงข้อมูลสรุปได้: {str(e)}")
-    
-def get_inventory_summary_service(document_code):
-    try:
-        summary_query = db.session.query(
-            PBI_Transaction.product_backoffice_inventory_id,
-            ProductBackofficeInventory.product_backoffice_inventory_code,
-            Product.product_code,
-            Product.product_name,
-            PBI_Transaction.type,
-            func.sum(PBI_Transaction.amount).label('total_amount')
-        ).join(
-            ProductBackofficeInventory,
-            PBI_Transaction.product_backoffice_inventory_id == ProductBackofficeInventory.product_backoffice_inventory_id
-        ).join(
-            Product,
-            ProductBackofficeInventory.product_id == Product.product_id
-        ).filter(
-            PBI_Transaction.related_document_code == document_code
-        ).group_by(
-            PBI_Transaction.product_backoffice_inventory_id,
-            ProductBackofficeInventory.product_backoffice_inventory_code,
-            Product.product_code,
-            Product.product_name,
-            PBI_Transaction.type
-        ).all()
-
-        #นำข้อมูลมาจัดหมวดหมู่และคำนวณ (เบิก - คืน = ใช้จริง)
-        results = {}
-        for row in summary_query:
-            inv_id = row.product_backoffice_inventory_id
-            
-            # ถ้ายังไม่มีสินค้านี้ใน Dictionary ให้สร้างโครงเปล่าๆ รอก่อน
-            if inv_id not in results:
-                results[inv_id] = {
-                    "inventory_id": inv_id,
-                    "inventory_code": row.product_backoffice_inventory_code,
-                    "product_code": row.product_code,
-                    "product_name": row.product_name,
-                    "total_removed": 0,  # ยอดเบิกออก
-                    "total_added": 0,    # ยอดรับคืน
-                    "net_used": 0        # ยอดใช้จริง
-                }
-
-            # จับตัวเลขใส่ให้ถูกช่อง
-            if row.type == 'REMOVE':
-                results[inv_id]['total_removed'] += int(row.total_amount)
-            elif row.type == 'ADD':
-                results[inv_id]['total_added'] += int(row.total_amount)
-
-        #คำนวณยอดใช้จริง (net_used) สรุปสุดท้าย
-        final_list = []
-        for inv_id, data in results.items():
-            data['net_used'] = data['total_removed'] - data['total_added']
-            final_list.append(data)
-
-        return {"success": True, "data": final_list, "document_code": document_code}
+        return {"success": True, "data": result}
 
     except Exception as e:
-        return {"success": False, "message": f"เกิดข้อผิดพลาดในการดึงสรุปยอด: {str(e)}"}
-    
-def remove_inventory_service(inventory_id, amount, document_code, user_name="System"):
-    try:
-        inv = ProductBackofficeInventory.query.get(inventory_id)
-        if not inv:
-            return {"success": False, "message": f"ไม่พบข้อมูล Inventory ID: {inventory_id}"}
-
-        if inv.current_num < amount:
-            return {
-                "success": False, 
-                "message": f"สต๊อกไม่พอ! มีของเหลือแค่ {inv.current_num} ชิ้น แต่ต้องการเบิก {amount} ชิ้น"
-            }
-
-        inv.current_num -= amount
-        inv.updated_by = user_name
-        inv.updated_date = datetime.datetime.now()
-
-        
-        transaction = PBI_Transaction(
-            product_backoffice_inventory_id=inventory_id,
-            amount=amount,
-            type="REMOVE", # ระบุชัดเจนว่าเอาออก
-            related_document_code=document_code,
-            created_by=user_name,
-            created_date=datetime.datetime.now(),
-            updated_by=user_name,
-            updated_date=datetime.datetime.now()
-        )
-        db.session.add(transaction)
-        db.session.commit()
-
-        return {
-            "success": True, 
-            "message": f"ตัดสต๊อกสำเร็จ! สินค้าเหลือ {inv.current_num} ชิ้น",
-            "transaction_id": transaction.pbi_transaction_id
-        }
-
-    except Exception as e:
-        db.session.rollback()
-        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
-
-def add_inventory_service(inventory_id, amount, document_code, user_name="System"):
-    try:
-        inv = ProductBackofficeInventory.query.get(inventory_id)
-        if not inv:
-            return {"success": False, "message": f"ไม่พบข้อมูล Inventory ID: {inventory_id}"}
-
-        # ดักจับเผื่อเผลอส่งค่าติดลบมา
-        if amount <= 0:
-            return {"success": False, "message": "จำนวนที่รับเข้าต้องมากกว่า 0 ชิ้น"}
-
-        inv.current_num += amount
-        inv.updated_by = user_name
-        inv.updated_date = datetime.datetime.now()
-
-        # (INSERT ลงตารางลูก)
-        transaction = PBI_Transaction(
-            product_backoffice_inventory_id=inventory_id,
-            amount=amount,
-            type="ADD", # เปลี่ยนจาก REMOVE เป็น ADD
-            related_document_code=document_code,
-            created_by=user_name,
-            created_date=datetime.datetime.now(),
-            updated_by=user_name,
-            updated_date=datetime.datetime.now()
-        )
-        db.session.add(transaction)
-
-        # ซฟลง Database 
-        db.session.commit()
-
-        return {
-            "success": True, 
-            "message": f"รับของเข้าสำเร็จ! สินค้าเพิ่มเป็น {inv.current_num} ชิ้น",
-            "transaction_id": transaction.pbi_transaction_id
-        }
-
-    except Exception as e:
-        db.session.rollback()
-        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
+        return {"success": False, "message": f"เกิดข้อผิดพลาดในการดึงข้อมูล: {str(e)}"}

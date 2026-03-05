@@ -1,27 +1,37 @@
 from flask import request, jsonify
 from app.app import app
 from app.api_auth import verify_required
-from app.services.inventory_service import remove_inventory_service,add_inventory_service,get_inventory_summary_service
+from app.services.inventory_service import record_material_usage_service, get_material_tracking_summary
 
-@app.route("/api/inventory/remove", methods=["POST", "OPTIONS"])
+#API สำหรับ "จดประวัติ (เบิกออก/รับคืน)"
+@app.route("/api/material/transaction", methods=["POST", "OPTIONS"])
 @verify_required
-def api_remove_inventory():
+def api_record_material_transaction():
     if request.method == "OPTIONS":
         return jsonify({"success": True}), 200
 
     try:
         data = request.get_json()
         
-        inventory_id = data.get("product_backoffice_inventory_id")
+        material_list_id = data.get("material_list_id")
         amount = data.get("amount")
+        action_type = data.get("type") # ส่งค่า "ADD" หรือ "REMOVE"
         document_code = data.get("related_document_code")
-        
-        if not inventory_id or not amount or not document_code:
-            return jsonify({"success": False, "message": "ส่งข้อมูลไม่ครบถ้วน!"}), 400
-            
-        user_name = "Admin_Camp" 
 
-        result = remove_inventory_service(inventory_id, int(amount), document_code, user_name)
+        # เช็คว่าส่งข้อมูลมาครบไหม
+        if not all([material_list_id, amount, action_type, document_code]):
+            return jsonify({"success": False, "message": "ส่งข้อมูลไม่ครบถ้วน!"}), 400
+
+        user_name = "Admin_Camp" # สมมติชื่อคนทำรายการ
+
+        # โยนให้ Service จัดการจดลงสมุด
+        result = record_material_usage_service(
+            material_list_id=int(material_list_id), 
+            amount=int(amount), 
+            action_type=action_type.upper(), 
+            document_code=document_code, 
+            user_name=user_name
+        )
         
         status_code = 200 if result["success"] else 400
         return jsonify(result), status_code
@@ -30,64 +40,16 @@ def api_remove_inventory():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@app.route("/api/material/summary/<int:sales_item_id>", methods=["GET", "OPTIONS"])
 @verify_required
-def process_remove_inventory():
-    try:
-        data = request.get_json()
-        
-        inventory_id = data.get("product_backoffice_inventory_id")
-        amount = data.get("amount")
-        document_code = data.get("related_document_code")
-        
-        if not inventory_id or not amount or not document_code:
-            return jsonify({
-                "success": False, 
-                "message": "ข้อมูลไม่ครบถ้วน (ต้องการ inventory_id, amount, related_document_code)"
-            }), 400
-            
-        result = remove_inventory_service(inventory_id, int(amount), document_code)
-        
-        return jsonify(result), 200
-        
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-
-@app.route("/api/inventory/add", methods=["POST", "OPTIONS"])
-@verify_required
-def api_add_inventory():
+def api_get_material_summary(sales_item_id):
     if request.method == "OPTIONS":
         return jsonify({"success": True}), 200
 
     try:
-        data = request.get_json()
-
-        inventory_id = data.get("product_backoffice_inventory_id")
-        amount = data.get("amount")
-        document_code = data.get("related_document_code")
+        result = get_material_tracking_summary(sales_item_id)
         
-        if not inventory_id or not amount or not document_code:
-            return jsonify({"success": False, "message": "ส่งข้อมูลไม่ครบถ้วน!"}), 400
-            
-        user_name = "Admin_Camp" 
-
-        result = add_inventory_service(inventory_id, int(amount), document_code, user_name)
-        
-        status_code = 200 if result["success"] else 400
-        return jsonify(result), status_code
-        
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-    
-@app.route("/api/inventory/summary/<document_code>", methods=["GET", "OPTIONS"])
-@verify_required
-def api_get_inventory_summary(document_code):
-    if request.method == "OPTIONS":
-        return jsonify({"success": True}), 200
-
-    try:
-        result = get_inventory_summary_service(document_code)
-        
-        status_code = 200 if result["success"] else 400
+        status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
         
     except Exception as e:
