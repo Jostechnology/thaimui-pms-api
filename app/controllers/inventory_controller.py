@@ -1,7 +1,7 @@
 from flask import request, jsonify
 from app.app import app
 from app.api_auth import verify_required
-from app.services.inventory_service import record_material_usage_service, get_material_tracking_summary
+from app.services.inventory_service import record_material_usage_service, get_material_tracking_summary,get_material_history_service
 
 #API สำหรับ "จดประวัติ (เบิกออก/รับคืน)"
 @app.route("/api/material/transaction", methods=["POST", "OPTIONS"])
@@ -49,6 +49,20 @@ def api_get_material_summary(sales_item_id):
     try:
         result = get_material_tracking_summary(sales_item_id)
         
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route("/api/material/history/<int:material_list_id>", methods=["GET", "OPTIONS"])
+@verify_required
+def api_get_material_history(material_list_id):
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+
+    try:
+        result = get_material_history_service(material_list_id)
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
         
