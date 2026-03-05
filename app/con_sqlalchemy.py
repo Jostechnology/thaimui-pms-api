@@ -410,9 +410,21 @@ class ItemComponent(AuditMixin):
         back_populates="item_component",
     )
     component_name = db.Column(db.String(255), nullable=False)
+    component_specs = db.relationship(
+        "ComponentSpec",
+        back_populates="item_component",
+        lazy='selectin'
+    )
+    component_options = db.relationship(
+        "ComponentOption",
+        back_populates="item_component",
+        lazy='selectin'
+    )
+    remark = db.Column(db.String(255), nullable=True)
+    img_url = db.Column(db.String(500), nullable=True)
 
 
-class ComponentMaterialUsage(BaseModel):
+class ComponentMaterialUsage(AuditMixin):
     __tablename__ = "t_component_material_usage"
     usage_id = db.Column(db.Integer, primary_key=True)
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
@@ -420,3 +432,52 @@ class ComponentMaterialUsage(BaseModel):
     quantity_used = db.Column(db.Integer, nullable=False)
     item_component = db.relationship("ItemComponent", back_populates="material_usages", lazy='selectin')
     material_list = db.relationship("MaterialList", back_populates="component_usages", lazy='selectin')
+
+class ComponentSpecType(BaseModel):
+    __tablename__ = "t_component_spec_type"
+    component_spec_type_id = db.Column(db.Integer, primary_key=True)
+    component_spec_type_name = db.Column(db.String(255), nullable=False)
+    spec_type = db.Column(db.Enum('boolean', 'decimal', 'text'), nullable=False)
+    component_specs = db.relationship(
+        "ComponentSpec",
+        back_populates="component_spec_type",
+        lazy='selectin'
+    )
+
+class ComponentSpec(AuditMixin):
+    __tablename__ = "t_component_spec"
+    component_spec_id = db.Column(db.Integer, primary_key=True)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
+    component_spec_type_id = db.Column(db.Integer, db.ForeignKey('t_component_spec_type.component_spec_type_id', ondelete='CASCADE'), nullable=False)
+    end_side = db.Column(db.Enum('top', 'bottom'), nullable=True)
+    bool_value = db.Column(db.Boolean, nullable=True)
+    decimal_value = db.Column(db.Numeric(10, 4), nullable=True)
+    text_value = db.Column(db.String(255), nullable=True)
+    item_component = db.relationship("ItemComponent", back_populates="component_specs", lazy='selectin')
+    component_spec_type = db.relationship("ComponentSpecType", back_populates="component_specs", lazy='selectin')
+    __table_args__ = (
+        db.UniqueConstraint(
+            'item_component_id', 
+            'component_spec_type_id', 
+            'end_side',
+            name='uq_item_component_spec'
+        ),
+    )
+
+class ComponentOptionType(BaseModel):
+    __tablename__ = "t_component_option_type"
+    component_option_type_id = db.Column(db.Integer, primary_key=True)
+    component_option_type_name = db.Column(db.String(255), nullable=False)
+    component_options = db.relationship(
+        "ComponentOption",
+        back_populates="component_option_type",
+        lazy='selectin'
+    )
+
+class ComponentOption(AuditMixin):
+    __tablename__ = "t_component_option"
+    component_option_id = db.Column(db.Integer, primary_key=True)
+    component_option_type_id = db.Column(db.Integer, db.ForeignKey('t_component_option_type.component_option_type_id', ondelete='CASCADE'), nullable=False)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
+    component_option_type = db.relationship("ComponentOptionType", back_populates="component_options", lazy='selectin')
+    item_component = db.relationship("ItemComponent", back_populates="component_options", lazy='selectin')
