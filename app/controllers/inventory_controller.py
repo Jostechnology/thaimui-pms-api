@@ -22,7 +22,7 @@ def api_record_material_transaction():
         if not all([material_list_id, amount, action_type, document_code]):
             return jsonify({"success": False, "message": "ส่งข้อมูลไม่ครบถ้วน!"}), 400
 
-        user_name = "Admin_Camp" # สมมติชื่อคนทำรายการ
+        user_name = "SYSTEM" # สมมติชื่อคนทำรายการ
 
         # โยนให้ Service จัดการจดลงสมุด
         result = record_material_usage_service(

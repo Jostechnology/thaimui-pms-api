@@ -14,15 +14,12 @@ def record_material_usage_service(material_list_id, amount, action_type, documen
             return {"success": False, "message": "ประเภทต้องเป็น ADD หรือ REMOVE เท่านั้น"}
 
         if action_type == "REMOVE":
-            #หาว่า แผนให้มากี่ชิ้น?
             planned_qty = mat.item_num 
             
-            # หาว่า เคยเบิกไปแล้วกี่ชิ้น?
             total_removed = sum([t.amount for t in mat.transactions if t.type == 'REMOVE'])
             total_added = sum([t.amount for t in mat.transactions if t.type == 'ADD'])
             actual_used = total_removed - total_added
             
-            # คำนวณ "โควต้าคงเหลือ"
             remaining_quota = planned_qty - actual_used
 
             if amount > remaining_quota:
@@ -30,6 +27,7 @@ def record_material_usage_service(material_list_id, amount, action_type, documen
                     "success": False, 
                     "message": f"เบิกไม่ได้! โควต้าเหลือแค่ {remaining_quota} ชิ้น (แผน: {planned_qty}, ใช้ไปแล้ว: {actual_used})"
                 }
+
         transaction = MaterialTransaction(
             material_list_id=material_list_id,
             amount=amount,
