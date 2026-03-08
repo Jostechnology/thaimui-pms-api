@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, WorkOrderStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, TestResultStatus, WorkOrderStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -138,6 +138,7 @@ class SalesOrderSchema(Schema):
     doc_entry = fields.Int()
     card_code = fields.String()
     card_name = fields.String()
+    po_number = fields.String()
     slp_code = fields.String()
     slp_name = fields.String()
     bpl_code = fields.String()
@@ -201,6 +202,7 @@ class QCWorkOrderSchema(Schema):
     qc_status = fields.Enum(QCWorkOrderStatus)
     qc_date = fields.DateTime()
     qc_by = fields.String()
+    quantity = fields.Integer()
     remark = fields.String()
     created_date = fields.DateTime()
     updated_date = fields.DateTime()
@@ -208,7 +210,8 @@ class QCWorkOrderSchema(Schema):
     updated_by = fields.String()
     qc_form = fields.Nested(QCFormSchema, allow_none=True)
     qc_items = fields.List(fields.Nested(QCItemSchema))
-    doc_entry = fields.Method("get_doc_entry")
+    test_results    = fields.List(fields.Nested(lambda: TestResultSchema()), dump_only=True)
+    doc_entry       = fields.Method("get_doc_entry")
     sales_item_code = fields.Method("get_sales_item_code")
     sales_item_name = fields.Method("get_sales_item_name")
 
@@ -222,42 +225,86 @@ class QCWorkOrderSchema(Schema):
         return obj.sales_item.item_name if obj.sales_item else None
 
 
-# 1. Schema สำหรับตารางลูก (รายการสินค้า/รายการเทส)
+class TestResultItemSchema(Schema):
+    test_result_item_id = fields.Integer(dump_only=True)
+    test_result_id      = fields.Integer()
+    unit_number         = fields.Integer()
+    serial_no           = fields.String()
+    wll_measured        = fields.Float()
+    load_test_value     = fields.Float()
+    description         = fields.String()
+    result              = fields.Enum(TestResultStatus)
+    remark              = fields.String()
+    created_date        = fields.DateTime(dump_only=True)
+    updated_date        = fields.DateTime(dump_only=True)
+    created_by          = fields.String(dump_only=True)
+    updated_by          = fields.String(dump_only=True)
+
+
+class TestResultSchema(Schema):
+    test_result_id      = fields.Integer(dump_only=True)
+    qc_work_order_id    = fields.Integer()
+    test_date           = fields.DateTime()
+    tested_by           = fields.String()
+    test_method         = fields.String()
+    standard_reference  = fields.String()
+    overall_status      = fields.Enum(TestResultStatus)
+    remark              = fields.String()
+    test_result_items   = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
+    created_date        = fields.DateTime(dump_only=True)
+    updated_date        = fields.DateTime(dump_only=True)
+    created_by          = fields.String(dump_only=True)
+    updated_by          = fields.String(dump_only=True)
+
+
 class QCCheckItemSchema(Schema):
-    test_id = fields.Integer(dump_only=True)
+    test_id             = fields.Integer(dump_only=True)
     qc_certification_id = fields.Integer()
-    
-    item_no = fields.String()
+    sales_item_id       = fields.Integer()
+    test_result_item_id = fields.Integer()
+    test_result_item    = fields.Nested(TestResultItemSchema(), dump_only=True)
+
+    item_no     = fields.String()
     test_number = fields.String()
-    ref_number = fields.String()
+    ref_number  = fields.String()
     description = fields.String()
-    wll = fields.Float()
-    load_test = fields.Float()
-    
-    # AuditMixin Fields
+    wll         = fields.Float()
+    load_test   = fields.Float()
+
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by   = fields.String(dump_only=True)
+    updated_by   = fields.String(dump_only=True)
+
+
+class QCCertificateSchema(Schema):
+    qc_certification_id = fields.Integer(dump_only=True)
+    doc_entry = fields.Integer()
+
+    # Customer detail auto-populated from SalesOrder
+    card_code = fields.Method("get_card_code")
+    card_name = fields.Method("get_card_name")
+    po_number = fields.Method("get_po_number")
+
+    certification_number = fields.String()
+    certification_date = fields.DateTime()
+    standard_reference = fields.String()
+    test_method = fields.String()
+    certification_status = fields.String()
+    remark = fields.String()
+
+    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
+
     created_date = fields.DateTime(dump_only=True)
     updated_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)
     updated_by = fields.String(dump_only=True)
 
-# 2. Schema สำหรับตารางแม่ (ใบรับรอง)
-class QCCertificateSchema(Schema):
-    qc_certification_id = fields.Integer(dump_only=True)
-    qc_work_order_id = fields.Integer()
-    
-    # อิงตาม Model ล่าสุดของพี่ที่ใช้คำว่า certification_number และมี standard_reference
-    certification_number = fields.String() 
-    certification_date = fields.DateTime()
-    standard_reference = fields.String()
-    test_method = fields.String()
-    certification_status = fields.String() # Enum จะถูกแปลงเป็น Text (String) ให้ Frontend
-    remark = fields.String()
-   
-    # 3. สิ่งสำคัญ: เชื่อม Schema ลูกเข้ากับ Schema แม่แบบ One-to-Many
-    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
-    
-    # AuditMixin Fields
-    created_date = fields.DateTime(dump_only=True)
-    updated_date = fields.DateTime(dump_only=True)
-    created_by = fields.String(dump_only=True)
-    updated_by = fields.String(dump_only=True)
+    def get_card_code(self, obj):
+        return obj.sales_order.card_code if obj.sales_order else None
+
+    def get_card_name(self, obj):
+        return obj.sales_order.card_name if obj.sales_order else None
+
+    def get_po_number(self, obj):
+        return obj.sales_order.po_number if obj.sales_order else None

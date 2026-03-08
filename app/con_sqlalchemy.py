@@ -290,10 +290,12 @@ class QCWorkOrder(AuditMixin):
     qc_status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
     qc_date = db.Column(db.DateTime, nullable=True)
     qc_by = db.Column(db.String(100), nullable=True)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
     remark = db.Column(db.String(500), nullable=True)
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], backref=db.backref('qc_work_orders', lazy='selectin'), lazy='selectin')
     qc_form = db.relationship('QCForm', uselist=False, backref='qc_work_order', cascade='all, delete-orphan', lazy='selectin')
     qc_items = db.relationship('QCItem', backref='qc_work_order', cascade='all, delete-orphan', lazy='selectin')
+    test_results = db.relationship('TestResult', backref='qc_work_order', cascade='all, delete-orphan', lazy='selectin')
 
 
 class QCForm(AuditMixin):
@@ -332,7 +334,7 @@ class QCForm(AuditMixin):
 
 
 class QCItem(AuditMixin):
-    """รายการสินค้าในใบสั่งงาน QC — 1-to-many กับ QCWorkOrder"""
+    """รายการ material ในใบสั่งงาน QC"""
     __tablename__ = "t_qc_item"
     qc_item_id       = db.Column(db.Integer, primary_key=True)
     qc_work_order_id = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='CASCADE'), nullable=False)
@@ -343,6 +345,39 @@ class QCItem(AuditMixin):
     quantity         = db.Column(db.String(50), nullable=True)
     serial_no        = db.Column(db.String(200), nullable=True)
     item_remark      = db.Column(db.String(500), nullable=True)
+
+
+class TestResultStatus(enum.Enum):
+    PASSED = 'PASSED'
+    FAILED = 'FAILED'
+
+
+class TestResult(AuditMixin):
+    """บันทึกการทดสอบจริง — 1 QCWorkOrder มีได้หลาย TestResult (กรณีทดสอบซ้ำ)"""
+    __tablename__ = "t_test_result"
+    test_result_id    = db.Column(db.Integer, primary_key=True)
+    qc_work_order_id  = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='CASCADE'), nullable=False)
+    test_date         = db.Column(db.DateTime, nullable=True, default=bangkok_now)
+    tested_by         = db.Column(db.String(100), nullable=True)
+    test_method       = db.Column(db.String(255), nullable=True)
+    standard_reference = db.Column(db.String(255), nullable=True)
+    overall_status    = db.Column(db.Enum(TestResultStatus), nullable=False, default=TestResultStatus.PASSED)
+    remark            = db.Column(db.String(500), nullable=True)
+    test_result_items = db.relationship('TestResultItem', backref='test_result', cascade='all, delete-orphan', lazy='selectin')
+
+
+class TestResultItem(AuditMixin):
+    """ผลการทดสอบรายหน่วย — 1 row ต่อ 1 ชิ้นที่ทดสอบ (quantity ของ SalesItem)"""
+    __tablename__ = "t_test_result_item"
+    test_result_item_id = db.Column(db.Integer, primary_key=True)
+    test_result_id      = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    unit_number         = db.Column(db.Integer, nullable=False)  # ลำดับชิ้น เช่น 1, 2, ...
+    serial_no           = db.Column(db.String(200), nullable=True)
+    wll_measured        = db.Column(db.Float, nullable=True)
+    load_test_value     = db.Column(db.Float, nullable=True)
+    description         = db.Column(db.Text, nullable=True)
+    result              = db.Column(db.Enum(TestResultStatus), nullable=False, default=TestResultStatus.PASSED)
+    remark              = db.Column(db.String(500), nullable=True)
 
 class CertificationStatus(enum.Enum):
     PASSED = 'PASSED'
@@ -357,30 +392,28 @@ class QCCertification(AuditMixin):
     remark = db.Column(db.String(500), nullable=True)
     test_method = db.Column(db.String(255), nullable=True)
     certification_status = db.Column(db.Enum(CertificationStatus), nullable=False, default=CertificationStatus.PASSED)
-    qc_work_order_id = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='CASCADE'), nullable=False)
-    qc_work_order = db.relationship('QCWorkOrder', foreign_keys=[qc_work_order_id], backref=db.backref('qc_certifications', lazy='selectin'), lazy='selectin')
-    
+    doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry', ondelete='CASCADE'), nullable=False)
+    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], backref=db.backref('certifications', lazy='selectin'), lazy='selectin')
+
     check_items = db.relationship('QCCheckItem', backref='certification', cascade='all, delete-orphan', lazy='selectin')
 
 
-class QCCheckItem(AuditMixin):
+class QCCheckItem(AuditMixin): # Certificate Item
     __tablename__ = "t_qc_check_item"
     test_id = db.Column(db.Integer, primary_key=True)
-    
-    # สิ่งที่เพิ่ม: 1. Foreign Key ผูกกับตารางแม่ (QCCertification)
-    qc_certification_id = db.Column(db.Integer, db.ForeignKey('t_qc_certification.qc_certification_id', ondelete='CASCADE'), nullable=False)
 
-    # ฟิลด์เก็บข้อมูลตามหน้า UI
-    item_no = db.Column(db.String(50), nullable=True)       # ลำดับที่ เช่น "01", "02" (Frontend ส่งมา)
-    test_number = db.Column(db.String(255), nullable=False) # เลข Test No. (ระบบรันให้)
-    ref_number = db.Column(db.String(255), nullable=True)   # รหัสอ้างอิง (User กรอก)
-    description = db.Column(db.Text, nullable=True)         # รายละเอียดสินค้าแบบยาวๆ (Frontend ส่งมา)
-    wll = db.Column(db.Float, nullable=True)                # ค่า W.L.L.
-    load_test = db.Column(db.Float, nullable=True)          # ค่า Load Test
+    qc_certification_id  = db.Column(db.Integer, db.ForeignKey('t_qc_certification.qc_certification_id', ondelete='CASCADE'), nullable=False)
+    sales_item_id        = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='SET NULL'), nullable=True)
+    test_result_item_id  = db.Column(db.Integer, db.ForeignKey('t_test_result_item.test_result_item_id', ondelete='SET NULL'), nullable=True)
+    sales_item           = db.relationship('SalesItem', foreign_keys=[sales_item_id], lazy='selectin')
+    test_result_item     = db.relationship('TestResultItem', foreign_keys=[test_result_item_id], lazy='selectin')
 
-
-
-
+    item_no     = db.Column(db.String(50), nullable=True)
+    test_number = db.Column(db.String(255), nullable=False)
+    ref_number  = db.Column(db.String(255), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    wll         = db.Column(db.Float, nullable=True)
+    load_test   = db.Column(db.Float, nullable=True)
   
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
@@ -388,6 +421,7 @@ class SalesOrder(AuditMixin):
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
     card_code = db.Column(db.String(20), nullable=False)
     card_name = db.Column(db.String(200), nullable=False)
+    po_number = db.Column(db.String(100), nullable=True)
     slp_code = db.Column(db.String(20), nullable=False)
     slp_name = db.Column(db.String(200), nullable=False)
     bpl_code = db.Column(db.String(20), nullable=False)
