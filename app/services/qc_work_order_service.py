@@ -96,6 +96,7 @@ def create_qc_work_order(data):
             qc_status=QCWorkOrderStatus.PENDING,
             qc_date=data.get("qc_date"),
             qc_by=data.get("qc_by"),
+            quantity=data.get("salesItemQuantity", 1),
             remark=data.get("remark"),
         )
         qc = qc_work_order_repository.create_qc_work_order(qc)
@@ -136,6 +137,9 @@ def update_qc_work_order(qc_work_order_id, data):
             qc.qc_date = data.get("qc_date")
         if "qc_by" in data:
             qc.qc_by = data.get("qc_by")
+        print(data.get("quantity"))
+        if "quantity" in data:
+            qc.quantity = data.get("quantity")
         if "remark" in data:
             qc.remark = data.get("remark")
 
