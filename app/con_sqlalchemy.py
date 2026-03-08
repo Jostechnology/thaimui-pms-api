@@ -148,10 +148,9 @@ class WorkPhase(AuditMixin):
     phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.PENDING)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
-    employee_list = db.relationship('Employee', secondary='t_work_assignment', back_populates='work_phases', lazy='selectin', overlaps='assignments,work_phases')
     work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='work_phases', lazy='selectin')
     breaks = db.relationship('WorkPhaseBreak', back_populates='work_phase', lazy='selectin', order_by='WorkPhaseBreak.break_start')
-    assignments = db.relationship('WorkAssignment', back_populates='work_phase', lazy='selectin', overlaps='employee_list,work_phases')
+    assignments = db.relationship('WorkAssignment', back_populates='work_phase', lazy='selectin')
 
 class BreakType(enum.Enum):
     LUNCHBREAK = "LUNCHBREAK"
@@ -228,8 +227,7 @@ class Employee(AuditMixin):
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     salary_base = db.Column(db.Float, nullable=False, default=0.0)
-    work_phases = db.relationship('WorkPhase', secondary='t_work_assignment', back_populates='employee_list', lazy='selectin', overlaps='assignments,work_phases')
-    assignments = db.relationship('WorkAssignment', back_populates='employee', lazy='selectin', overlaps='employee_list,work_phases')
+    assignments = db.relationship('WorkAssignment', back_populates='employee', lazy='selectin')
 
 class EmployeeSalaryHistory(AuditMixin):
     __tablename__ = "t_employee_salary_history"
@@ -246,8 +244,8 @@ class WorkAssignment(AuditMixin):
     work_assignment_id = db.Column(db.Integer, primary_key=True)
     work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
     employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
-    work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], back_populates='assignments', lazy='selectin', overlaps='employee_list,work_phases')
-    employee = db.relationship('Employee', foreign_keys=[employee_id], back_populates='assignments', lazy='selectin', overlaps='employee_list,work_phases')
+    work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], back_populates='assignments', lazy='selectin')
+    employee = db.relationship('Employee', foreign_keys=[employee_id], back_populates='assignments', lazy='selectin')
 
 class SalesItemStatus(enum.Enum):
     PENDING = 'PENDING'
