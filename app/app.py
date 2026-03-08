@@ -68,9 +68,10 @@ from .controllers import sales_order_controller
 from .controllers import employee_salary
 from .controllers import qc_work_order_controller
 from .controllers import test_certificate_controller
+from .controllers import test_result_controller
 
-with app.app_context():
-    db.create_all()
+# with app.app_context():
+#     db.create_all()
 
 @app.route('/api/health_check', methods=['POST'])
 def health_check():
