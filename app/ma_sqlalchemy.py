@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, WorkOrderStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, WorkOrderStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -66,6 +66,21 @@ class EmployeeSalaryHistorySchema(Schema):
     new_salary = fields.Float()
     effective_date = fields.DateTime()
     remark = fields.String()
+
+class MachineSchema(Schema):
+    machine_id = fields.Integer()
+    machine_code = fields.String()
+    machine_name = fields.String()
+    machine_description = fields.String(allow_none=True)
+    manufacturer = fields.String(allow_none=True)
+    purchase_date = fields.DateTime(allow_none=True)
+    status = fields.Enum(MachineStatus)
+    is_active = fields.Boolean()
+    created_date = fields.DateTime()
+    updated_date = fields.DateTime()
+    created_by = fields.String(allow_none=True)
+    updated_by = fields.String(allow_none=True)
+
 class MaterialListSchema(Schema):
     material_list_id = fields.Integer()
     sales_item_id = fields.Integer()
@@ -301,3 +316,17 @@ class MaterialTransactionSchema(Schema):
     related_document_code = fields.String(required=True)
     created_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)
+
+class MachineSchema(Schema):
+    machine_id = fields.Integer()
+    machine_code = fields.String()
+    machine_name = fields.String()
+    machine_description = fields.String(allow_none=True)
+    manufacturer = fields.String(allow_none=True)
+    purchase_date = fields.Date(allow_none=True)
+    status = fields.Enum(MachineStatus)
+    is_active = fields.Boolean()
+    created_date = fields.DateTime()
+    updated_date = fields.DateTime()
+    created_by = fields.String(allow_none=True)
+    updated_by = fields.String(allow_none=True)

@@ -70,9 +70,7 @@ from .controllers import qc_work_order_controller
 from .controllers import test_certificate_controller
 from .controllers import inventory_controller
 from .controllers import item_component_controller
-
-with app.app_context():
-    db.create_all()
+from .controllers import machine_controller
 
 @app.route('/api/health_check', methods=['POST'])
 def health_check():
