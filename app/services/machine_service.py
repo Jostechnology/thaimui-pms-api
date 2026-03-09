@@ -68,18 +68,25 @@ def _to_purchase_date(val):
 
 def get_machine_list(data):
     try:
+        page = data.get("page")
+        limit = data.get("limit")
         search = _normalize_search(data.get("search") or data.get("keyword") or data.get("query"))
         status = data.get("status", "")
         is_active = data.get("is_active", None)
-        items = machine_repository.get_machine_list(search, status, is_active)
+        result = machine_repository.get_machine_list(page, limit, search, status, is_active)
         return {
-            "items": MachineSchema(many=True).dump(items),
+            "items": MachineSchema(many=True).dump(result.items),
             "filters": {
                 "search": search,
                 "status": status,
                 "is_active": is_active,
             },
-            "total": len(items),
+            "page": page,
+            "limit": limit,
+            "total": result.total,
+            "total_pages": result.pages,
+            "prev_page": result.prev_num,
+            "next_page": result.next_num,
         }
     except Exception:
         raise

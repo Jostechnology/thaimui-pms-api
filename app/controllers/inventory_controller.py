@@ -42,6 +42,7 @@ def api_record_material_transaction():
         
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+    
 @app.route("/api/material/tracking", methods=["GET"])
 @verify_required
 def api_get_all_material_tracking():

@@ -2,7 +2,7 @@ from app.con_sqlalchemy import Machine
 from app.app import db
 
 
-def get_machine_list(search="", status="", is_active=None):
+def get_machine_list(page, limit, search="", status="", is_active=None):
     try:
         query = Machine.query
 
@@ -35,7 +35,9 @@ def get_machine_list(search="", status="", is_active=None):
             if isinstance(is_active, bool):
                 query = query.filter(Machine.is_active == is_active)
 
-        return query.order_by(Machine.machine_code.asc()).all()
+        query = query.order_by(Machine.machine_code.asc())
+        result = query.paginate(page=page, per_page=limit, error_out=False)
+        return result
     except Exception:
         raise
 
