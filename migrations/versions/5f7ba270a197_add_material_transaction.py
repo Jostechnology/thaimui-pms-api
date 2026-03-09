@@ -17,9 +17,10 @@ depends_on = None
 
 
 def upgrade():
-    op.drop_table('t_pbi_transaction')                 # 1. ทุบตารางหลาน
-    op.drop_table('t_product_backoffice_inventory')    # 2. ทุบตารางลูก
-    op.drop_table('m_product')                         # 3. ทุบตารางแม่
+    pass
+    # op.drop_table('t_pbi_transaction')                 # 1. ทุบตารางหลาน
+    # op.drop_table('t_product_backoffice_inventory')    # 2. ทุบตารางลูก
+    # op.drop_table('m_product')                         # 3. ทุบตารางแม่
 
     # op.create_table('t_material_transaction',
     #     sa.Column('transaction_id', sa.Integer(), autoincrement=True, nullable=False),
