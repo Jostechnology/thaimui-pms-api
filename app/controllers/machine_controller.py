@@ -13,13 +13,17 @@ from app.services.machine_service import (
 @verify_required
 def api_get_machine_list():
     try:
-        page = request.args.get("page", 1, type=int)
-        limit = request.args.get("limit", 10, type=int)
+        page = request.args.get("page", type=int)
+        limit = request.args.get("limit", type=int)
         search = request.args.get("search", "", type=str)
         keyword = request.args.get("keyword", "", type=str)
         query = request.args.get("query", "", type=str)
         status = request.args.get("status", "", type=str)
         is_active = request.args.get("is_active", None, type=str)
+
+        if page is None or limit is None:
+            return jsonify({"error": "page and limit are required"}), 400
+
         data = {
             "page": page,
             "limit": limit,
