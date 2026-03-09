@@ -69,15 +69,51 @@ def get_material_tracking_summary(sales_item_id):
     except Exception as e:
         return {"success": False, "message": f"เกิดข้อผิดพลาดในการดึงข้อมูล: {str(e)}"}
 
+def get_all_material_tracking_service(search=None, tracking_type=None):
+    try:
+        rows = material_repository.get_all_tracking(search=search, tracking_type=tracking_type)
+        result = []
+        for row in rows:
+            total_qty = int(row.total_quantity)
+            used_prod = int(row.used_in_production)
+            used_test = int(row.used_in_testing)
+            result.append({
+                "material_list_id": row.material_list_id,
+                "sales_item_id": row.sales_item_id,
+                "item_code": row.item_code,
+                "item_name": row.item_name,
+                "item_description": row.item_description,
+                "total_quantity": total_qty,
+                "used_in_production": used_prod,
+                "used_in_testing": used_test,
+                "remaining_quantity": total_qty - used_prod - used_test,
+            })
+        return {"success": True, "data": result}
+    except Exception as e:
+        return {"success": False, "message": f"เกิดข้อผิดพลาดในการดึงข้อมูล: {str(e)}"}
+
+
 def get_material_history_service(material_list_id):
     try:
-        # ดึงประวัติของ Material นี้มาทั้งหมด เรียงจากล่าสุดไปเก่าสุด
-        transactions = MaterialTransaction.query.filter_by(
-            material_list_id=material_list_id
-        ).order_by(MaterialTransaction.created_date.desc()).all()
+        usage_detail = material_repository.get_usage_detail(material_list_id)
+        if not usage_detail:
+            return {"success": False, "message": f"ไม่พบรายการวัสดุ ID: {material_list_id}"}
 
         history_list = []
-        for t in transactions:
+
+        # ข้อมูลจาก t_component_material_usage (ใช้ในผลิต — Work Order)
+        for p in usage_detail['production_usages']:
+            history_list.append({
+                "transaction_id": f"PU-{p.usage_id}",
+                "action_type": "ใช้ในการผลิต",
+                "amount": p.quantity_used,
+                "document_code": p.work_order_doc_num or "-",
+                "action_date": p.created_date.strftime("%Y-%m-%d %H:%M:%S") if p.created_date else None,
+                "action_by": None
+            })
+
+        # ข้อมูลจาก t_material_transaction (เบิกใช้งาน/รับคืน)
+        for t in usage_detail['transactions']:
             history_list.append({
                 "transaction_id": t.transaction_id,
                 "action_type": "เบิกใช้งาน" if t.type == "REMOVE" else "รับคืนคลัง",
@@ -87,6 +123,83 @@ def get_material_history_service(material_list_id):
                 "action_by": t.created_by
             })
 
+        # เรียงจากล่าสุดไปเก่าสุด
+        history_list.sort(key=lambda x: x["action_date"] or "", reverse=True)
+
         return {"success": True, "data": history_list}
+    except Exception as e:
+        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
+
+
+def validate_material_stock_service(items):
+    """ตรวจสอบจำนวนวัตถุดิบว่าเพียงพอหรือไม่"""
+    try:
+        results = []
+        all_valid = True
+        for item in items:
+            mid = item.get('material_list_id')
+            requested = item.get('quantity', 0)
+
+            mat = material_repository.get_material_by_id(mid)
+            if not mat:
+                results.append({
+                    "is_valid": False,
+                    "material_list_id": mid,
+                    "item_name": "ไม่พบข้อมูล",
+                    "requested_quantity": requested,
+                    "available_quantity": 0,
+                    "shortage": requested,
+                    "message": f"ไม่พบวัตถุดิบ ID: {mid}"
+                })
+                all_valid = False
+                continue
+
+            total = mat.item_num or 0
+            prod_used = sum(u.quantity_used for u in mat.component_usages)
+            test_used = sum(t.amount for t in mat.transactions if t.type == 'REMOVE')
+            available = total - prod_used - test_used
+
+            is_valid = requested <= available
+            if not is_valid:
+                all_valid = False
+
+            results.append({
+                "is_valid": is_valid,
+                "material_list_id": mid,
+                "item_name": mat.item_name,
+                "requested_quantity": requested,
+                "available_quantity": available,
+                "shortage": max(0, requested - available),
+                "message": "เพียงพอ" if is_valid else f"ไม่เพียงพอ — ขาดอีก {requested - available} ชิ้น"
+            })
+
+        return {
+            "success": True,
+            "data": {
+                "is_valid": all_valid,
+                "results": results
+            }
+        }
+    except Exception as e:
+        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
+
+
+def get_transactions_service(sales_item_id, tx_type=None):
+    try:
+        txns = material_repository.get_transactions_by_sales_item(sales_item_id, tx_type)
+        data = []
+        for t in txns:
+            data.append({
+                "transaction_id": t.transaction_id,
+                "material_list_id": t.material_list_id,
+                "amount": t.amount,
+                "type": t.type,
+                "related_document_code": t.related_document_code,
+                "created_by": t.created_by,
+                "updated_by": t.updated_by,
+                "created_date": t.created_date.strftime("%Y-%m-%d %H:%M:%S") if t.created_date else None,
+                "updated_date": t.updated_date.strftime("%Y-%m-%d %H:%M:%S") if t.updated_date else None
+            })
+        return {"success": True, "data": data}
     except Exception as e:
         return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
