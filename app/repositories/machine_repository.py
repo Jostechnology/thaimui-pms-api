@@ -22,18 +22,22 @@ def get_machine_list(page, limit, search="", status="", is_active=None):
             except Exception:
                 pass
 
-        if is_active not in (None, "", "all"):
-            if isinstance(is_active, str):
-                lowered = is_active.strip().lower()
-                if lowered in ("true", "1", "yes", "active"):
-                    is_active = True
-                elif lowered in ("false", "0", "no", "inactive"):
-                    is_active = False
-                else:
-                    is_active = None
+        normalized_is_active = is_active
+        if isinstance(normalized_is_active, str):
+            lowered = normalized_is_active.strip().lower()
+            if lowered in ("true", "1", "yes", "active"):
+                normalized_is_active = True
+            elif lowered in ("false", "0", "no", "inactive"):
+                normalized_is_active = False
+            elif lowered == "all":
+                normalized_is_active = "all"
+            else:
+                normalized_is_active = True
+        elif normalized_is_active in (None, ""):
+            normalized_is_active = True
 
-            if isinstance(is_active, bool):
-                query = query.filter(Machine.is_active == is_active)
+        if isinstance(normalized_is_active, bool):
+            query = query.filter(Machine.is_active == normalized_is_active)
 
         query = query.order_by(Machine.machine_code.asc())
         result = query.paginate(page=page, per_page=limit, error_out=False)

@@ -73,13 +73,14 @@ def get_machine_list(data):
         search = _normalize_search(data.get("search") or data.get("keyword") or data.get("query"))
         status = data.get("status", "")
         is_active = data.get("is_active", None)
-        result = machine_repository.get_machine_list(page, limit, search, status, is_active)
+        effective_is_active = True if is_active in (None, "") else is_active
+        result = machine_repository.get_machine_list(page, limit, search, status, effective_is_active)
         return {
             "items": MachineSchema(many=True).dump(result.items),
             "filters": {
                 "search": search,
                 "status": status,
-                "is_active": is_active,
+                "is_active": effective_is_active,
             },
             "page": page,
             "limit": limit,
