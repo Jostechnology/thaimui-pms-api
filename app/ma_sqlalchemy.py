@@ -285,9 +285,9 @@ class QCCertificateSchema(Schema):
     doc_entry = fields.Integer()
 
     # Customer detail auto-populated from SalesOrder
-    card_code = fields.Method("get_card_code")
-    card_name = fields.Method("get_card_name")
-    po_number = fields.Method("get_po_number")
+    # card_code = fields.Method("get_card_code")
+    # card_name = fields.Method("get_card_name")
+    # po_number = fields.Method("get_po_number")
 
     certification_number = fields.String()
     certification_date = fields.DateTime()

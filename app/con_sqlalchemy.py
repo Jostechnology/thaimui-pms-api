@@ -419,7 +419,7 @@ class QCCheckItem(AuditMixin): # Certificate Item
     test_result_item_id  = db.Column(db.Integer, db.ForeignKey('t_test_result_item.test_result_item_id', ondelete='SET NULL'), nullable=True)
     sales_item           = db.relationship('SalesItem', foreign_keys=[sales_item_id], lazy='selectin')
     test_result_item     = db.relationship('TestResultItem', foreign_keys=[test_result_item_id], lazy='selectin')
-    certification        = db.relationship('QCCertification', back_populates='check_items', lazy='selectin')
+    certification        = db.relationship('QCCertification', back_populates='check_items', lazy='noload')
 
     item_no     = db.Column(db.String(50), nullable=True)
     test_number = db.Column(db.String(255), nullable=False)
