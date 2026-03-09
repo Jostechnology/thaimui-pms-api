@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, TestResultStatus, WorkOrderStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, TestResultStatus, WorkOrderStatus, SalesItemTransactionType
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -153,6 +153,7 @@ class ItemComponentSchema(Schema):
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.Int()
+    quantity = fields.Integer()
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
     current_phase = fields.Nested(WorkPhaseSchema())
@@ -179,17 +180,33 @@ class SalesOrderSchema(Schema):
     group_code = fields.String()
     group_name = fields.String()
 
+class SalesItemTransactionSchema(Schema):
+    transaction_id        = fields.Integer()
+    sales_item_id         = fields.Integer()
+    quantity              = fields.Integer()
+    type                  = fields.Enum(SalesItemTransactionType)
+    related_document_code = fields.String()
+    created_date          = fields.DateTime()
+    created_by            = fields.String()
+
 class SalesItemSchema(Schema):
-    sales_item_id    = fields.Integer()
-    item_code        = fields.String()
-    item_num         = fields.Integer()
-    item_name        = fields.String()
-    item_description = fields.String()
-    cost_price       = fields.Float()
-    unit_price       = fields.Float()
-    doc_num          = fields.Integer()
-    doc_entry        = fields.Integer()
-    material_list    = fields.List(fields.Nested(MaterialListSchema()))
+    sales_item_id           = fields.Integer()
+    item_code               = fields.String()
+    item_num                = fields.Integer()
+    item_name               = fields.String()
+    item_description        = fields.String()
+    cost_price              = fields.Float()
+    unit_price              = fields.Float()
+    doc_num                 = fields.Integer()
+    doc_entry               = fields.Integer()
+    material_list           = fields.List(fields.Nested(MaterialListSchema()))
+    producing_qty           = fields.Integer(dump_only=True)
+    produced_qty            = fields.Integer(dump_only=True)
+    queued_for_test_qty     = fields.Integer(dump_only=True)
+    tested_qty              = fields.Integer(dump_only=True)
+
+class SalesItemDetailSchema(SalesItemSchema):
+    sales_item_transactions = fields.List(fields.Nested(SalesItemTransactionSchema()))
 
 class QCFormSchema(Schema):
     qc_form_id              = fields.Integer()

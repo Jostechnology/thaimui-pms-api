@@ -127,6 +127,7 @@ class WorkOrder(AuditMixin):
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
@@ -268,6 +269,27 @@ class SalesItem(AuditMixin):
     material_list = db.relationship('MaterialList', back_populates='sales_item', lazy='selectin')
     work_order = db.relationship('WorkOrder', back_populates='sales_item', lazy='selectin', uselist=False)
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item', lazy='selectin')
+    sales_item_transactions = db.relationship('SalesItemTransaction', back_populates='sales_item', lazy='selectin')
+
+    @property
+    def producing_qty(self):
+        if self.work_order and self.work_order.status != WorkOrderStatus.COMPLETED:
+            return self.work_order.quantity
+        return 0
+
+    @property
+    def produced_qty(self):
+        if self.work_order and self.work_order.status == WorkOrderStatus.COMPLETED:
+            return self.work_order.quantity
+        return 0
+
+    @property
+    def queued_for_test_qty(self):
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.QUEUED_FOR_TEST)
+
+    @property
+    def tested_qty(self):
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED)
 
 
 class MaterialList(AuditMixin):
@@ -513,6 +535,23 @@ class MaterialTransaction(AuditMixin):
 
     # สร้าง Relationship ให้เชื่อมหากันได้ง่ายๆ
     material_list = db.relationship('MaterialList', backref=db.backref('transactions', lazy='selectin'))
+
+class SalesItemTransactionType(enum.Enum):
+    PRODUCED = 'PRODUCED'
+    QUEUED_FOR_TEST = 'QUEUED_FOR_TEST'
+    TESTED = 'TESTED'
+
+class SalesItemTransaction(AuditMixin):
+    __tablename__ = "t_sales_item_transaction"
+
+    transaction_id = db.Column(db.Integer, primary_key=True)
+    sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    type = db.Column(db.Enum(SalesItemTransactionType), nullable=False)
+    related_document_code = db.Column(db.String(128), nullable=False)
+
+    sales_item = db.relationship('SalesItem', back_populates='sales_item_transactions', lazy='selectin')
+
 class ComponentSpec(AuditMixin):
     __tablename__ = "t_component_spec"
     component_spec_id = db.Column(db.Integer, primary_key=True)
