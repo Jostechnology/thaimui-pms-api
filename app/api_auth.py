@@ -9,9 +9,7 @@ import json
 def verify_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if request.method == "OPTIONS":
-            return f(*args, **kwargs)
-
+        
         token = None
 
         if "Authorization" in request.headers:
