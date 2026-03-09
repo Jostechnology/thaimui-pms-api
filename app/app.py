@@ -69,6 +69,8 @@ from .controllers import employee_salary
 from .controllers import qc_work_order_controller
 from .controllers import test_certificate_controller
 from .controllers import inventory_controller
+from .controllers import item_component_controller
+from .controllers import material_stock_controller
 
 with app.app_context():
     db.create_all()

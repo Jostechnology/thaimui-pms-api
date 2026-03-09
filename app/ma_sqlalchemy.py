@@ -66,7 +66,16 @@ class EmployeeSalaryHistorySchema(Schema):
     new_salary = fields.Float()
     effective_date = fields.DateTime()
     remark = fields.String()
-
+class MaterialListSchema(Schema):
+    material_list_id = fields.Integer()
+    sales_item_id = fields.Integer()
+    item_code = fields.String()
+    item_name = fields.String()
+    item_description = fields.String()
+    item_num = fields.Integer()
+    cost_price = fields.Float()
+    unit_price = fields.Float()
+    created_date = fields.DateTime()
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
     item_code = fields.String()
@@ -76,6 +85,7 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.Int()
+    material_list = fields.List(fields.Nested(MaterialListSchema()))
     
 class WorkPhaseBreakSchema(Schema):
     break_id = fields.Integer()
@@ -94,6 +104,48 @@ class WorkPhaseSchema(Schema):
     created_date = fields.DateTime()
     employee_list = fields.List(fields.Nested(EmployeeSchema()))
     breaks = fields.List(fields.Nested(WorkPhaseBreakSchema()))
+class ComponentSpecTypeSchema(Schema):
+    component_spec_type_id = fields.Integer()
+    component_spec_type_name = fields.String()
+    spec_type = fields.String()
+
+class ComponentSpecSchema(Schema):
+    component_spec_id = fields.Integer()
+    item_component_id = fields.Integer()
+    component_spec_type_id = fields.Integer()
+    end_side = fields.String(allow_none=True)
+    bool_value = fields.Boolean(allow_none=True)
+    decimal_value = fields.Float(allow_none=True)
+    text_value = fields.String(allow_none=True)
+    component_spec_type = fields.Nested(ComponentSpecTypeSchema)
+
+class ComponentOptionTypeSchema(Schema):
+    component_option_type_id = fields.Integer()
+    component_option_type_name = fields.String()
+
+class ComponentOptionSchema(Schema):
+    component_option_id = fields.Integer()
+    component_option_type_id = fields.Integer()
+    item_component_id = fields.Integer()
+    component_option_type = fields.Nested(ComponentOptionTypeSchema)
+
+class ComponentMaterialUsageSchema(Schema):
+    usage_id = fields.Integer()
+    item_component_id = fields.Integer()
+    material_list_id = fields.Integer()
+    quantity_used = fields.Integer()
+    material_list = fields.Nested(MaterialListSchema())
+
+class ItemComponentSchema(Schema):
+    item_component_id = fields.Integer()
+    work_order_id = fields.Integer()
+    component_name = fields.String()
+    material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
+    component_specs = fields.List(fields.Nested(ComponentSpecSchema()))
+    component_options = fields.List(fields.Nested(ComponentOptionSchema()))
+    remark = fields.String(allow_none=True)
+    img_url = fields.String(allow_none=True)
+
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.Int()
@@ -102,17 +154,9 @@ class WorkOrderSchema(Schema):
     current_phase = fields.Nested(WorkPhaseSchema())
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     sales_item = fields.Nested(SalesItemSchema())
+    item_components = fields.List(fields.Nested(ItemComponentSchema()))
 
-class MaterialListSchema(Schema):
-    material_list_id = fields.Integer()
-    sales_item_id = fields.Integer()
-    item_code = fields.String()
-    item_name = fields.String()
-    item_description = fields.String()
-    item_num = fields.Integer()
-    cost_price = fields.Float()
-    unit_price = fields.Float()
-    created_date = fields.DateTime()
+
 
 class SalesOrderSearchSchema(Schema):
     doc_num = fields.Int()
@@ -136,9 +180,11 @@ class SalesItemSchema(Schema):
     item_num         = fields.Integer()
     item_name        = fields.String()
     item_description = fields.String()
+    cost_price       = fields.Float()
+    unit_price       = fields.Float()
     doc_num          = fields.Integer()
     doc_entry        = fields.Integer()
-    work_order_id    = fields.Integer()
+    material_list    = fields.List(fields.Nested(MaterialListSchema()))
 
 class QCFormSchema(Schema):
     qc_form_id              = fields.Integer()
@@ -193,6 +239,18 @@ class QCWorkOrderSchema(Schema):
     updated_by = fields.String()
     qc_form = fields.Nested(QCFormSchema, allow_none=True)
     qc_items = fields.List(fields.Nested(QCItemSchema))
+    doc_entry = fields.Method("get_doc_entry")
+    sales_item_code = fields.Method("get_sales_item_code")
+    sales_item_name = fields.Method("get_sales_item_name")
+
+    def get_doc_entry(self, obj):
+        return obj.sales_item.doc_entry if obj.sales_item else None
+
+    def get_sales_item_code(self, obj):
+        return obj.sales_item.item_code if obj.sales_item else None
+
+    def get_sales_item_name(self, obj):
+        return obj.sales_item.item_name if obj.sales_item else None
 
 
 # 1. Schema สำหรับตารางลูก (รายการสินค้า/รายการเทส)

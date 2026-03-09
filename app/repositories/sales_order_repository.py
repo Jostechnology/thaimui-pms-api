@@ -24,6 +24,24 @@ def search_sales_order(page, limit, search):
     except Exception:
         raise
 
+def get_all_sales_orders(page, limit, search):
+    try:
+        query = db.session.query(SalesOrder)
+        if search:
+            query = query.filter(
+                or_(
+                    SalesOrder.doc_num.ilike(f"%{search}%"),
+                    SalesOrder.card_name.ilike(f"%{search}%"),
+                    SalesOrder.card_code.ilike(f"%{search}%")
+                )
+            )
+        query = query.order_by(SalesOrder.doc_num.desc())
+        result = query.paginate(page=page, per_page=limit, error_out=False)
+        return result
+    except Exception:
+        raise
+
+
 def get_sales_order_detail(doc_entry):
     try:
         sales_order = db.session.query(SalesOrder).filter(SalesOrder.doc_entry == doc_entry).first()
@@ -32,3 +50,4 @@ def get_sales_order_detail(doc_entry):
         return sales_order
     except Exception:
         raise
+

@@ -27,19 +27,13 @@ def get_work_order_by_id(work_order_id):
     except Exception:
         raise
 
-def get_sales_orders_for_qc(search=""):
-    """ดึง SalesOrder ที่ผูกกับ WorkOrder สถานะ WAIT_TEST หรือ TESTING เท่านั้น"""
+def get_sales_orders_for_qc(search="", statuses = []):
     try:
-        query = (
-            db.session.query(SalesOrder)
-            .join(WorkOrder, WorkOrder.doc_entry == SalesOrder.doc_entry)
-            .filter(
-                or_(
-                    WorkOrder.status == WorkOrderStatus.WAIT_TEST,
-                    WorkOrder.status == WorkOrderStatus.TESTING,
-                )
-            )
-        )
+        query = db.session.query(SalesOrder)
+        if statuses:
+            query = query.join(WorkOrder, WorkOrder.doc_entry == SalesOrder.doc_entry)
+            query = query.filter(WorkOrder.status.in_(statuses))
+
         if search:
             query = query.filter(
                 or_(
@@ -48,24 +42,20 @@ def get_sales_orders_for_qc(search=""):
                     SalesOrder.card_code.ilike(f"%{search}%"),
                 )
             )
+
         return query.order_by(SalesOrder.doc_entry.desc()).all()
     except Exception:
         raise
 
 
-def get_sales_items_for_qc(search=""):
-    """ดึง SalesItem ที่ WorkOrder มีสถานะ WAIT_TEST หรือ TESTING"""
+def get_sales_items_for_qc(search="", statuses = []):
     try:
         query = (
             db.session.query(SalesItem)
-            .join(WorkOrder, WorkOrder.work_order_id == SalesItem.work_order_id)
-            .filter(
-                or_(
-                    WorkOrder.status == WorkOrderStatus.WAIT_TEST,
-                    WorkOrder.status == WorkOrderStatus.TESTING,
-                )
-            )
         )
+        if statuses:
+            query = query.join(WorkOrder, WorkOrder.sales_item_id == SalesItem.sales_item_id)
+            query = query.filter(WorkOrder.status.in_(statuses))
         if search:
             query = query.filter(
                 or_(

@@ -3,6 +3,7 @@ from app.ma_sqlalchemy import QCWorkOrderSchema,search_qc_work_order_schema
 from app.repositories import qc_work_order_repository
 from app.repositories import work_order_repository
 from app.app import db
+from app.ma_sqlalchemy import SalesItemSchema
 
 def get_all_qc_work_orders(data):
     try:
@@ -27,11 +28,11 @@ def get_qc_work_order_by_id(qc_work_order_id):
         raise
 
 
-def get_sales_items_for_qc(search=""):
-    """ดึง SalesItem ที่พร้อมสร้าง QC (WorkOrder สถานะ WAIT_TEST/TESTING)"""
-    from app.ma_sqlalchemy import SalesItemSchema
+def get_sales_items_for_qc(search="", statuses = []):
+    
     try:
-        items = work_order_repository.get_sales_items_for_qc(search)
+        statuses = [WorkOrderStatus(s) for s in statuses] if statuses else []
+        items = work_order_repository.get_sales_items_for_qc(search, statuses)
         return SalesItemSchema(many=True).dump(items)
     except Exception:
         raise
@@ -89,18 +90,6 @@ def create_qc_work_order(data):
         sales_item = db.session.query(SalesItem).filter_by(sales_item_id=sales_item_id).first()
         if not sales_item:
             raise Exception(f"ไม่พบ Sales Item ID: {sales_item_id}")
-
-        work_order = sales_item.work_order
-        if not work_order:
-            raise Exception("Sales Item นี้ไม่มี Work Order ที่เชื่อมต่อ")
-
-        allowed = {WorkOrderStatus.WAIT_TEST, WorkOrderStatus.TESTING}
-        if work_order.status not in allowed:
-            allowed_labels = ", ".join([s.value for s in allowed])
-            raise Exception(
-                f"ไม่สามารถสร้างใบสั่งเทสได้ เนื่องจาก Work Order มีสถานะ '{work_order.status.value}' "
-                f"(ต้องเป็น {allowed_labels} เท่านั้น)"
-            )
 
         qc = QCWorkOrder(
             sales_item_id=sales_item_id,
