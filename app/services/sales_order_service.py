@@ -113,7 +113,7 @@ def create_sales_order(data):
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
                     item_description=mat.get("item_description"),
-                    item_num=mat.get("item_num"),
+                    original_num=mat.get("original_num"),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
                     

@@ -1,4 +1,5 @@
-from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus
+import datetime
+from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus, MaterialTransaction, MaterialList
 from app.ma_sqlalchemy import QCWorkOrderSchema,search_qc_work_order_schema
 from app.repositories import qc_work_order_repository
 from app.repositories import work_order_repository
@@ -86,10 +87,29 @@ def create_qc_work_order(data):
         if not sales_item_id:
             raise Exception("กรุณาระบุ Sales Item")
 
-        # ตรวจสอบสถานะ WorkOrder ผ่าน SalesItem
         sales_item = db.session.query(SalesItem).filter_by(sales_item_id=sales_item_id).first()
         if not sales_item:
             raise Exception(f"ไม่พบ Sales Item ID: {sales_item_id}")
+
+        material_usage_data = data.get("items", [])
+
+        # Validate material availability before creating
+        if material_usage_data:
+            material_map = {m.material_list_id: m for m in sales_item.material_list}
+            for usage in material_usage_data:
+                material_list_id = usage.get("material_list_id")
+                quantity_used = int(usage.get("quantity", 0))
+                material = material_map.get(material_list_id)
+                if not material:
+                    raise Exception(f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้")
+                total_removed = sum(t.amount for t in material.transactions if t.type == 'REMOVE')
+                total_added = sum(t.amount for t in material.transactions if t.type == 'ADD')
+                available = material.original_num - (total_removed - total_added)
+                if quantity_used > available:
+                    raise Exception(
+                        f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
+                        f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
+                    )
 
         qc = QCWorkOrder(
             sales_item_id=sales_item_id,
@@ -105,6 +125,19 @@ def create_qc_work_order(data):
         db.session.add(_build_qc_form(qc.qc_work_order_id, data))
         for item in _build_qc_items(qc.qc_work_order_id, data.get("items", [])):
             db.session.add(item)
+
+        # Create MaterialTransaction(REMOVE) for each material consumed
+        if material_usage_data:
+            now = datetime.datetime.now()
+            for usage in material_usage_data:
+                db.session.add(MaterialTransaction(
+                    material_list_id=usage.get("material_list_id"),
+                    amount=int(usage.get("quantity")),
+                    type="REMOVE",
+                    related_document_code=f"QC-{qc.qc_work_order_id}",
+                    created_by="System",
+                    created_date=now,
+                ))
 
         db.session.commit()
         db.session.refresh(qc)
