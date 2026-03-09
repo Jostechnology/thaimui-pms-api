@@ -17,6 +17,42 @@ def search_sales_order(data):
     except Exception:
         raise
 
+
+def get_all_sales_orders(data):
+    try:
+        page = data.get("page", 1)
+        limit = data.get("limit", 10)
+        search = data.get("search", "")
+        result = sales_order_repository.get_all_sales_orders(page, limit, search)
+
+        items_data = []
+        for so in result.items:
+            items_data.append({
+                "doc_entry": so.doc_entry,
+                "doc_num": so.doc_num,
+                "card_code": so.card_code,
+                "card_name": so.card_name,
+                "slp_code": so.slp_code,
+                "slp_name": so.slp_name,
+                "bpl_code": so.bpl_code,
+                "bpl_name": so.bpl_name,
+                "group_code": so.group_code,
+                "group_name": so.group_name,
+                "created_date": so.created_date.strftime("%Y-%m-%d %H:%M:%S") if so.created_date else None,
+                "sales_items_count": len(so.sales_items) if so.sales_items else 0,
+                "work_orders_count": sum(1 for si in (so.sales_items or []) if si.work_order is not None)
+            })
+
+        return {
+            "items": items_data,
+            "total": result.total,
+            "page": result.page,
+            "pages": result.pages,
+            "limit": limit
+        }
+    except Exception:
+        raise
+
 def get_sales_order_detail(doc_entry):
     try:
         result = sales_order_repository.get_sales_order_detail(doc_entry)

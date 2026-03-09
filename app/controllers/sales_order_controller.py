@@ -4,7 +4,23 @@ from app.app import app
 from app.exception import AppException
 from flask import request, jsonify
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema
-from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail
+from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders
+
+
+@app.route("/api/sales_order/get_all", methods=["GET"])
+@verify_required
+def api_get_all_sales_orders():
+    try:
+        page = request.args.get("page", 1, type=int)
+        limit = request.args.get("limit", 10, type=int)
+        search = request.args.get("search", "", type=str)
+        data = {"page": page, "limit": limit, "search": search}
+
+        result = get_all_sales_orders(data)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/search_sales_order", methods=["GET"])

@@ -25,6 +25,9 @@ def verify_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         _start = time.perf_counter()
+        if request.method == "OPTIONS":
+            return f(*args, **kwargs)
+
         token = None
         if "Authorization" in request.headers:
             parts = request.headers["Authorization"].split(" ")

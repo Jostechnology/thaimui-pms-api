@@ -107,6 +107,31 @@ class WorkPhaseSchema(Schema):
 
     def get_employee_list(self, obj):
         return EmployeeSchema(many=True).dump([a.employee for a in obj.assignments])
+class ComponentSpecTypeSchema(Schema):
+    component_spec_type_id = fields.Integer()
+    component_spec_type_name = fields.String()
+    spec_type = fields.String()
+
+class ComponentSpecSchema(Schema):
+    component_spec_id = fields.Integer()
+    item_component_id = fields.Integer()
+    component_spec_type_id = fields.Integer()
+    end_side = fields.String(allow_none=True)
+    bool_value = fields.Boolean(allow_none=True)
+    decimal_value = fields.Float(allow_none=True)
+    text_value = fields.String(allow_none=True)
+    component_spec_type = fields.Nested(ComponentSpecTypeSchema)
+
+class ComponentOptionTypeSchema(Schema):
+    component_option_type_id = fields.Integer()
+    component_option_type_name = fields.String()
+
+class ComponentOptionSchema(Schema):
+    component_option_id = fields.Integer()
+    component_option_type_id = fields.Integer()
+    item_component_id = fields.Integer()
+    component_option_type = fields.Nested(ComponentOptionTypeSchema)
+
 class ComponentMaterialUsageSchema(Schema):
     usage_id = fields.Integer()
     item_component_id = fields.Integer()
@@ -119,6 +144,10 @@ class ItemComponentSchema(Schema):
     work_order_id = fields.Integer()
     component_name = fields.String()
     material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
+    component_specs = fields.List(fields.Nested(ComponentSpecSchema()))
+    component_options = fields.List(fields.Nested(ComponentOptionSchema()))
+    remark = fields.String(allow_none=True)
+    img_url = fields.String(allow_none=True)
 
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
@@ -155,6 +184,8 @@ class SalesItemSchema(Schema):
     item_num         = fields.Integer()
     item_name        = fields.String()
     item_description = fields.String()
+    cost_price       = fields.Float()
+    unit_price       = fields.Float()
     doc_num          = fields.Integer()
     doc_entry        = fields.Integer()
     material_list    = fields.List(fields.Nested(MaterialListSchema()))
@@ -279,35 +310,33 @@ class QCCheckItemSchema(Schema):
     created_by   = fields.String(dump_only=True)
     updated_by   = fields.String(dump_only=True)
 
-
+# 2. Schema สำหรับตารางแม่ (ใบรับรอง)
 class QCCertificateSchema(Schema):
     qc_certification_id = fields.Integer(dump_only=True)
-    doc_entry = fields.Integer()
-
-    # Customer detail auto-populated from SalesOrder
-    # card_code = fields.Method("get_card_code")
-    # card_name = fields.Method("get_card_name")
-    # po_number = fields.Method("get_po_number")
-
-    certification_number = fields.String()
+    qc_work_order_id = fields.Integer()
+    
+    # อิงตาม Model ล่าสุดของพี่ที่ใช้คำว่า certification_number และมี standard_reference
+    certification_number = fields.String() 
     certification_date = fields.DateTime()
     standard_reference = fields.String()
     test_method = fields.String()
-    certification_status = fields.String()
+    certification_status = fields.String() # Enum จะถูกแปลงเป็น Text (String) ให้ Frontend
     remark = fields.String()
-
-    # check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
-
+   
+    # 3. สิ่งสำคัญ: เชื่อม Schema ลูกเข้ากับ Schema แม่แบบ One-to-Many
+    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
+    
+    # AuditMixin Fields
     created_date = fields.DateTime(dump_only=True)
     updated_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)
     updated_by = fields.String(dump_only=True)
 
-    def get_card_code(self, obj):
-        return obj.sales_order.card_code if obj.sales_order else None
-
-    def get_card_name(self, obj):
-        return obj.sales_order.card_name if obj.sales_order else None
-
-    def get_po_number(self, obj):
-        return obj.sales_order.po_number if obj.sales_order else None
+class MaterialTransactionSchema(Schema):
+    transaction_id = fields.Integer(dump_only=True)
+    material_list_id = fields.Integer(required=True)
+    amount = fields.Integer(required=True)
+    type = fields.String(required=True) # 'ADD' หรือ 'REMOVE'
+    related_document_code = fields.String(required=True)
+    created_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
