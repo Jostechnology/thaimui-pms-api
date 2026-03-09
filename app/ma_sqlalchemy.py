@@ -102,8 +102,11 @@ class WorkPhaseSchema(Schema):
     start_date = fields.DateTime()
     end_date = fields.DateTime()
     created_date = fields.DateTime()
-    employee_list = fields.List(fields.Nested(EmployeeSchema()))
+    employee_list = fields.Method("get_employee_list")
     breaks = fields.List(fields.Nested(WorkPhaseBreakSchema()))
+
+    def get_employee_list(self, obj):
+        return EmployeeSchema(many=True).dump([a.employee for a in obj.assignments])
 class ComponentMaterialUsageSchema(Schema):
     usage_id = fields.Integer()
     item_component_id = fields.Integer()
@@ -282,9 +285,9 @@ class QCCertificateSchema(Schema):
     doc_entry = fields.Integer()
 
     # Customer detail auto-populated from SalesOrder
-    card_code = fields.Method("get_card_code")
-    card_name = fields.Method("get_card_name")
-    po_number = fields.Method("get_po_number")
+    # card_code = fields.Method("get_card_code")
+    # card_name = fields.Method("get_card_name")
+    # po_number = fields.Method("get_po_number")
 
     certification_number = fields.String()
     certification_date = fields.DateTime()
@@ -293,7 +296,7 @@ class QCCertificateSchema(Schema):
     certification_status = fields.String()
     remark = fields.String()
 
-    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
+    # check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
 
     created_date = fields.DateTime(dump_only=True)
     updated_date = fields.DateTime(dump_only=True)
