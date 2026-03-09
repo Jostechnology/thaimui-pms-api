@@ -14,7 +14,7 @@ def record_material_usage_service(material_list_id, amount, action_type, documen
             return {"success": False, "message": "ประเภทต้องเป็น ADD หรือ REMOVE เท่านั้น"}
 
         if action_type == "REMOVE":
-            planned_qty = mat.item_num 
+            planned_qty = mat.original_num
             
             total_removed = sum([t.amount for t in mat.transactions if t.type == 'REMOVE'])
             total_added = sum([t.amount for t in mat.transactions if t.type == 'ADD'])
@@ -75,8 +75,7 @@ def get_all_material_tracking_service(search=None, tracking_type=None):
         result = []
         for row in rows:
             total_qty = int(row.total_quantity)
-            used_prod = int(row.used_in_production)
-            used_test = int(row.used_in_testing)
+            total_used = int(row.total_used)
             result.append({
                 "material_list_id": row.material_list_id,
                 "sales_item_id": row.sales_item_id,
@@ -84,9 +83,8 @@ def get_all_material_tracking_service(search=None, tracking_type=None):
                 "item_name": row.item_name,
                 "item_description": row.item_description,
                 "total_quantity": total_qty,
-                "used_in_production": used_prod,
-                "used_in_testing": used_test,
-                "remaining_quantity": total_qty - used_prod - used_test,
+                "total_used": total_used,
+                "remaining_quantity": total_qty - total_used,
             })
         return {"success": True, "data": result}
     except Exception as e:
@@ -100,31 +98,15 @@ def get_material_history_service(material_list_id):
             return {"success": False, "message": f"ไม่พบรายการวัสดุ ID: {material_list_id}"}
 
         history_list = []
-
-        # ข้อมูลจาก t_component_material_usage (ใช้ในผลิต — Work Order)
-        for p in usage_detail['production_usages']:
-            history_list.append({
-                "transaction_id": f"PU-{p.usage_id}",
-                "action_type": "ใช้ในการผลิต",
-                "amount": p.quantity_used,
-                "document_code": p.work_order_doc_num or "-",
-                "action_date": p.created_date.strftime("%Y-%m-%d %H:%M:%S") if p.created_date else None,
-                "action_by": None
-            })
-
-        # ข้อมูลจาก t_material_transaction (เบิกใช้งาน/รับคืน)
         for t in usage_detail['transactions']:
             history_list.append({
                 "transaction_id": t.transaction_id,
-                "action_type": "เบิกใช้งาน" if t.type == "REMOVE" else "รับคืนคลัง",
+                "action_type": t.type,
                 "amount": t.amount,
                 "document_code": t.related_document_code,
                 "action_date": t.created_date.strftime("%Y-%m-%d %H:%M:%S") if t.created_date else None,
                 "action_by": t.created_by
             })
-
-        # เรียงจากล่าสุดไปเก่าสุด
-        history_list.sort(key=lambda x: x["action_date"] or "", reverse=True)
 
         return {"success": True, "data": history_list}
     except Exception as e:
@@ -154,10 +136,10 @@ def validate_material_stock_service(items):
                 all_valid = False
                 continue
 
-            total = mat.item_num or 0
-            prod_used = sum(u.quantity_used for u in mat.component_usages)
-            test_used = sum(t.amount for t in mat.transactions if t.type == 'REMOVE')
-            available = total - prod_used - test_used
+            total = mat.original_num or 0
+            total_removed = sum(t.amount for t in mat.transactions if t.type == 'REMOVE')
+            total_added = sum(t.amount for t in mat.transactions if t.type == 'ADD')
+            available = total - (total_removed - total_added)
 
             is_valid = requested <= available
             if not is_valid:
