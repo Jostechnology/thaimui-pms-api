@@ -277,11 +277,17 @@ class MaterialList(AuditMixin):
     item_code = db.Column(db.String(50), nullable=False)
     item_name = db.Column(db.String(255), nullable=False)
     item_description = db.Column(db.String(500))
-    item_num = db.Column(db.Integer, nullable=False)
+    original_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
     sales_item = db.relationship('SalesItem', back_populates='material_list', lazy='selectin')
     component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='selectin')
+
+    @property
+    def remaining_num(self):
+        total_removed = sum(t.amount for t in self.transactions if t.type == 'REMOVE')
+        total_added = sum(t.amount for t in self.transactions if t.type == 'ADD')
+        return self.original_num - (total_removed - total_added)
 
 class QCWorkOrderStatus(enum.Enum):
     PENDING = 'PENDING'
