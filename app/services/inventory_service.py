@@ -1,6 +1,8 @@
-import datetime
-from app.con_sqlalchemy import MaterialTransaction
-from app.repositories import material_repository 
+from app.repositories import material_repository
+from app.services import transaction_service
+from app.app import db
+from app.exception import ValidationError
+
 
 def record_material_usage_service(material_list_id, amount, action_type, document_code, user_name="System"):
     try:
@@ -13,37 +15,17 @@ def record_material_usage_service(material_list_id, amount, action_type, documen
         if action_type not in ["ADD", "REMOVE"]:
             return {"success": False, "message": "ประเภทต้องเป็น ADD หรือ REMOVE เท่านั้น"}
 
-        if action_type == "REMOVE":
-            planned_qty = mat.original_num
-            
-            total_removed = sum([t.amount for t in mat.transactions if t.type == 'REMOVE'])
-            total_added = sum([t.amount for t in mat.transactions if t.type == 'ADD'])
-            actual_used = total_removed - total_added
-            
-            remaining_quota = planned_qty - actual_used
-
-            if amount > remaining_quota:
-                return {
-                    "success": False, 
-                    "message": f"เบิกไม่ได้! โควต้าเหลือแค่ {remaining_quota} ชิ้น (แผน: {planned_qty}, ใช้ไปแล้ว: {actual_used})"
-                }
-
-        transaction = MaterialTransaction(
-            material_list_id=material_list_id,
-            amount=amount,
-            type=action_type, 
-            related_document_code=document_code,
-            created_by=user_name,
-            created_date=datetime.datetime.now()
-        )
-        
-        material_repository.save_material_transaction(transaction)
+        transaction_service.create_material_transaction(mat, None, action_type, amount, code=document_code)
+        db.session.commit()
 
         action_text = "เบิกออก" if action_type == "REMOVE" else "รับคืน"
         return {"success": True, "message": f"บันทึกประวัติการ{action_text} จำนวน {amount} ชิ้น สำเร็จ!"}
 
+    except ValidationError as e:
+        db.session.rollback()
+        return {"success": False, "message": e.message}
     except Exception as e:
-        material_repository.rollback_transaction() 
+        db.session.rollback()
         return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
 
 

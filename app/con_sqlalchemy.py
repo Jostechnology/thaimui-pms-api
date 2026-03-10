@@ -47,7 +47,7 @@ class User(AuditMixin):
     username = db.Column(db.String(80), unique=True, nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id', onupdate='CASCADE'), nullable=False, default=2) # default role_id = 2 (Default User)
     password = db.Column(db.String(200), nullable=False)
-    role = db.relationship('Role', back_populates="users", lazy='selectin')
+    role = db.relationship('Role', back_populates="users")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
 
@@ -64,9 +64,9 @@ class Role(BaseModel):
     role_code = db.Column(db.String(80), nullable=False)
     role_name = db.Column(db.String(250), unique=True, nullable=False)
     description = db.Column(db.String(200))
-    users = db.relationship('User', back_populates="role", lazy='selectin')
+    users = db.relationship('User', back_populates="role", lazy='noload')
     active_flag = db.Column(db.Boolean, nullable=False)
-    permissions = db.relationship('Permission', secondary='m_role_permission', back_populates='roles', lazy='selectin')
+    permissions = db.relationship('Permission', secondary='m_role_permission', back_populates='roles')
     def get_permissions(self):
         if self.role_name == "Admin":
             return ["*"]
@@ -84,7 +84,6 @@ class Module(BaseModel):
     permissions = db.relationship(
         'Permission',
         back_populates='module',
-        lazy='selectin',
         cascade='all, delete-orphan'
     )
 
@@ -99,7 +98,7 @@ class Permission(BaseModel):
     method = db.Column(db.String(20), nullable=False) # view, create, edit, delete
     permission_code = db.Column(db.String(50), nullable=False)
     description = db.Column(db.String(255))
-    roles = db.relationship('Role', secondary='m_role_permission', back_populates='permissions', lazy='selectin')
+    roles = db.relationship('Role', secondary='m_role_permission', back_populates='permissions', lazy='noload')
 
     module = db.relationship(
         'Module',
@@ -127,12 +126,13 @@ class WorkOrder(AuditMixin):
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
-    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order', lazy='selectin')
-    item_components = db.relationship('ItemComponent', back_populates='work_order', lazy='selectin')
-    work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_order_id', back_populates='work_order', lazy='selectin')
+    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order')
+    item_components = db.relationship('ItemComponent', back_populates='work_order')
+    work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_order_id', back_populates='work_order')
 
 class PhaseStatus(enum.Enum):
     PENDING = 'PENDING'
@@ -148,9 +148,9 @@ class WorkPhase(AuditMixin):
     phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.PENDING)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
-    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='work_phases', lazy='selectin')
-    breaks = db.relationship('WorkPhaseBreak', back_populates='work_phase', lazy='selectin', order_by='WorkPhaseBreak.break_start')
-    assignments = db.relationship('WorkAssignment', back_populates='work_phase', lazy='selectin')
+    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='work_phases', lazy='noload')
+    breaks = db.relationship('WorkPhaseBreak', back_populates='work_phase', order_by='WorkPhaseBreak.break_start')
+    assignments = db.relationship('WorkAssignment', back_populates='work_phase')
 
 class BreakType(enum.Enum):
     LUNCHBREAK = "LUNCHBREAK"
@@ -165,7 +165,7 @@ class WorkPhaseBreak(AuditMixin):
     break_end = db.Column(db.DateTime, nullable=True)
     break_type = db.Column(db.Enum(BreakType), nullable=False, default=BreakType.OTHER)
     Remark = db.Column(db.String(255), nullable=True)
-    work_phase = db.relationship('WorkPhase', back_populates='breaks', lazy='selectin')
+    work_phase = db.relationship('WorkPhase', back_populates='breaks', lazy='noload')
 
 
 @event.listens_for(WorkPhaseBreak, 'before_insert', propagate=True)
@@ -227,7 +227,7 @@ class Employee(AuditMixin):
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     salary_base = db.Column(db.Float, nullable=False, default=0.0)
-    assignments = db.relationship('WorkAssignment', back_populates='employee', lazy='selectin')
+    assignments = db.relationship('WorkAssignment', back_populates='employee', lazy='noload')
 
 class EmployeeSalaryHistory(AuditMixin):
     __tablename__ = "t_employee_salary_history"
@@ -244,8 +244,8 @@ class WorkAssignment(AuditMixin):
     work_assignment_id = db.Column(db.Integer, primary_key=True)
     work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
     employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
-    work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], back_populates='assignments', lazy='selectin')
-    employee = db.relationship('Employee', foreign_keys=[employee_id], back_populates='assignments', lazy='selectin')
+    work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], back_populates='assignments', lazy='noload')
+    employee = db.relationship('Employee', foreign_keys=[employee_id], back_populates='assignments')
 
 class SalesItemStatus(enum.Enum):
     PENDING = 'PENDING'
@@ -264,10 +264,31 @@ class SalesItem(AuditMixin):
     unit_price = db.Column(db.Float, nullable=False)
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
-    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='selectin')
-    material_list = db.relationship('MaterialList', back_populates='sales_item', lazy='selectin')
-    work_order = db.relationship('WorkOrder', back_populates='sales_item', lazy='selectin', uselist=False)
-    qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item', lazy='selectin')
+    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='noload')
+    material_list = db.relationship('MaterialList', back_populates='sales_item')
+    work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False)
+    qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
+    sales_item_transactions = db.relationship('SalesItemTransaction', back_populates='sales_item')
+
+    @property
+    def producing_qty(self):
+        if self.work_order and self.work_order.status != WorkOrderStatus.COMPLETED:
+            return self.work_order.quantity
+        return 0
+
+    @property
+    def produced_qty(self):
+        if self.work_order and self.work_order.status == WorkOrderStatus.COMPLETED:
+            return self.work_order.quantity
+        return 0
+
+    @property
+    def queued_for_test_qty(self):
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.QUEUED_FOR_TEST)
+
+    @property
+    def tested_qty(self):
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED)
 
 
 class MaterialList(AuditMixin):
@@ -280,8 +301,10 @@ class MaterialList(AuditMixin):
     original_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
-    sales_item = db.relationship('SalesItem', back_populates='material_list', lazy='selectin')
-    component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='selectin')
+    sales_item = db.relationship('SalesItem', back_populates='material_list', lazy='noload')
+    component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='noload')
+    # Forward: used by remaining_num property and transaction_service
+    transactions = db.relationship('MaterialTransaction', back_populates='material_list')
 
     @property
     def remaining_num(self):
@@ -304,10 +327,10 @@ class QCWorkOrder(AuditMixin):
     qc_by = db.Column(db.String(100), nullable=True)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     remark = db.Column(db.String(500), nullable=True)
-    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders', lazy='selectin')
-    qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan', lazy='selectin')
-    qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan', lazy='selectin')
-    test_results = db.relationship('TestResult', back_populates='qc_work_order', cascade='all, delete-orphan', lazy='selectin')
+    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders')
+    qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
+    qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
+    test_results = db.relationship('TestResult', back_populates='qc_work_order', cascade='all, delete-orphan')
 
 
 class QCForm(AuditMixin):
@@ -344,7 +367,7 @@ class QCForm(AuditMixin):
     details                  = db.Column(db.Text, nullable=True)
     customer_receipt_number  = db.Column(db.String(100), nullable=True)
 
-    qc_work_order = db.relationship('QCWorkOrder', back_populates='qc_form', lazy='selectin')
+    qc_work_order = db.relationship('QCWorkOrder', back_populates='qc_form', lazy='noload')
 
 
 class QCItem(AuditMixin):
@@ -359,7 +382,7 @@ class QCItem(AuditMixin):
     quantity         = db.Column(db.String(50), nullable=True)
     serial_no        = db.Column(db.String(200), nullable=True)
     item_remark      = db.Column(db.String(500), nullable=True)
-    qc_work_order = db.relationship('QCWorkOrder', back_populates='qc_items', lazy='selectin')
+    qc_work_order = db.relationship('QCWorkOrder', back_populates='qc_items', lazy='noload')
 
 
 class TestResultStatus(enum.Enum):
@@ -378,8 +401,9 @@ class TestResult(AuditMixin):
     standard_reference = db.Column(db.String(255), nullable=True)
     overall_status    = db.Column(db.Enum(TestResultStatus), nullable=False, default=TestResultStatus.PASSED)
     remark            = db.Column(db.String(500), nullable=True)
-    test_result_items = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan', lazy='selectin')
-    qc_work_order = db.relationship('QCWorkOrder', back_populates='test_results', lazy='selectin')
+    test_result_items = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
+    # Kept as lazy='select': test_result_service navigates test_result.qc_work_order.sales_item
+    qc_work_order = db.relationship('QCWorkOrder', back_populates='test_results')
 
 
 class TestResultItem(AuditMixin):
@@ -394,7 +418,7 @@ class TestResultItem(AuditMixin):
     description         = db.Column(db.Text, nullable=True)
     result              = db.Column(db.Enum(TestResultStatus), nullable=False, default=TestResultStatus.PASSED)
     remark              = db.Column(db.String(500), nullable=True)
-    test_result = db.relationship('TestResult', back_populates='test_result_items', lazy='selectin')
+    test_result = db.relationship('TestResult', back_populates='test_result_items', lazy='noload')
 
 class CertificationStatus(enum.Enum):
     PASSED = 'PASSED'
@@ -411,9 +435,9 @@ class QCCertification(AuditMixin):
     test_method = db.Column(db.String(255), nullable=True)
     certification_status = db.Column(db.Enum(CertificationStatus), nullable=False, default=CertificationStatus.PASSED)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry', ondelete='CASCADE'), nullable=False)
-    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='certifications', lazy='selectin')
+    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='certifications', lazy='noload')
 
-    check_items = db.relationship('QCCheckItem', back_populates='certification', cascade='all, delete-orphan', lazy='selectin')
+    check_items = db.relationship('QCCheckItem', back_populates='certification', cascade='all, delete-orphan')
 
 
 class QCCheckItem(AuditMixin): # Certificate Item
@@ -423,8 +447,8 @@ class QCCheckItem(AuditMixin): # Certificate Item
     qc_certification_id  = db.Column(db.Integer, db.ForeignKey('t_qc_certification.qc_certification_id', ondelete='CASCADE'), nullable=False)
     sales_item_id        = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='SET NULL'), nullable=True)
     test_result_item_id  = db.Column(db.Integer, db.ForeignKey('t_test_result_item.test_result_item_id', ondelete='SET NULL'), nullable=True)
-    sales_item           = db.relationship('SalesItem', foreign_keys=[sales_item_id], lazy='selectin')
-    test_result_item     = db.relationship('TestResultItem', foreign_keys=[test_result_item_id], lazy='selectin')
+    sales_item           = db.relationship('SalesItem', foreign_keys=[sales_item_id])
+    test_result_item     = db.relationship('TestResultItem', foreign_keys=[test_result_item_id])
     certification        = db.relationship('QCCertification', back_populates='check_items', lazy='noload')
 
     item_no     = db.Column(db.String(50), nullable=True)
@@ -451,15 +475,14 @@ class SalesOrder(AuditMixin):
     sales_items = db.relationship(
         "SalesItem",
         back_populates="sales_order",
-        lazy='selectin'
     )
-    certifications = db.relationship('QCCertification', back_populates='sales_order', lazy='selectin')
+    certifications = db.relationship('QCCertification', back_populates='sales_order')
 
 class ItemComponent(AuditMixin):
     __tablename__ = "t_item_component"
     item_component_id = db.Column(db.Integer, primary_key=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False)
-    work_order = db.relationship('WorkOrder', back_populates='item_components', lazy='selectin')
+    work_order = db.relationship('WorkOrder', back_populates='item_components', lazy='noload')
     material_usages = db.relationship(
         "ComponentMaterialUsage",
         back_populates="item_component",
@@ -468,12 +491,10 @@ class ItemComponent(AuditMixin):
     component_specs = db.relationship(
         "ComponentSpec",
         back_populates="item_component",
-        lazy='selectin'
     )
     component_options = db.relationship(
         "ComponentOption",
         back_populates="item_component",
-        lazy='selectin'
     )
     remark = db.Column(db.String(255), nullable=True)
     img_url = db.Column(db.String(500), nullable=True)
@@ -485,8 +506,8 @@ class ComponentMaterialUsage(AuditMixin):
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
     material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='CASCADE'), nullable=False)
     quantity_used = db.Column(db.Integer, nullable=False)
-    item_component = db.relationship("ItemComponent", back_populates="material_usages", lazy='selectin')
-    material_list = db.relationship("MaterialList", back_populates="component_usages", lazy='selectin')
+    item_component = db.relationship("ItemComponent", back_populates="material_usages", lazy='noload')
+    material_list = db.relationship("MaterialList", back_populates="component_usages")
 
 class ComponentSpecType(BaseModel):
     __tablename__ = "t_component_spec_type"
@@ -496,23 +517,39 @@ class ComponentSpecType(BaseModel):
     component_specs = db.relationship(
         "ComponentSpec",
         back_populates="component_spec_type",
-        lazy='selectin'
+        lazy='noload'
     )
 
 class MaterialTransaction(AuditMixin):
     __tablename__ = "t_material_transaction"
-    
+
     transaction_id = db.Column(db.Integer, primary_key=True)
-    
+
     #ผูกกับตาราง t_material_list
     material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='CASCADE'), nullable=False)
-    
+
     amount = db.Column(db.Integer, nullable=False)
     type = db.Column(db.String(24), nullable=False)  # "ADD" หรือ "REMOVE"
     related_document_code = db.Column(db.String(128), nullable=False) # เอกสารที่อ้างอิง
 
-    # สร้าง Relationship ให้เชื่อมหากันได้ง่ายๆ
-    material_list = db.relationship('MaterialList', backref=db.backref('transactions', lazy='selectin'))
+    material_list = db.relationship('MaterialList', back_populates='transactions', lazy='noload')
+
+class SalesItemTransactionType(enum.Enum):
+    PRODUCED = 'PRODUCED'
+    QUEUED_FOR_TEST = 'QUEUED_FOR_TEST'
+    TESTED = 'TESTED'
+
+class SalesItemTransaction(AuditMixin):
+    __tablename__ = "t_sales_item_transaction"
+
+    transaction_id = db.Column(db.Integer, primary_key=True)
+    sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    type = db.Column(db.Enum(SalesItemTransactionType), nullable=False)
+    related_document_code = db.Column(db.String(128), nullable=False)
+
+    sales_item = db.relationship('SalesItem', back_populates='sales_item_transactions', lazy='noload')
+
 class ComponentSpec(AuditMixin):
     __tablename__ = "t_component_spec"
     component_spec_id = db.Column(db.Integer, primary_key=True)
@@ -522,12 +559,12 @@ class ComponentSpec(AuditMixin):
     bool_value = db.Column(db.Boolean, nullable=True)
     decimal_value = db.Column(db.Numeric(10, 4), nullable=True)
     text_value = db.Column(db.String(255), nullable=True)
-    item_component = db.relationship("ItemComponent", back_populates="component_specs", lazy='selectin')
-    component_spec_type = db.relationship("ComponentSpecType", back_populates="component_specs", lazy='selectin')
+    item_component = db.relationship("ItemComponent", back_populates="component_specs", lazy='noload')
+    component_spec_type = db.relationship("ComponentSpecType", back_populates="component_specs")
     __table_args__ = (
         db.UniqueConstraint(
-            'item_component_id', 
-            'component_spec_type_id', 
+            'item_component_id',
+            'component_spec_type_id',
             'end_side',
             name='uq_item_component_spec'
         ),
@@ -540,7 +577,7 @@ class ComponentOptionType(BaseModel):
     component_options = db.relationship(
         "ComponentOption",
         back_populates="component_option_type",
-        lazy='selectin'
+        lazy='noload'
     )
 
 class ComponentOption(AuditMixin):
@@ -548,5 +585,5 @@ class ComponentOption(AuditMixin):
     component_option_id = db.Column(db.Integer, primary_key=True)
     component_option_type_id = db.Column(db.Integer, db.ForeignKey('t_component_option_type.component_option_type_id', ondelete='CASCADE'), nullable=False)
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
-    component_option_type = db.relationship("ComponentOptionType", back_populates="component_options", lazy='selectin')
-    item_component = db.relationship("ItemComponent", back_populates="component_options", lazy='selectin')
+    component_option_type = db.relationship("ComponentOptionType", back_populates="component_options")
+    item_component = db.relationship("ItemComponent", back_populates="component_options", lazy='noload')

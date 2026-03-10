@@ -26,6 +26,10 @@ CORS(app)  # เปิดการเชื่อมต่อจากทุก�
 app.config['SQLALCHEMY_DATABASE_URI'] = connectdb  # กําหนด URI ของฐานข้อมูล
 app.config['JSON_SORT_KEYS'] = False  # แก้ไขการสะกดผิด
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+}
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
 db = SQLAlchemy(app)

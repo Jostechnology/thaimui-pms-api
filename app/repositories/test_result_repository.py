@@ -1,5 +1,16 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, TestResult
+from app.con_sqlalchemy import QCWorkOrder, SalesItem, TestResult, TestResultItem
 from app.app import db
+from sqlalchemy.orm import selectinload
+
+
+def _test_result_options():
+    """Eager-load what TestResultSchema and test_result_service need."""
+    return [
+        selectinload(TestResult.test_result_items),
+        # test_result_service navigates test_result.qc_work_order.sales_item
+        selectinload(TestResult.qc_work_order)
+            .selectinload(QCWorkOrder.sales_item),
+    ]
 
 
 def create_test_result(test_result):
@@ -14,6 +25,7 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
     try:
         return (
             db.session.query(TestResult)
+            .options(*_test_result_options())
             .filter(TestResult.qc_work_order_id == qc_work_order_id)
             .order_by(TestResult.test_result_id.desc())
             .all()
@@ -24,7 +36,12 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
 
 def get_test_result_by_id(test_result_id):
     try:
-        return db.session.query(TestResult).filter(TestResult.test_result_id == test_result_id).first()
+        return (
+            db.session.query(TestResult)
+            .options(*_test_result_options())
+            .filter(TestResult.test_result_id == test_result_id)
+            .first()
+        )
     except Exception:
         raise
 
@@ -42,6 +59,7 @@ def get_test_results_by_doc_entry(doc_entry):
     try:
         return (
             db.session.query(TestResult)
+            .options(*_test_result_options())
             .join(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
             .join(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
             .filter(SalesItem.doc_entry == doc_entry)

@@ -1,9 +1,8 @@
-import datetime
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus, ComponentMaterialUsage, ItemComponent, MaterialTransaction
-from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
+from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema, WorkOrderSchemaDetail
 from app.repositories import work_order_repository
 from app.app import db
-from app.services import sales_item_service
+from app.services import sales_item_service, transaction_service
 from app.exception import NotFoundError, UniqueError
 
 def get_all_work_orders(data):
@@ -29,7 +28,7 @@ def get_sales_orders_for_qc(search="", statuses = []):
 def get_work_order_by_id(work_order_id):
     try:
         work_order = work_order_repository.get_work_order_by_id(work_order_id)
-        return WorkOrderSchema().dump(work_order)
+        return WorkOrderSchemaDetail().dump(work_order)
     except Exception:
         raise
 
@@ -45,32 +44,21 @@ def create_work_order(data):
         if sales_item.work_order:
             raise UniqueError("มี Work Order สำหรับ Sales Item นี้อยู่แล้ว")
 
+        quantity = data.get("quantity") or sales_item.item_num
+
         material_map = {m.material_list_id: m for m in sales_item.material_list}
 
-        # Validate material availability using MaterialTransaction
+        # Validate that all materials belong to this SalesItem
         for comp in item_components_data:
             for usage in comp.get("material_usage", []):
-                material_list_id = usage.get("material_list_id")
-                quantity_used = usage.get("quantity_used", 0)
-
-                if material_list_id not in material_map:
-                    raise NotFoundError(f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้")
-
-                material = material_map[material_list_id]
-                total_removed = sum(t.amount for t in material.transactions if t.type == 'REMOVE')
-                total_added = sum(t.amount for t in material.transactions if t.type == 'ADD')
-                available = material.original_num - (total_removed - total_added)
-
-                if quantity_used > available:
-                    raise NotFoundError(
-                        f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
-                        f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
-                    )
+                if usage.get("material_list_id") not in material_map:
+                    raise NotFoundError(f"Material ID {usage.get('material_list_id')} ไม่ได้อยู่ใน Sales Item นี้")
 
         work_order = WorkOrder(
             doc_num=sales_item.doc_num,
             doc_entry=sales_item.doc_entry,
             sales_item_id=sales_item_id,
+            quantity=quantity,
         )
 
         # Create ItemComponent + ComponentMaterialUsage
@@ -89,17 +77,17 @@ def create_work_order(data):
         db.session.flush()
 
         # Create MaterialTransaction(REMOVE) for each material used
-        now = datetime.datetime.now()
         for comp in item_components_data:
             for usage in comp.get("material_usage", []):
-                db.session.add(MaterialTransaction(
-                    material_list_id=usage.get("material_list_id"),
-                    amount=usage.get("quantity_used"),
-                    type="REMOVE",
-                    related_document_code=work_order.doc_num or str(work_order.work_order_id),
-                    created_by="System",
-                    created_date=now,
-                ))
+                material = material_map[usage.get("material_list_id")]
+                transaction_service.create_material_transaction(
+                    material, work_order, "REMOVE", usage.get("quantity_used")
+                )
+
+        # Track production
+        transaction_service.create_sales_item_transaction(
+            sales_item, work_order, SalesItemTransactionType.PRODUCED, quantity
+        )
 
         db.session.commit()
         return WorkOrderSchema().dump(work_order)

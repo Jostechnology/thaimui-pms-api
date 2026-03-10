@@ -1,7 +1,7 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.services.sales_item_service import get_all_sales_items, create_sales_item
+from app.services.sales_item_service import get_all_sales_items, create_sales_item, get_sales_item_detail
 
 
 @app.route("/api/get_sales_item_list", methods=["GET"])
@@ -17,6 +17,16 @@ def api_get_sales_item_list():
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sales_item/<int:sales_item_id>", methods=["GET"])
+@verify_required
+def api_get_sales_item_detail(sales_item_id):
+    try:
+        result = get_sales_item_detail(sales_item_id)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
