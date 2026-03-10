@@ -1,8 +1,9 @@
-from app.con_sqlalchemy import QCWorkOrder, TestResult, TestResultItem, TestResultStatus
+from app.con_sqlalchemy import QCWorkOrder, TestResult, TestResultItem, TestResultStatus, SalesItemTransactionType
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import test_result_repository
 from app.app import db
 from app.exception import NotFoundError
+from app.services import transaction_service
 
 
 def _resolve_status(val):
@@ -45,8 +46,17 @@ def create_test_result(qc_work_order_id, data):
             test_result.test_result_items.append(item)
 
         test_result_repository.create_test_result(test_result)
-        db.session.commit()
+        db.session.flush()
 
+        # Track tested quantity when result is PASSED
+        if test_result.overall_status == TestResultStatus.PASSED:
+            tested_qty = len(test_result.test_result_items)
+            if tested_qty > 0:
+                transaction_service.create_sales_item_transaction(
+                    qc.sales_item, test_result, SalesItemTransactionType.TESTED, tested_qty
+                )
+
+        db.session.commit()
         return TestResultSchema().dump(test_result)
     except Exception as e:
         db.session.rollback()
@@ -77,6 +87,8 @@ def update_test_result(test_result_id, data):
         if not test_result:
             raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
 
+        prev_status = test_result.overall_status
+
         if "test_date" in data:
             test_result.test_date = data["test_date"]
         if "tested_by" in data:
@@ -105,8 +117,20 @@ def update_test_result(test_result_id, data):
                 test_result.test_result_items.append(item)
 
         test_result_repository.update_test_result(test_result)
-        db.session.commit()
+        db.session.flush()
 
+        # Create TESTED transaction only when status transitions to PASSED
+        if prev_status != TestResultStatus.PASSED and test_result.overall_status == TestResultStatus.PASSED:
+            tested_qty = len(test_result.test_result_items)
+            if tested_qty > 0:
+                transaction_service.create_sales_item_transaction(
+                    test_result.qc_work_order.sales_item,
+                    test_result,
+                    SalesItemTransactionType.TESTED,
+                    tested_qty,
+                )
+
+        db.session.commit()
         return TestResultSchema().dump(test_result)
     except Exception as e:
         db.session.rollback()

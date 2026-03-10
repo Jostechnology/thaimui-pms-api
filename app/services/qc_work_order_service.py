@@ -1,10 +1,10 @@
-import datetime
-from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus, MaterialTransaction, MaterialList
+from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus, SalesItemTransactionType
 from app.ma_sqlalchemy import QCWorkOrderSchema,search_qc_work_order_schema
 from app.repositories import qc_work_order_repository
 from app.repositories import work_order_repository
 from app.app import db
 from app.ma_sqlalchemy import SalesItemSchema
+from app.services import transaction_service
 
 def get_all_qc_work_orders(data):
     try:
@@ -92,31 +92,23 @@ def create_qc_work_order(data):
             raise Exception(f"ไม่พบ Sales Item ID: {sales_item_id}")
 
         material_usage_data = data.get("items", [])
+        qc_quantity = data.get("salesItemQuantity", 1)
 
-        # Validate material availability before creating
+        material_map = {m.material_list_id: m for m in sales_item.material_list}
+
+        # Validate that all materials belong to this SalesItem
         if material_usage_data:
-            material_map = {m.material_list_id: m for m in sales_item.material_list}
             for usage in material_usage_data:
                 material_list_id = usage.get("material_list_id")
-                quantity_used = int(usage.get("quantity", 0))
-                material = material_map.get(material_list_id)
-                if not material:
+                if material_list_id not in material_map:
                     raise Exception(f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้")
-                total_removed = sum(t.amount for t in material.transactions if t.type == 'REMOVE')
-                total_added = sum(t.amount for t in material.transactions if t.type == 'ADD')
-                available = material.original_num - (total_removed - total_added)
-                if quantity_used > available:
-                    raise Exception(
-                        f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
-                        f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
-                    )
 
         qc = QCWorkOrder(
             sales_item_id=sales_item_id,
             qc_status=QCWorkOrderStatus.PENDING,
             qc_date=data.get("qc_date"),
             qc_by=data.get("qc_by"),
-            quantity=data.get("salesItemQuantity", 1),
+            quantity=qc_quantity,
             remark=data.get("remark"),
         )
         qc = qc_work_order_repository.create_qc_work_order(qc)
@@ -128,16 +120,16 @@ def create_qc_work_order(data):
 
         # Create MaterialTransaction(REMOVE) for each material consumed
         if material_usage_data:
-            now = datetime.datetime.now()
             for usage in material_usage_data:
-                db.session.add(MaterialTransaction(
-                    material_list_id=usage.get("material_list_id"),
-                    amount=int(usage.get("quantity")),
-                    type="REMOVE",
-                    related_document_code=f"QC-{qc.qc_work_order_id}",
-                    created_by="System",
-                    created_date=now,
-                ))
+                material = material_map[usage.get("material_list_id")]
+                transaction_service.create_material_transaction(
+                    material, qc, "REMOVE", int(usage.get("quantity"))
+                )
+
+        # Track items queued for testing
+        transaction_service.create_sales_item_transaction(
+            sales_item, qc, SalesItemTransactionType.QUEUED_FOR_TEST, qc_quantity
+        )
 
         db.session.commit()
         db.session.refresh(qc)

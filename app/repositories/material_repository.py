@@ -1,9 +1,16 @@
 from sqlalchemy import func, case, or_
+from sqlalchemy.orm import selectinload
 from app.con_sqlalchemy import MaterialList, MaterialTransaction, ComponentMaterialUsage, ItemComponent, WorkOrder
 from app.app import db
 
 def get_material_by_id(material_list_id):
-    return MaterialList.query.get(material_list_id)
+    # Pre-load transactions so remaining_num property doesn't fire a lazy query
+    return (
+        db.session.query(MaterialList)
+        .options(selectinload(MaterialList.transactions))
+        .filter(MaterialList.material_list_id == material_list_id)
+        .first()
+    )
 
 def save_material_transaction(transaction):
     db.session.add(transaction)
@@ -25,7 +32,7 @@ def get_tracking_summary_query(sales_item_id):
         sum_removed.label('total_removed'),
         sum_added.label('total_added')
     ).outerjoin(
-        MaterialTransaction, 
+        MaterialTransaction,
         MaterialList.material_list_id == MaterialTransaction.material_list_id
     ).filter(
         MaterialList.sales_item_id == sales_item_id
@@ -103,7 +110,12 @@ def get_material_stock_summary(sales_item_id):
 
 def get_usage_detail(material_list_id):
     """ดึงรายละเอียดการใช้วัตถุดิบจาก MaterialTransaction"""
-    material = MaterialList.query.get(material_list_id)
+    material = (
+        db.session.query(MaterialList)
+        .options(selectinload(MaterialList.transactions))
+        .filter(MaterialList.material_list_id == material_list_id)
+        .first()
+    )
     if not material:
         return None
 
