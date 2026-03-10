@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
-from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema
+from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema, WorkOrderSchemaDetail
 from app.repositories import work_order_repository
 from app.app import db
 from app.services import sales_item_service, transaction_service
@@ -28,7 +28,7 @@ def get_sales_orders_for_qc(search="", statuses = []):
 def get_work_order_by_id(work_order_id):
     try:
         work_order = work_order_repository.get_work_order_by_id(work_order_id)
-        return WorkOrderSchema().dump(work_order)
+        return WorkOrderSchemaDetail().dump(work_order)
     except Exception:
         raise
 

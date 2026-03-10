@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import CertificationStatus, QCCertification, QCCheckItem, SalesOrder
-from app.ma_sqlalchemy import QCCertificateSchema
+from app.ma_sqlalchemy import QCCertificateSchema, QCCertificateSchemaDetail
 from app.repositories import test_certificate_repository
 from app.app import db
 import datetime
@@ -56,7 +56,6 @@ def create_test_certificate(data):
         raise e
 
 def get_test_certificate_list(search=""):
-    from app.ma_sqlalchemy import QCCertificateSchema
     try:
         items = test_certificate_repository.get_test_certificate_list(search)
         return QCCertificateSchema(many=True).dump(items)
@@ -64,18 +63,16 @@ def get_test_certificate_list(search=""):
         raise
 
 def get_test_certificate_by_id(qc_certification_id):
-    from app.ma_sqlalchemy import QCCertificateSchema
     try:
         item = test_certificate_repository.get_test_certificate_by_id(qc_certification_id)
         if not item:
             raise NotFoundError("Test certificate not found")
-        return QCCertificateSchema().dump(item)
+        return QCCertificateSchemaDetail().dump(item)
     except Exception:
         raise
 
 def update_test_certificate(qc_certification_id, data):
-    from app.ma_sqlalchemy import QCCertificateSchema
-    from app.con_sqlalchemy import QCCheckItem, CertificationStatus
+
     try:
         cert = test_certificate_repository.get_test_certificate_by_id(qc_certification_id)
         if not cert:

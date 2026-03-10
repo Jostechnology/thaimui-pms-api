@@ -26,7 +26,7 @@ def get_sales_item_by_id(sales_item_id):
 
 def get_sales_item_detail(sales_item_id):
     try:
-        sales_item = sales_item_repository.get_sales_item_by_id(sales_item_id)
+        sales_item = sales_item_repository.get_sales_item_detail_by_id(sales_item_id)
         if not sales_item:
             raise NotFoundError(f"Sales item with id {sales_item_id} not found")
         return SalesItemDetailSchema().dump(sales_item)

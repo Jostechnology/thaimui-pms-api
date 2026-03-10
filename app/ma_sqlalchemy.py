@@ -86,7 +86,10 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.Int()
+
+class SalesItemSchemaDetail(SalesItemSchema):
     material_list = fields.List(fields.Nested(MaterialListSchema()))
+
     
 class WorkPhaseBreakSchema(Schema):
     break_id = fields.Integer()
@@ -156,12 +159,12 @@ class WorkOrderSchema(Schema):
     quantity = fields.Integer()
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
+    sales_item = fields.Nested(SalesItemSchema())
+    
+class WorkOrderSchemaDetail(WorkOrderSchema):
     current_phase = fields.Nested(WorkPhaseSchema())
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
-    sales_item = fields.Nested(SalesItemSchema())
     item_components = fields.List(fields.Nested(ItemComponentSchema()))
-
-
 
 class SalesOrderSearchSchema(Schema):
     doc_num = fields.Int()
@@ -260,6 +263,8 @@ class QCWorkOrderSchema(Schema):
     updated_date = fields.DateTime()
     created_by = fields.String()
     updated_by = fields.String()
+
+class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
     qc_form = fields.Nested(QCFormSchema, allow_none=True)
     qc_items = fields.List(fields.Nested(QCItemSchema))
     test_results    = fields.List(fields.Nested(lambda: TestResultSchema()), dump_only=True)
@@ -339,16 +344,16 @@ class QCCertificateSchema(Schema):
     standard_reference = fields.String()
     test_method = fields.String()
     certification_status = fields.String() # Enum จะถูกแปลงเป็น Text (String) ให้ Frontend
-    remark = fields.String()
-   
-    # 3. สิ่งสำคัญ: เชื่อม Schema ลูกเข้ากับ Schema แม่แบบ One-to-Many
-    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
+    remark = fields.String()    
     
     # AuditMixin Fields
     created_date = fields.DateTime(dump_only=True)
     updated_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)
     updated_by = fields.String(dump_only=True)
+
+class QCCertificateSchemaDetail(QCCertificateSchema):
+    check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
 
 class MaterialTransactionSchema(Schema):
     transaction_id = fields.Integer(dump_only=True)
