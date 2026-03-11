@@ -55,12 +55,11 @@ def create_sales_item_transaction(sales_item: SalesItem, document, transaction_t
             )
 
     elif transaction_type == SalesItemTransactionType.QUEUED_FOR_TEST:
-        total_produced = sum(t.quantity for t in txns if t.type == SalesItemTransactionType.PRODUCED)
         total_queued = sum(t.quantity for t in txns if t.type == SalesItemTransactionType.QUEUED_FOR_TEST)
-        if total_queued + quantity > total_produced:
+        if total_queued + quantity > sales_item.item_num:
             raise ValidationError(
                 f"จำนวนที่ส่งทดสอบรวม ({total_queued + quantity}) "
-                f"เกินจำนวนที่ผลิตได้ ({total_produced})"
+                f"เกินจำนวนใน Sales Item ({sales_item.item_num})"
             )
 
     code = _resolve_document_code(document)
