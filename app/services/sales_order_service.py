@@ -26,7 +26,8 @@ def get_all_sales_orders(data):
         result = sales_order_repository.get_all_sales_orders(page, limit, search)
 
         items_data = []
-        for so in result.items:
+        for row in result.items:
+            so = row.SalesOrder
             items_data.append({
                 "doc_entry": so.doc_entry,
                 "doc_num": so.doc_num,
@@ -39,8 +40,8 @@ def get_all_sales_orders(data):
                 "group_code": so.group_code,
                 "group_name": so.group_name,
                 "created_date": so.created_date.strftime("%Y-%m-%d %H:%M:%S") if so.created_date else None,
-                "sales_items_count": len(so.sales_items) if so.sales_items else 0,
-                "work_orders_count": sum(1 for si in (so.sales_items or []) if si.work_order is not None)
+                "sales_items_count": row.sales_items_count,
+                "work_orders_count": row.work_orders_count,
             })
 
         return {
@@ -113,7 +114,7 @@ def create_sales_order(data):
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
                     item_description=mat.get("item_description"),
-                    item_num=mat.get("item_num"),
+                    original_num=mat.get("original_num"),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
                     

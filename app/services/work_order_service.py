@@ -1,9 +1,8 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus
-from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
+from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema, WorkOrderSchemaDetail
 from app.repositories import work_order_repository
 from app.app import db
-from app.services import sales_item_service
-from app.con_sqlalchemy import ComponentMaterialUsage, ItemComponent, WorkOrder
+from app.services import sales_item_service, transaction_service
 from app.exception import NotFoundError, UniqueError
 
 def get_all_work_orders(data):
@@ -29,7 +28,7 @@ def get_sales_orders_for_qc(search="", statuses = []):
 def get_work_order_by_id(work_order_id):
     try:
         work_order = work_order_repository.get_work_order_by_id(work_order_id)
-        return WorkOrderSchema().dump(work_order)
+        return WorkOrderSchemaDetail().dump(work_order)
     except Exception:
         raise
 
@@ -45,46 +44,26 @@ def create_work_order(data):
         if sales_item.work_order:
             raise UniqueError("มี Work Order สำหรับ Sales Item นี้อยู่แล้ว")
 
-        # สร้าง map ของ material_list ที่อยู่ใน SalesItem นี้
+        quantity = data.get("quantity") or sales_item.item_num
+
         material_map = {m.material_list_id: m for m in sales_item.material_list}
 
-        # ตรวจสอบ material ทุกตัวในทุก component ว่ามีอยู่จริงและมีจำนวนเพียงพอ
+        # Validate that all materials belong to this SalesItem
         for comp in item_components_data:
-            material_usage_list = comp.get("material_usage", [])
-            for usage in material_usage_list:
-                material_list_id = usage.get("material_list_id")
-                quantity_used = usage.get("quantity_used", 0)
+            for usage in comp.get("material_usage", []):
+                if usage.get("material_list_id") not in material_map:
+                    raise NotFoundError(f"Material ID {usage.get('material_list_id')} ไม่ได้อยู่ใน Sales Item นี้")
 
-                if material_list_id not in material_map:
-                    raise NotFoundError(
-                        f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้"
-                    )
-
-                material = material_map[material_list_id]
-                # คำนวณจำนวนที่ถูกใช้ไปแล้วจาก WorkOrder อื่น
-                already_used = sum(
-                    u.quantity_used for u in material.component_usages
-                )
-                available = material.item_num - already_used
-                if quantity_used > available:
-                    raise NotFoundError(
-                        f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
-                        f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
-                    )
-                material.item_num -= quantity_used  # อัปเดตจำนวนคงเหลือใน MaterialList
-
-        # สร้าง WorkOrder
         work_order = WorkOrder(
             doc_num=sales_item.doc_num,
             doc_entry=sales_item.doc_entry,
             sales_item_id=sales_item_id,
+            quantity=quantity,
         )
 
-        # สร้าง ItemComponent + ComponentMaterialUsage
+        # Create ItemComponent + ComponentMaterialUsage
         for comp in item_components_data:
-            item_component = ItemComponent(
-                component_name=comp.get("component_name", ""),
-            )
+            item_component = ItemComponent(component_name=comp.get("component_name", ""))
             work_order.item_components.append(item_component)
 
             for usage in comp.get("material_usage", []):
@@ -95,6 +74,21 @@ def create_work_order(data):
                 item_component.material_usages.append(material_usage)
 
         db.session.add(work_order)
+        db.session.flush()
+
+        # Create MaterialTransaction(REMOVE) for each material used
+        for comp in item_components_data:
+            for usage in comp.get("material_usage", []):
+                material = material_map[usage.get("material_list_id")]
+                transaction_service.create_material_transaction(
+                    material, work_order, "REMOVE", usage.get("quantity_used")
+                )
+
+        # Track production
+        transaction_service.create_sales_item_transaction(
+            sales_item, work_order, SalesItemTransactionType.PRODUCED, quantity
+        )
+
         db.session.commit()
         return WorkOrderSchema().dump(work_order)
     except Exception:

@@ -31,7 +31,8 @@ def get_work_phase_detail(work_phase_id):
             work_ms = 0
 
         total_time_spent_seconds = work_ms / 1000
-        num_employees = len(work_phase.employee_list) if work_phase.employee_list else 1
+        employees = [a.employee for a in work_phase.assignments]
+        num_employees = len(employees) if employees else 1
 
         # Per-employee time (split evenly)
         per_employee_seconds = total_time_spent_seconds / num_employees if num_employees > 0 else 0
@@ -39,7 +40,7 @@ def get_work_phase_detail(work_phase_id):
         employee_breakdown = []
         total_labor_cost = 0.0
 
-        for emp in work_phase.employee_list:
+        for emp in employees:
             # Get salary at the time the phase was created
             salary = employee_salary_repository.get_salary_at_date(emp.employee_id, work_phase.created_date)
             if salary is None:

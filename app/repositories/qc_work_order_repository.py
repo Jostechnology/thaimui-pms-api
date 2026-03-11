@@ -1,8 +1,21 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesOrder
+from app.con_sqlalchemy import QCWorkOrder, SalesItem, SalesOrder, TestResult, TestResultItem
 from app.app import db
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
 
 from app.exception import NotFoundError
+
+
+def _qc_work_order_options():
+    """Eager-load exactly what QCWorkOrderSchema needs — no deep SalesItem nesting."""
+    return [
+        # Only the SalesItem scalar fields are used (item_code, item_name, doc_entry)
+        selectinload(QCWorkOrder.sales_item),
+        selectinload(QCWorkOrder.qc_form),
+        selectinload(QCWorkOrder.qc_items),
+        selectinload(QCWorkOrder.test_results)
+            .selectinload(TestResult.test_result_items),
+    ]
 
 
 def get_all_qc_work_orders(page, limit, search, filter=None):
@@ -27,9 +40,12 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
 
 def get_qc_work_order_by_id(qc_work_order_id):
     try:
-        qc = db.session.query(QCWorkOrder).filter(
-            QCWorkOrder.qc_work_order_id == qc_work_order_id
-        ).first()
+        qc = (
+            db.session.query(QCWorkOrder)
+            .options(*_qc_work_order_options())
+            .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
+            .first()
+        )
         if not qc:
             raise NotFoundError(f"ไม่พบ QC Work Order ID -> {qc_work_order_id}")
         return qc
