@@ -1,6 +1,6 @@
 from sqlalchemy import func, case, or_
 from sqlalchemy.orm import selectinload
-from app.con_sqlalchemy import MaterialList, MaterialTransaction, ComponentMaterialUsage, ItemComponent, WorkOrder
+from app.con_sqlalchemy import MaterialList, MaterialTransaction, ComponentMaterialUsage, ItemComponent, SalesItem, WorkOrder
 from app.app import db
 
 def get_material_by_id(material_list_id):
@@ -139,3 +139,11 @@ def get_transactions_by_sales_item(sales_item_id, tx_type=None):
         query = query.filter(MaterialTransaction.type == tx_type.upper())
 
     return query.order_by(MaterialTransaction.created_date.desc()).all()
+
+def get_material_list_from_doc_entry(doc_entry):
+    try:
+        query = db.session.query(MaterialList).join(SalesItem, SalesItem.sales_item_id == MaterialList.sales_item_id).filter(SalesItem.doc_entry == doc_entry)
+        sales_items = query.all()
+        return sales_items
+    except Exception:
+        raise

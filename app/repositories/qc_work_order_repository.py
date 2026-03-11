@@ -33,7 +33,7 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
         result = query.order_by(QCWorkOrder.qc_work_order_id.desc()).paginate(
             page=page, per_page=limit, error_out=False
         )
-        return {"items": result.items, "total_pages": result.pages}
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
     except Exception:
         raise
 
@@ -89,7 +89,7 @@ def search_qc_work_orders(page, limit, search):
         )
 
         result = query.paginate(page=page, per_page=limit, error_out=False)
-        return result.items
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
 
     except Exception:
         raise

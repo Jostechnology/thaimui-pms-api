@@ -1,5 +1,4 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
-from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema, WorkOrderSchemaDetail
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
 from app.repositories import work_order_repository
 from app.app import db
 from app.services import sales_item_service, transaction_service
@@ -8,27 +7,19 @@ from app.exception import NotFoundError, UniqueError
 def get_all_work_orders(data):
     try:
         page = data.get("page", 1)
-        limit = data.get("limit", 10)
+        per_page = data.get("per_page", 10)
         search = data.get("search", "")
         filter = data.get("filter", "")
         month = data.get("month", "")
-        result = work_order_repository.get_all_work_orders(page, limit, search,filter, month)
-        return {"items": WorkOrderSchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
-    except Exception:
-        raise
-
-def get_sales_orders_for_qc(search="", statuses = []):
-    try:
-        statuses = [WorkOrderStatus(s) for s in statuses] if statuses else []
-        items = work_order_repository.get_sales_orders_for_qc(search, statuses)
-        return SalesOrderSchema(many=True).dump(items)
+        result = work_order_repository.get_all_work_orders(page, per_page, search,filter, month)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
 
 def get_work_order_by_id(work_order_id):
     try:
         work_order = work_order_repository.get_work_order_by_id(work_order_id)
-        return WorkOrderSchemaDetail().dump(work_order)
+        return work_order
     except Exception:
         raise
 
@@ -90,7 +81,7 @@ def create_work_order(data):
         )
 
         db.session.commit()
-        return WorkOrderSchema().dump(work_order)
+        return work_order
     except Exception:
         db.session.rollback()
         raise

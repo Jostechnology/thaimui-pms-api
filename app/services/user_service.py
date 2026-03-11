@@ -489,13 +489,13 @@ def create_user(data):
 def get_user_list(data):
     try:
         page = int(data.get("page", 1))
-        limit = int(data.get("pageConfig", 10))
+        per_page = int(data.get("per_page", 10))
         username = data.get("search", "")
-        role_id = data.get("filter") 
+        role_id = data.get("filter")
 
         result = user_repository.get_user_list_paginated(
-            page=page, 
-            limit=limit, 
+            page=page,
+            limit=per_page,
             username=username, 
             role_id=role_id
         )
@@ -510,7 +510,9 @@ def get_user_list(data):
             })
         return {
             "items": items,
-            "total_pages": result['total_pages']
+            "total": result["total"],
+            "page": result["page"],
+            "pages": result["pages"],
         }
 
     except AppException:
