@@ -264,33 +264,12 @@ class SalesItem(AuditMixin):
     unit_price = db.Column(db.Float, nullable=False)
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
-    sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='selectin')
-    material_list = db.relationship('MaterialList', backref='sales_item', lazy='selectin')
-    work_order = db.relationship('WorkOrder', back_populates='sales_item', lazy='selectin', uselist=False)
-    
-
-class MachineStatus(enum.Enum):
-    RUNNING = "RUNNING"
-    DOWN = "DOWN"
-    IDLE = "IDLE"
-    OFFLINE = "OFFLINE"
-
-class Machine(AuditMixin):
-    __tablename__ = "m_machine"
-    machine_id = db.Column(db.Integer, primary_key=True)
-    machine_code = db.Column(db.String(50), nullable=False, unique=True)
-    machine_name = db.Column(db.String(255), nullable=False)
-    machine_description = db.Column(db.String(500))
-    manufacturer = db.Column(db.String(255), nullable=True)
-    purchase_date = db.Column(db.DateTime, nullable=True)
-    status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
-    is_active = db.Column(db.Boolean, nullable=False, default=True)
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='noload')
     material_list = db.relationship('MaterialList', back_populates='sales_item')
     work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False)
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
     sales_item_transactions = db.relationship('SalesItemTransaction', back_populates='sales_item')
-
+    
     @property
     def producing_qty(self):
         if self.work_order and self.work_order.status != WorkOrderStatus.COMPLETED:
@@ -310,6 +289,35 @@ class Machine(AuditMixin):
     @property
     def tested_qty(self):
         return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED)
+
+class MachineStatus(enum.Enum):
+    RUNNING = "RUNNING"
+    DOWN = "DOWN"
+    IDLE = "IDLE"
+    OFFLINE = "OFFLINE"
+
+class Machine(AuditMixin):
+    __tablename__ = "m_machine"
+    machine_id = db.Column(db.Integer, primary_key=True)
+    machine_code = db.Column(db.String(50), nullable=False, unique=True)
+    machine_name = db.Column(db.String(255), nullable=False)
+    machine_description = db.Column(db.String(500))
+    manufacturer = db.Column(db.String(255), nullable=True)
+    purchase_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    maintenances = db.relationship('MachineMaintenance', back_populates='machine', lazy='noload')
+
+class MachineMaintenance(AuditMixin):
+    __tablename__ = "t_machine_maintenance"
+    maintenance_id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('m_machine.machine_id', ondelete='CASCADE'), nullable=False)
+    maintenance_date = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    maintenance_type = db.Column(db.String(50), nullable=False) # Preventive, Corrective
+    description = db.Column(db.String(500), nullable=True)
+    fix_cost = db.Column(db.Float, nullable=True, default=0)
+    machine = db.relationship('Machine', foreign_keys=[machine_id], back_populates='maintenances', lazy='noload')
+
 
 
 class MaterialList(AuditMixin):
