@@ -9,7 +9,8 @@ def get_all_pm_machines(data):
         search = data.get("search", "")
         page = data.get("page", "")
         per_page = data.get("per_page", "")
-        result = pm_machine_repository.get_all_pm_machines(search, page, per_page)
+        status = data.get("status", "")
+        result = pm_machine_repository.get_all_pm_machines(search, page, per_page, status)
         return {
             "items": MachineMaintenanceSchema(many=True).dump(result["items"]),
             "total_pages": result["total_pages"]

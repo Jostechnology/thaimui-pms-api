@@ -10,10 +10,12 @@ def api_get_pm_machine():
         search = request.args.get("search", "", type=str)
         page = request.args.get("page", type=int)
         per_page = request.args.get("per_page", type=int)
+        status = request.args.get("status", "", type=str)
         data = {
             "search": search , 
             "page": page,
-            "per_page": per_page
+            "per_page": per_page,
+            "status": status
             }
         result = get_all_pm_machines(data)
         return jsonify({"data": result, "success": True}), 200
