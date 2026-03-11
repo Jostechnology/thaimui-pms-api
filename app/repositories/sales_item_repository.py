@@ -2,7 +2,6 @@ from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, QCWorkOrder, 
 from app.app import db
 from sqlalchemy.orm import selectinload
 
-
 def get_all_sales_items(page, limit, search):
     try:
         query = SalesItem.query
@@ -16,7 +15,7 @@ def get_all_sales_items(page, limit, search):
             )
         query = query.order_by(SalesItem.created_date.desc())
         result = query.paginate(page=page, per_page=limit, error_out=False)
-        return {"items": result.items, "total_pages": result.pages}
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
     except Exception:
         raise
 
@@ -42,6 +41,17 @@ def get_sales_item_detail_by_id(sales_item_id):
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
             .first()
+        )
+    except Exception:
+        raise
+
+def get_sales_items_by_doc_entry(doc_entry):
+    try:
+        return (
+            db.session.query(SalesItem)
+            .filter(SalesItem.doc_entry == doc_entry)
+            .order_by(SalesItem.sales_item_id)
+            .all()
         )
     except Exception:
         raise

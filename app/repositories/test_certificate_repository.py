@@ -21,7 +21,7 @@ def create_test_certificate(test_certificate):
     except Exception as e:
         raise e
 
-def get_test_certificate_list(search=""):
+def get_test_certificate_list(page, per_page, search=""):
     try:
         query = db.session.query(QCCertification) #.options(*_certificate_options())
 
@@ -36,7 +36,8 @@ def get_test_certificate_list(search=""):
                 )
             ).distinct()
 
-        return query.order_by(QCCertification.qc_certification_id.desc()).all()
+        result = query.order_by(QCCertification.qc_certification_id.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
     except Exception:
         raise
 
