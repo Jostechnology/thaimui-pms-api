@@ -14,7 +14,7 @@ def get_all_material_lists(page, limit, search):
             )
         query = query.order_by(MaterialList.created_date.desc())
         result = query.paginate(page=page, per_page=limit, error_out=False)
-        return {"items": result.items, "total_pages": result.pages}
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
     except Exception:
         raise
 

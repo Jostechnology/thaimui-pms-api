@@ -69,7 +69,9 @@ def get_user_list_paginated(page, limit, username="", role_id=None):
 
         return {
             "items": users,
-            "total_pages": total_pages
+            "total": total_items,
+            "page": page,
+            "pages": total_pages,
         }
         
     except Exception as e:

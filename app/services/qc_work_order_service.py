@@ -1,22 +1,17 @@
-from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus, SalesItemTransactionType
-from app.ma_sqlalchemy import QCWorkOrderSchema,search_qc_work_order_schema
+from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, SalesItemTransactionType
 from app.repositories import qc_work_order_repository
 from app.repositories import work_order_repository
 from app.app import db
-from app.ma_sqlalchemy import SalesItemSchema
-from app.services import transaction_service
+from app.services import sales_item_service, sales_order_service, transaction_service
 
 def get_all_qc_work_orders(data):
     try:
         page = data.get("page", 1)
-        limit = data.get("limit", 10)
+        per_page = data.get("per_page", 10)
         search = data.get("search", "")
         filter = data.get("filter", None)
-        result = qc_work_order_repository.get_all_qc_work_orders(page, limit, search, filter)
-        return {
-            "items": QCWorkOrderSchema(many=True).dump(result["items"]),
-            "total_pages": result["total_pages"],
-        }
+        result = qc_work_order_repository.get_all_qc_work_orders(page, per_page, search, filter)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
 
@@ -24,17 +19,7 @@ def get_all_qc_work_orders(data):
 def get_qc_work_order_by_id(qc_work_order_id):
     try:
         qc = qc_work_order_repository.get_qc_work_order_by_id(qc_work_order_id)
-        return QCWorkOrderSchema().dump(qc)
-    except Exception:
-        raise
-
-
-def get_sales_items_for_qc(search="", statuses = []):
-    
-    try:
-        statuses = [WorkOrderStatus(s) for s in statuses] if statuses else []
-        items = work_order_repository.get_sales_items_for_qc(search, statuses)
-        return SalesItemSchema(many=True).dump(items)
+        return qc
     except Exception:
         raise
 
@@ -87,21 +72,16 @@ def create_qc_work_order(data):
         if not sales_item_id:
             raise Exception("กรุณาระบุ Sales Item")
 
-        sales_item = db.session.query(SalesItem).filter_by(sales_item_id=sales_item_id).first()
+        sales_item = sales_item_service.get_sales_item_by_id(sales_item_id)
         if not sales_item:
             raise Exception(f"ไม่พบ Sales Item ID: {sales_item_id}")
 
         material_usage_data = data.get("items", [])
         qc_quantity = data.get("salesItemQuantity", 1)
+        
+        material_in_sales_order = sales_order_service.get_material_list_from_sales_order(sales_item.doc_entry)
 
-        material_map = {m.material_list_id: m for m in sales_item.material_list}
-
-        # Validate that all materials belong to this SalesItem
-        if material_usage_data:
-            for usage in material_usage_data:
-                material_list_id = usage.get("material_list_id")
-                if material_list_id not in material_map:
-                    raise Exception(f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้")
+        material_map = {m.material_list_id: m for m in material_in_sales_order}
 
         qc = QCWorkOrder(
             sales_item_id=sales_item_id,
@@ -133,7 +113,7 @@ def create_qc_work_order(data):
 
         db.session.commit()
         db.session.refresh(qc)
-        return QCWorkOrderSchema().dump(qc)
+        return qc
     except Exception as e:
         db.session.rollback()
         raise Exception(str(e))
@@ -202,7 +182,7 @@ def update_qc_work_order(qc_work_order_id, data):
 
         db.session.commit()
         db.session.refresh(qc)
-        return QCWorkOrderSchema().dump(qc)
+        return qc
     except Exception:
         db.session.rollback()
         raise
@@ -220,10 +200,9 @@ def delete_qc_work_order(qc_work_order_id):
 def search_qc_work_orders(data):
     try:
         page = data.get("page", 1)
-        limit = data.get("limit", 10)
+        per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = qc_work_order_repository.search_qc_work_orders(page, limit, search)
-        qc_work_orders = search_qc_work_order_schema(many=True).dump(result)
-        return qc_work_orders
+        result = qc_work_order_repository.search_qc_work_orders(page, per_page, search)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise

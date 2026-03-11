@@ -13,14 +13,23 @@ def search_sales_order(page, limit, search):
             .filter(
                 or_(
                     SalesOrder.doc_entry.ilike(f"%{search}%"),
-                    SalesOrder.doc_num.ilike(f"%{search}%")
+                    SalesOrder.doc_num.ilike(f"%{search}%"),
+                    SalesOrder.card_code.ilike(f"%{search}%"),
+                    SalesOrder.card_name.ilike(f"%{search}%"),
+                    SalesOrder.slp_code.ilike(f"%{search}%"),
+                    SalesOrder.slp_name.ilike(f"%{search}%"),
+                    SalesOrder.bpl_code.ilike(f"%{search}%"),
+                    SalesOrder.bpl_name.ilike(f"%{search}%"),
+                    SalesOrder.group_code.ilike(f"%{search}%"),
+                    SalesOrder.group_name.ilike(f"%{search}%"),
+                    SalesOrder.po_number.ilike(f"%{search}%"),
                 )
             )
             .distinct()
         )
 
         result = query.paginate(page=page, per_page=limit, error_out=False)
-        return result.items
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
 
     except Exception:
         raise
@@ -68,10 +77,8 @@ def get_sales_order_detail(doc_entry):
         sales_order = (
             db.session.query(SalesOrder)
             .options(
-                # Load sales_items → material_list only; no transactions, no work_order chain
                 selectinload(SalesOrder.sales_items)
                     .selectinload(SalesItem.material_list),
-                # Load certifications → check_items only
                 selectinload(SalesOrder.certifications)
                     .selectinload(QCCertification.check_items),
             )

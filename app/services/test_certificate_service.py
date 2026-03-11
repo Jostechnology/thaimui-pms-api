@@ -1,5 +1,4 @@
 from app.con_sqlalchemy import CertificationStatus, QCCertification, QCCheckItem, SalesOrder
-from app.ma_sqlalchemy import QCCertificateSchema, QCCertificateSchemaDetail
 from app.repositories import test_certificate_repository
 from app.app import db
 import datetime
@@ -49,16 +48,16 @@ def create_test_certificate(data):
         test_certificate_repository.create_test_certificate(cert)
         db.session.commit()
 
-        return QCCertificateSchema().dump(cert)
+        return cert
 
     except Exception as e:
         db.session.rollback()
         raise e
 
-def get_test_certificate_list(search=""):
+def get_test_certificate_list(page, per_page, search=""):
     try:
-        items = test_certificate_repository.get_test_certificate_list(search)
-        return QCCertificateSchema(many=True).dump(items)
+        result = test_certificate_repository.get_test_certificate_list(page, per_page, search)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
 
@@ -67,7 +66,7 @@ def get_test_certificate_by_id(qc_certification_id):
         item = test_certificate_repository.get_test_certificate_by_id(qc_certification_id)
         if not item:
             raise NotFoundError("Test certificate not found")
-        return QCCertificateSchemaDetail().dump(item)
+        return item
     except Exception:
         raise
 
@@ -117,7 +116,7 @@ def update_test_certificate(qc_certification_id, data):
         test_certificate_repository.update_test_certificate(cert)
         db.session.commit()
 
-        return QCCertificateSchema().dump(cert)
+        return cert
     except Exception as e:
         db.session.rollback()
         raise Exception(str(e))

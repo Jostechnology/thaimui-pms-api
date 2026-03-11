@@ -29,6 +29,7 @@ The app is structured in three layers. Each layer has a single responsibility an
 - Coordinates `db.session.add()`, `db.session.commit()`, and `db.session.rollback()`
 - **Returns SQLAlchemy model instances — never dicts, never `jsonify()` objects**
 - Returning raw models allows services to be composed and reused by other services
+- For data list return  "total": result.total, "page": result.page, "pages": result.pages from pagination as well.
 
 ### Repository (`app/repositories/`)
 - Contains only SQLAlchemy queries — no business logic
@@ -36,8 +37,25 @@ The app is structured in three layers. Each layer has a single responsibility an
   - **Lightweight** (no eager loading): used for write operations where only the model itself is needed
   - **Detail** (with `selectinload()`): used for read/detail endpoints that need nested data
 - Never calls services
+- Do NOT use Object.get or other variation. Always use db.sesssion.query(....) or something like this.
+- Always assign query to "query" variable first, do not do db.session.query(...).all() right away. Do query = db.sess... and then query.all()
+
+### Notes
+For crossing responsibility modules such as "Get all materials inside a SalesOrder" We will use SalesOrder service to call 
+SalesItem repository.
 
 ---
+
+## Data Retrieval Handling
+- As in "Repository" we will have 2 data retrieval method, the normal and detailed
+- Normal will return that model generic data without joining other models.
+- Detailed will be full detail version of that model, joining ONLY 1 layer. Such as X -> Ys and each Y won't Y -> Zs
+
+### Get functions
+We will have 3 main get data functions for every model.
+- 1. Get list : We will have to do pagination with at least 3 parameters : page, per_page, search.
+- 2. Get One Normal : Get normal version of that model for single entry.
+- 3. Get One Detailed : Get detailed version of that model for single entry.
 
 ## Authentication & Authorization
 
