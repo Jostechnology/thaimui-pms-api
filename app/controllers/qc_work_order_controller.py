@@ -3,7 +3,7 @@ from app.api_auth import verify_required
 from app.app import app
 from app.exception import AppException
 from flask import request, jsonify
-from app.ma_sqlalchemy import QCWorkOrderSchema, search_qc_work_order_schema
+from app.ma_sqlalchemy import QCWorkOrderSchema, QCWorkOrderSchemaDetail, search_qc_work_order_schema
 from app.con_sqlalchemy import QCWorkOrderStatus
 from app.services.qc_work_order_service import (
     get_all_qc_work_orders,
@@ -41,7 +41,7 @@ def api_get_qc_work_order_list():
 def api_get_qc_work_order_by_id(qc_work_order_id):
     try:
         result = get_qc_work_order_by_id(qc_work_order_id)
-        return jsonify({"data": QCWorkOrderSchema().dump(result), "success": True}), 200
+        return jsonify({"data": QCWorkOrderSchemaDetail().dump(result), "success": True}), 200
     except AppException as e:
         return jsonify({"error": e.message}), e.status_code
     except Exception as e:

@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, QCWorkOrder, SalesItemTransaction
+from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, QCWorkOrder, SalesItemTransaction, TestResult
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -44,6 +44,23 @@ def get_sales_item_detail_by_id(sales_item_id):
         )
     except Exception:
         raise
+
+def get_sales_item_tracking_by_id(sales_item_id):
+    """Fetch sales item with work order phases and QC work order test results for tracking."""
+    try:
+        query = (
+            db.session.query(SalesItem)
+            .options(
+                selectinload(SalesItem.work_order).selectinload(WorkOrder.current_phase),
+                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_phases),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+            )
+            .filter(SalesItem.sales_item_id == sales_item_id)
+        )
+        return query.first()
+    except Exception:
+        raise
+
 
 def get_sales_items_by_doc_entry(doc_entry):
     try:
