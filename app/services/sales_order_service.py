@@ -38,8 +38,12 @@ def get_all_sales_orders(data):
                 "group_code": so.group_code,
                 "group_name": so.group_name,
                 "created_date": so.created_date.strftime("%Y-%m-%d %H:%M:%S") if so.created_date else None,
-                "sales_items_count": row.sales_items_count,
-                "work_orders_count": row.work_orders_count,
+                "items_total": row.items_total,
+                "wo_count": row.wo_count,
+                "wo_completed": row.wo_completed,
+                "qc_count": row.qc_count,
+                "qc_passed": row.qc_passed,
+                "qc_failed": row.qc_failed,
             })
 
         return {

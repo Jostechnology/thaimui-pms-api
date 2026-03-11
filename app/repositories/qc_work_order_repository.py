@@ -30,7 +30,8 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
             )
         if filter:
             query = query.filter(QCWorkOrder.qc_status == filter)
-        result = query.order_by(QCWorkOrder.qc_work_order_id.desc()).paginate(
+        query = query.options(selectinload(QCWorkOrder.sales_item))
+        result = query.order_by(QCWorkOrder.created_date.desc()).paginate(
             page=page, per_page=limit, error_out=False
         )
         return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}

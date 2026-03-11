@@ -270,6 +270,7 @@ class SalesItem(AuditMixin):
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
     sales_item_transactions = db.relationship('SalesItemTransaction', back_populates='sales_item')
 
+    # Right now we act as if 1 SalesItem per 1 WorkOrder
     @property
     def producing_qty(self):
         if self.work_order and self.work_order.status != WorkOrderStatus.COMPLETED:

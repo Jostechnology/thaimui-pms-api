@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, TestResultStatus, WorkOrderStatus, SalesItemTransactionType
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, TestResultStatus, WorkOrderStatus, SalesItemTransactionType, SalesItemStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -192,6 +192,21 @@ class SalesItemTransactionSchema(Schema):
     created_date          = fields.DateTime()
     created_by            = fields.String()
 
+class SalesItemNoMaterialSchema(Schema):
+    sales_item_id           = fields.Integer()
+    item_code               = fields.String()
+    item_num                = fields.Integer()
+    item_name               = fields.String()
+    item_description        = fields.String()
+    cost_price              = fields.Float()
+    unit_price              = fields.Float()
+    doc_num                 = fields.Integer()
+    doc_entry               = fields.Integer()
+    producing_qty           = fields.Integer(dump_only=True)
+    produced_qty            = fields.Integer(dump_only=True)
+    queued_for_test_qty     = fields.Integer(dump_only=True)
+    tested_qty              = fields.Integer(dump_only=True)
+
 class SalesItemSchema(Schema):
     sales_item_id           = fields.Integer()
     item_code               = fields.String()
@@ -263,7 +278,8 @@ class QCWorkOrderSchema(Schema):
     updated_date = fields.DateTime()
     created_by = fields.String()
     updated_by = fields.String()
-
+    sales_item = fields.Nested(SalesItemNoMaterialSchema)
+    
 class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
     qc_form = fields.Nested(QCFormSchema, allow_none=True)
     qc_items = fields.List(fields.Nested(QCItemSchema))
@@ -354,6 +370,45 @@ class QCCertificateSchema(Schema):
 
 class QCCertificateSchemaDetail(QCCertificateSchema):
     check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
+
+class WorkPhaseSimpleSchema(Schema):
+    work_phase_id = fields.Integer()
+    phase_name = fields.String()
+    phase_status = fields.Enum(PhaseStatus)
+    start_date = fields.DateTime()
+    end_date = fields.DateTime()
+
+
+class WorkOrderTrackingSchema(Schema):
+    work_order_id = fields.Integer()
+    status = fields.Enum(WorkOrderStatus)
+    quantity = fields.Integer()
+    current_phase = fields.Nested(WorkPhaseSimpleSchema(), allow_none=True)
+    work_phases = fields.List(fields.Nested(WorkPhaseSimpleSchema()))
+
+
+class QCWorkOrderTrackingSchema(Schema):
+    qc_work_order_id = fields.Integer()
+    qc_status = fields.Enum(QCWorkOrderStatus)
+    qc_date = fields.DateTime()
+    qc_by = fields.String()
+    quantity = fields.Integer()
+    remark = fields.String()
+    test_results = fields.List(fields.Nested(TestResultSchema()))
+
+
+class SalesItemTrackingSchema(Schema):
+    sales_item_id = fields.Integer()
+    item_code = fields.String()
+    item_num = fields.Integer()
+    item_name = fields.String()
+    item_description = fields.String()
+    doc_num = fields.Integer()
+    doc_entry = fields.Integer()
+    status = fields.Enum(SalesItemStatus)
+    work_order = fields.Nested(WorkOrderTrackingSchema(), allow_none=True)
+    qc_work_orders = fields.List(fields.Nested(QCWorkOrderTrackingSchema()))
+
 
 class MaterialTransactionSchema(Schema):
     transaction_id = fields.Integer(dump_only=True)
