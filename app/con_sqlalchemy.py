@@ -120,6 +120,10 @@ class WorkOrderStatus(enum.Enum):
     TESTING = 'TESTING'
     COMPLETED = 'COMPLETED'
 
+class WorkOrderType(enum.Enum):
+    ORIGINAL = 'ORIGINAL'
+    REWORK = 'REWORK'
+
 class WorkOrder(AuditMixin):
     __tablename__ = "t_work_order"
     work_order_id = db.Column(db.Integer, primary_key=True)
@@ -127,10 +131,13 @@ class WorkOrder(AuditMixin):
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
     quantity = db.Column(db.Integer, nullable=False, default=1)
+    type = db.Column(db.Enum(WorkOrderType), nullable=False, default=WorkOrderType.ORIGINAL)
+    source_qc_work_order_id = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id'), nullable=True)
+    wms_pick_reference = db.Column(db.String(100), nullable=True)
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
-    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order')
+    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_orders')
     item_components = db.relationship('ItemComponent', back_populates='work_order')
     work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_order_id', back_populates='work_order')
 
@@ -266,22 +273,18 @@ class SalesItem(AuditMixin):
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='noload')
     material_list = db.relationship('MaterialList', back_populates='sales_item')
-    work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False)
+    work_orders = db.relationship('WorkOrder', back_populates='sales_item')
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
     sales_item_transactions = db.relationship('SalesItemTransaction', back_populates='sales_item')
 
     # Right now we act as if 1 SalesItem per 1 WorkOrder
     @property
     def producing_qty(self):
-        if self.work_order and self.work_order.status != WorkOrderStatus.COMPLETED:
-            return self.work_order.quantity
-        return 0
+        return sum(wo.quantity for wo in self.work_orders if wo.status != WorkOrderStatus.COMPLETED)
 
     @property
     def produced_qty(self):
-        if self.work_order and self.work_order.status == WorkOrderStatus.COMPLETED:
-            return self.work_order.quantity
-        return 0
+        return sum(wo.quantity for wo in self.work_orders if wo.status == WorkOrderStatus.COMPLETED)
 
     @property
     def queued_for_test_qty(self):

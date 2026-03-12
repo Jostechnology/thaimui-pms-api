@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, TestResult, TestResultItem, TestResultStatus, SalesItemTransactionType
+from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, TestResult, TestResultItem, TestResultStatus, SalesItemTransactionType
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import test_result_repository
 from app.app import db
@@ -47,6 +47,9 @@ def create_test_result(qc_work_order_id, data):
 
         test_result_repository.create_test_result(test_result)
         db.session.flush()
+
+        # Sync QCWorkOrder status to this test result
+        qc.qc_status = QCWorkOrderStatus.PASSED if test_result.overall_status == TestResultStatus.PASSED else QCWorkOrderStatus.FAILED
 
         # Track tested quantity when result is PASSED
         if test_result.overall_status == TestResultStatus.PASSED:
@@ -118,6 +121,9 @@ def update_test_result(test_result_id, data):
 
         test_result_repository.update_test_result(test_result)
         db.session.flush()
+
+        # Sync QCWorkOrder status to this test result
+        test_result.qc_work_order.qc_status = QCWorkOrderStatus.PASSED if test_result.overall_status == TestResultStatus.PASSED else QCWorkOrderStatus.FAILED
 
         # Create TESTED transaction only when status transitions to PASSED
         if prev_status != TestResultStatus.PASSED and test_result.overall_status == TestResultStatus.PASSED:

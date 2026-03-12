@@ -35,7 +35,7 @@ def get_sales_item_detail_by_id(sales_item_id):
             db.session.query(SalesItem)
             .options(
                 selectinload(SalesItem.material_list),
-                selectinload(SalesItem.work_order),
+                selectinload(SalesItem.work_orders),
                 selectinload(SalesItem.qc_work_orders),
                 selectinload(SalesItem.sales_item_transactions),
             )
@@ -51,9 +51,9 @@ def get_sales_item_tracking_by_id(sales_item_id):
         query = (
             db.session.query(SalesItem)
             .options(
-                selectinload(SalesItem.work_order).selectinload(WorkOrder.current_phase),
-                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_phases),
-                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.work_orders).selectinload(WorkOrder.current_phase),
+                selectinload(SalesItem.work_orders).selectinload(WorkOrder.work_phases),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results).selectinload(TestResult.test_result_items),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
         )

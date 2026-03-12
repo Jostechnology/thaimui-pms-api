@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, TestResultStatus, WorkOrderStatus, SalesItemTransactionType, SalesItemStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, QCWorkOrderStatus, RolePermission, TestResultStatus, WorkOrderStatus, WorkOrderType, SalesItemTransactionType, SalesItemStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -159,6 +159,9 @@ class WorkOrderSchema(Schema):
     quantity = fields.Integer()
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
+    type = fields.Enum(WorkOrderType)
+    source_qc_work_order_id = fields.Integer(allow_none=True)
+    wms_pick_reference = fields.String(allow_none=True)
     sales_item = fields.Nested(SalesItemSchema())
     
 class WorkOrderSchemaDetail(WorkOrderSchema):
@@ -382,6 +385,9 @@ class WorkPhaseSimpleSchema(Schema):
 class WorkOrderTrackingSchema(Schema):
     work_order_id = fields.Integer()
     status = fields.Enum(WorkOrderStatus)
+    type = fields.Enum(WorkOrderType)
+    source_qc_work_order_id = fields.Integer(allow_none=True)
+    wms_pick_reference = fields.String(allow_none=True)
     quantity = fields.Integer()
     current_phase = fields.Nested(WorkPhaseSimpleSchema(), allow_none=True)
     work_phases = fields.List(fields.Nested(WorkPhaseSimpleSchema()))
@@ -406,7 +412,7 @@ class SalesItemTrackingSchema(Schema):
     doc_num = fields.Integer()
     doc_entry = fields.Integer()
     status = fields.Enum(SalesItemStatus)
-    work_order = fields.Nested(WorkOrderTrackingSchema(), allow_none=True)
+    work_orders = fields.List(fields.Nested(WorkOrderTrackingSchema()))
     qc_work_orders = fields.List(fields.Nested(QCWorkOrderTrackingSchema()))
 
 
