@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import (
-    WorkOrder, WorkOrderStatus, SalesOrder, SalesItem,
+    WorkOrder, WorkOrderStatus, WorkRun, SalesOrder, SalesItem,
     WorkPhase, WorkPhaseBreak, WorkAssignment, Employee,
     ItemComponent, ComponentMaterialUsage, MaterialList,
     ComponentSpec, ComponentSpecType, ComponentOption, ComponentOptionType,
@@ -13,6 +13,7 @@ def _work_order_options():
     """Eager-load exactly what WorkOrderSchema needs — nothing more."""
     return [
         selectinload(WorkOrder.sales_item),
+        selectinload(WorkOrder.work_runs),
         selectinload(WorkOrder.work_phases)
             .selectinload(WorkPhase.assignments)
             .selectinload(WorkAssignment.employee),

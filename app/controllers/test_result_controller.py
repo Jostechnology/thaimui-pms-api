@@ -12,12 +12,12 @@ from app.services.test_result_service import (
 )
 
 
-@app.route("/api/qc_work_order/<int:qc_work_order_id>/test_result/create", methods=["POST"])
+@app.route("/api/work_run/<int:work_run_id>/test_result/create", methods=["POST"])
 @verify_required
-def api_create_test_result(qc_work_order_id):
+def api_create_test_result(work_run_id):
     try:
         data = request.get_json()
-        result = create_test_result(qc_work_order_id, data)
+        result = create_test_result(work_run_id, data)
         return jsonify({"data": result, "success": True}), 201
     except Exception as e:
         traceback.print_exc()

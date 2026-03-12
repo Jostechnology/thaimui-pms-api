@@ -1,6 +1,6 @@
-from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, TestResult, TestResultItem, TestResultStatus, SalesItemTransactionType
+from app.con_sqlalchemy import WorkRun, TestResult, TestResultItem, TestResultStatus, SalesItemTransactionType
 from app.ma_sqlalchemy import TestResultSchema
-from app.repositories import test_result_repository
+from app.repositories import test_result_repository, work_run_repository
 from app.app import db
 from app.exception import NotFoundError
 from app.services import transaction_service
@@ -17,14 +17,17 @@ def _resolve_status(val):
         return TestResultStatus.PASSED
 
 
-def create_test_result(qc_work_order_id, data):
+def create_test_result(work_run_id, data):
     try:
-        qc = db.session.query(QCWorkOrder).filter(QCWorkOrder.qc_work_order_id == qc_work_order_id).first()
-        if not qc:
-            raise NotFoundError("ไม่พบ QC Work Order ที่ระบุ")
+        work_run = work_run_repository.get_work_run_with_test_result(work_run_id)
+        if not work_run:
+            raise NotFoundError("ไม่พบ Work Run ที่ระบุ")
+        if work_run.test_result:
+            raise NotFoundError("Work Run นี้มีผลการทดสอบแล้ว")
 
         test_result = TestResult(
-            qc_work_order_id=qc_work_order_id,
+            work_run_id=work_run_id,
+            qc_work_order_id=data.get("qc_work_order_id"),
             test_date=data.get("test_date"),
             tested_by=data.get("tested_by"),
             test_method=data.get("test_method"),
@@ -48,15 +51,12 @@ def create_test_result(qc_work_order_id, data):
         test_result_repository.create_test_result(test_result)
         db.session.flush()
 
-        # Sync QCWorkOrder status to this test result
-        qc.qc_status = QCWorkOrderStatus.PASSED if test_result.overall_status == TestResultStatus.PASSED else QCWorkOrderStatus.FAILED
-
         # Track tested quantity when result is PASSED
         if test_result.overall_status == TestResultStatus.PASSED:
             tested_qty = len(test_result.test_result_items)
             if tested_qty > 0:
                 transaction_service.create_sales_item_transaction(
-                    qc.sales_item, test_result, SalesItemTransactionType.TESTED, tested_qty
+                    work_run.work_order.sales_item, test_result, SalesItemTransactionType.TESTED, tested_qty
                 )
 
         db.session.commit()
@@ -122,15 +122,12 @@ def update_test_result(test_result_id, data):
         test_result_repository.update_test_result(test_result)
         db.session.flush()
 
-        # Sync QCWorkOrder status to this test result
-        test_result.qc_work_order.qc_status = QCWorkOrderStatus.PASSED if test_result.overall_status == TestResultStatus.PASSED else QCWorkOrderStatus.FAILED
-
         # Create TESTED transaction only when status transitions to PASSED
         if prev_status != TestResultStatus.PASSED and test_result.overall_status == TestResultStatus.PASSED:
             tested_qty = len(test_result.test_result_items)
             if tested_qty > 0:
                 transaction_service.create_sales_item_transaction(
-                    test_result.qc_work_order.sales_item,
+                    test_result.work_run.work_order.sales_item,
                     test_result,
                     SalesItemTransactionType.TESTED,
                     tested_qty,

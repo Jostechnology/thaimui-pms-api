@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import SalesOrder, SalesItem, WorkOrder, WorkOrderStatus, QCWorkOrder, QCWorkOrderStatus, QCCertification, QCCheckItem, MaterialList
+from app.con_sqlalchemy import SalesOrder, SalesItem, WorkOrder, WorkOrderStatus, WorkRun, TestResult, TestResultStatus, QCCertification, QCCheckItem, MaterialList
 from app.app import db
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import selectinload
@@ -60,25 +60,31 @@ def get_all_sales_orders(page, limit, search):
         )
 
         qc_count_subq = (
-            db.session.query(func.count(QCWorkOrder.qc_work_order_id))
-            .join(SalesItem, QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
+            db.session.query(func.count(TestResult.test_result_id))
+            .join(WorkRun, WorkRun.work_run_id == TestResult.work_run_id)
+            .join(WorkOrder, WorkOrder.work_order_id == WorkRun.work_order_id)
+            .join(SalesItem, SalesItem.sales_item_id == WorkOrder.sales_item_id)
             .filter(SalesItem.doc_entry == SalesOrder.doc_entry)
             .correlate(SalesOrder)
             .scalar_subquery()
         )
 
         qc_passed_subq = (
-            db.session.query(func.count(QCWorkOrder.qc_work_order_id))
-            .join(SalesItem, QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
-            .filter(SalesItem.doc_entry == SalesOrder.doc_entry, QCWorkOrder.qc_status == QCWorkOrderStatus.PASSED)
+            db.session.query(func.count(TestResult.test_result_id))
+            .join(WorkRun, WorkRun.work_run_id == TestResult.work_run_id)
+            .join(WorkOrder, WorkOrder.work_order_id == WorkRun.work_order_id)
+            .join(SalesItem, SalesItem.sales_item_id == WorkOrder.sales_item_id)
+            .filter(SalesItem.doc_entry == SalesOrder.doc_entry, TestResult.overall_status == TestResultStatus.PASSED)
             .correlate(SalesOrder)
             .scalar_subquery()
         )
 
         qc_failed_subq = (
-            db.session.query(func.count(QCWorkOrder.qc_work_order_id))
-            .join(SalesItem, QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
-            .filter(SalesItem.doc_entry == SalesOrder.doc_entry, QCWorkOrder.qc_status == QCWorkOrderStatus.FAILED)
+            db.session.query(func.count(TestResult.test_result_id))
+            .join(WorkRun, WorkRun.work_run_id == TestResult.work_run_id)
+            .join(WorkOrder, WorkOrder.work_order_id == WorkRun.work_order_id)
+            .join(SalesItem, SalesItem.sales_item_id == WorkOrder.sales_item_id)
+            .filter(SalesItem.doc_entry == SalesOrder.doc_entry, TestResult.overall_status == TestResultStatus.FAILED)
             .correlate(SalesOrder)
             .scalar_subquery()
         )

@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, TestResult, TestResultItem
+from app.con_sqlalchemy import WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -7,9 +7,10 @@ def _test_result_options():
     """Eager-load what TestResultSchema and test_result_service need."""
     return [
         selectinload(TestResult.test_result_items),
-        # test_result_service navigates test_result.qc_work_order.sales_item
-        selectinload(TestResult.qc_work_order)
-            .selectinload(QCWorkOrder.sales_item),
+        # test_result_service navigates test_result.work_run.work_order.sales_item
+        selectinload(TestResult.work_run)
+            .selectinload(WorkRun.work_order)
+            .selectinload(WorkOrder.sales_item),
     ]
 
 
@@ -60,8 +61,9 @@ def get_test_results_by_doc_entry(doc_entry):
         return (
             db.session.query(TestResult)
             .options(*_test_result_options())
-            .join(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
-            .join(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
+            .join(WorkRun, WorkRun.work_run_id == TestResult.work_run_id)
+            .join(WorkOrder, WorkOrder.work_order_id == WorkRun.work_order_id)
+            .join(SalesItem, SalesItem.sales_item_id == WorkOrder.sales_item_id)
             .filter(SalesItem.doc_entry == doc_entry)
             .order_by(TestResult.test_result_id.desc())
             .all()
