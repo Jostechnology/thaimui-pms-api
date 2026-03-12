@@ -481,3 +481,16 @@ class ComponentOption(AuditMixin):
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
     component_option_type = db.relationship("ComponentOptionType", back_populates="component_options", lazy='selectin')
     item_component = db.relationship("ItemComponent", back_populates="component_options", lazy='selectin')
+class OperationCostMonthly(AuditMixin):
+    __tablename__ = "m_operation_cost_monthly"
+    operation_cost_monthly_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    operation_cost_date = db.Column(db.Date, nullable=False, default = bangkok_now)
+    depreciation_building_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    depreciation_building_period = db.Column(db.Integer, nullable=False, default=0)
+    depreciation_util_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    depreciation_util_period = db.Column(db.Integer, nullable=False, default=0)
+    office_rent_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    office_supplies_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    water_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    electricity_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    utility_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
