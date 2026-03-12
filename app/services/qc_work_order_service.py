@@ -1,6 +1,5 @@
 from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem, SalesItemTransactionType
 from app.repositories import qc_work_order_repository
-from app.repositories import work_order_repository
 from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
 

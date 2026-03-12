@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, SalesOrder
+from app.con_sqlalchemy import QCWorkOrder, SalesItem, SalesItemTransaction, SalesOrder
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -39,6 +39,25 @@ def get_qc_work_order_by_id(qc_work_order_id):
         qc = (
             db.session.query(QCWorkOrder)
             .options(*_qc_work_order_options())
+            .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
+            .first()
+        )
+        if not qc:
+            raise NotFoundError(f"ไม่พบ QC Work Order ID -> {qc_work_order_id}")
+        return qc
+    except Exception:
+        raise
+
+
+def get_qc_work_order_with_sales_item_transactions(qc_work_order_id):
+    """Load QCWorkOrder → sales_item → sales_item_transactions for availability validation."""
+    try:
+        qc = (
+            db.session.query(QCWorkOrder)
+            .options(
+                selectinload(QCWorkOrder.sales_item)
+                    .selectinload(SalesItem.sales_item_transactions)
+            )
             .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
             .first()
         )

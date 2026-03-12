@@ -44,26 +44,11 @@ def create_sales_item_transaction(sales_item: SalesItem, document, transaction_t
     """
     Create a SalesItemTransaction linked to the given document.
 
-    Hard constraints:
-    - PRODUCED: quantity must not exceed sales_item.item_num
-    - QUEUED_FOR_TEST: cumulative queued quantity must not exceed total produced
+    - PRODUCED: fires when a WorkRun is completed, quantity = usable_qty
+    - TESTED_PASSED: fires when TestResult created/updated, quantity = passing item count
+    - TESTED_FAILED: fires when TestResult created/updated, quantity = failing item count
     """
-    txns = sales_item.sales_item_transactions
     try:
-        if transaction_type == SalesItemTransactionType.PRODUCED:
-            if quantity > sales_item.item_num:
-                raise ValidationError(
-                    f"จำนวนที่ผลิต ({quantity}) เกินจำนวนใน Sales Item ({sales_item.item_num})"
-                )
-
-        elif transaction_type == SalesItemTransactionType.QUEUED_FOR_TEST:
-            total_queued = sum(t.quantity for t in txns if t.type == SalesItemTransactionType.QUEUED_FOR_TEST)
-            if total_queued + quantity > sales_item.item_num:
-                raise ValidationError(
-                    f"จำนวนที่ส่งทดสอบรวม ({total_queued + quantity}) "
-                    f"เกินจำนวนใน Sales Item ({sales_item.item_num})"
-                )
-
         db.session.add(SalesItemTransaction(
             sales_item_id=sales_item.sales_item_id,
             quantity=quantity,

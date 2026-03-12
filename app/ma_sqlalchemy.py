@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, TestResultStatus, WorkOrderStatus, WorkRunStatus, SalesItemTransactionType, SalesItemStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, SalesItemTransactionType, SalesItemStatus, WorkRun
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -157,6 +157,9 @@ class WorkRunSchema(Schema):
     work_run_id = fields.Integer()
     work_order_id = fields.Integer()
     quantity = fields.Integer()
+    usable_qty = fields.Integer(allow_none=True)
+    defect_qty = fields.Integer(dump_only=True, allow_none=True)
+    completion_remark = fields.String(allow_none=True)
     wms_pick_reference = fields.String(allow_none=True)
     status = fields.Enum(WorkRunStatus)
     created_date = fields.DateTime()
@@ -169,11 +172,14 @@ class WorkOrderSchema(Schema):
     status = fields.Enum(WorkOrderStatus)
     sales_item = fields.Nested(SalesItemSchema())
     
+class WorkRunDetailSchema(WorkRunSchema):
+    test_results = fields.List(fields.Nested(lambda: TestResultSchema()))
+
 class WorkOrderSchemaDetail(WorkOrderSchema):
     current_phase = fields.Nested(WorkPhaseSchema())
     work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     item_components = fields.List(fields.Nested(ItemComponentSchema()))
-    work_runs = fields.List(fields.Nested(WorkRunSchema()))
+    work_runs = fields.List(fields.Nested(WorkRunDetailSchema()))
 
 class SalesOrderSearchSchema(Schema):
     doc_num = fields.Int()
@@ -202,35 +208,39 @@ class SalesItemTransactionSchema(Schema):
     created_by            = fields.String()
 
 class SalesItemNoMaterialSchema(Schema):
-    sales_item_id           = fields.Integer()
-    item_code               = fields.String()
-    item_num                = fields.Integer()
-    item_name               = fields.String()
-    item_description        = fields.String()
-    cost_price              = fields.Float()
-    unit_price              = fields.Float()
-    doc_num                 = fields.Integer()
-    doc_entry               = fields.Integer()
-    producing_qty           = fields.Integer(dump_only=True)
-    produced_qty            = fields.Integer(dump_only=True)
-    queued_for_test_qty     = fields.Integer(dump_only=True)
-    tested_qty              = fields.Integer(dump_only=True)
+    sales_item_id                = fields.Integer()
+    item_code                    = fields.String()
+    item_num                     = fields.Integer()
+    item_name                    = fields.String()
+    item_description             = fields.String()
+    cost_price                   = fields.Float()
+    unit_price                   = fields.Float()
+    doc_num                      = fields.Integer()
+    doc_entry                    = fields.Integer()
+    producing_qty                = fields.Integer(dump_only=True)
+    produced_qty                 = fields.Integer(dump_only=True)
+    unavailable_for_test_qty     = fields.Integer(dump_only=True)
+    available_for_test_qty       = fields.Integer(dump_only=True)
+    passed_qty                   = fields.Integer(dump_only=True)
+    failed_qty                   = fields.Integer(dump_only=True)
 
 class SalesItemSchema(Schema):
-    sales_item_id           = fields.Integer()
-    item_code               = fields.String()
-    item_num                = fields.Integer()
-    item_name               = fields.String()
-    item_description        = fields.String()
-    cost_price              = fields.Float()
-    unit_price              = fields.Float()
-    doc_num                 = fields.Integer()
-    doc_entry               = fields.Integer()
-    material_list           = fields.List(fields.Nested(MaterialListSchema()))
-    producing_qty           = fields.Integer(dump_only=True)
-    produced_qty            = fields.Integer(dump_only=True)
-    queued_for_test_qty     = fields.Integer(dump_only=True)
-    tested_qty              = fields.Integer(dump_only=True)
+    sales_item_id                = fields.Integer()
+    item_code                    = fields.String()
+    item_num                     = fields.Integer()
+    item_name                    = fields.String()
+    item_description             = fields.String()
+    cost_price                   = fields.Float()
+    unit_price                   = fields.Float()
+    doc_num                      = fields.Integer()
+    doc_entry                    = fields.Integer()
+    material_list                = fields.List(fields.Nested(MaterialListSchema()))
+    producing_qty                = fields.Integer(dump_only=True)
+    produced_qty                 = fields.Integer(dump_only=True)
+    unavailable_for_test_qty     = fields.Integer(dump_only=True)
+    available_for_test_qty       = fields.Integer(dump_only=True)
+    passed_qty                   = fields.Integer(dump_only=True)
+    failed_qty                   = fields.Integer(dump_only=True)
 
 class SalesItemDetailSchema(SalesItemSchema):
     sales_item_transactions = fields.List(fields.Nested(SalesItemTransactionSchema()))
@@ -323,14 +333,16 @@ class TestResultItemSchema(Schema):
 
 class TestResultSchema(Schema):
     test_result_id      = fields.Integer(dump_only=True)
-    work_run_id         = fields.Integer()
     qc_work_order_id    = fields.Integer(allow_none=True)
-    test_date           = fields.DateTime()
-    tested_by           = fields.String()
-    test_method         = fields.String()
-    standard_reference  = fields.String()
-    overall_status      = fields.Enum(TestResultStatus)
-    remark              = fields.String()
+    work_run_id         = fields.Integer(allow_none=True)
+    claimed_qty         = fields.Integer()
+    session_status      = fields.Enum(TestSessionStatus, dump_only=True)
+    test_date           = fields.DateTime(allow_none=True)
+    tested_by           = fields.String(allow_none=True)
+    test_method         = fields.String(allow_none=True)
+    standard_reference  = fields.String(allow_none=True)
+    overall_status      = fields.Enum(TestResultStatus, allow_none=True)
+    remark              = fields.String(allow_none=True)
     test_result_items   = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
     created_date        = fields.DateTime(dump_only=True)
     updated_date        = fields.DateTime(dump_only=True)

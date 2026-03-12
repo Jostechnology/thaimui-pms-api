@@ -35,7 +35,8 @@ def api_get_work_runs(work_order_id):
 @verify_required
 def api_complete_work_run(work_run_id):
     try:
-        result = complete_work_run(work_run_id)
+        data = request.get_json() or {}
+        result = complete_work_run(work_run_id, data)
         return jsonify({"data": WorkRunSchema().dump(result), "success": True}), 200
     except AppException as e:
         return jsonify({"error": e.message}), e.status_code
