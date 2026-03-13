@@ -30,16 +30,19 @@ def save_all_work_assignments(assignments):
         raise
 
 def get_work_phase_by_id(work_phase_id):
-    return WorkPhase.query.get(work_phase_id)
+    query = db.session.query(WorkPhase).filter(WorkPhase.work_phase_id == work_phase_id)
+    return query.first()
 
 
-def get_work_phases_by_order_id(work_order_id):
-    """Get all phases for a work order, ordered by work_phase_id (creation order)"""
-    return WorkPhase.query.filter_by(work_order_id=work_order_id).order_by(WorkPhase.work_phase_id).all()
+def get_work_phases_by_run_id(work_run_id):
+    """Get all phases for a work run, ordered by work_phase_id (creation order)"""
+    query = db.session.query(WorkPhase).filter(WorkPhase.work_run_id == work_run_id).order_by(WorkPhase.work_phase_id)
+    return query.all()
 
 
 def get_work_assignments_by_phase(work_phase_id):
-    return WorkAssignment.query.filter_by(work_phase_id=work_phase_id).all()
+    query = db.session.query(WorkAssignment).filter(WorkAssignment.work_phase_id == work_phase_id)
+    return query.all()
 
 
 def delete_work_phase(work_phase_ids):

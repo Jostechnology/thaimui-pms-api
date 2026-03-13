@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, QCWorkOrder, SalesItemTransaction, TestResult
+from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, WorkRun, QCWorkOrder, SalesItemTransaction, TestResult
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -46,15 +46,13 @@ def get_sales_item_detail_by_id(sales_item_id):
         raise
 
 def get_sales_item_tracking_by_id(sales_item_id):
-    """Fetch sales item with work order phases and QC work order test results for tracking."""
+    """Fetch sales item with work order → work runs, and qc_work_orders → test_results (simple)."""
     try:
         query = (
             db.session.query(SalesItem)
             .options(
-                selectinload(SalesItem.work_order).selectinload(WorkOrder.current_phase),
-                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_phases),
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
-                selectinload(SalesItem.qc_work_orders),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
         )

@@ -100,17 +100,20 @@ class WorkPhaseBreakSchema(Schema):
 
 class WorkPhaseSchema(Schema):
     work_phase_id = fields.Integer()
-    work_order_id = fields.Integer()
+    work_run_id = fields.Integer()
     phase_name = fields.String()
     phase_status = fields.Enum(PhaseStatus)
     start_date = fields.DateTime()
     end_date = fields.DateTime()
     created_date = fields.DateTime()
+    
+class WorkPhaseSchemaDetailed(WorkPhaseSchema):
     employee_list = fields.Method("get_employee_list")
     breaks = fields.List(fields.Nested(WorkPhaseBreakSchema()))
 
     def get_employee_list(self, obj):
         return EmployeeSchema(many=True).dump([a.employee for a in obj.assignments])
+    
 class ComponentSpecTypeSchema(Schema):
     component_spec_type_id = fields.Integer()
     component_spec_type_name = fields.String()
@@ -162,6 +165,7 @@ class WorkRunSchema(Schema):
     completion_remark = fields.String(allow_none=True)
     wms_pick_reference = fields.String(allow_none=True)
     status = fields.Enum(WorkRunStatus)
+    current_phase_id = fields.Integer(allow_none=True)
     created_date = fields.DateTime()
 
 class WorkOrderSchema(Schema):
@@ -171,15 +175,20 @@ class WorkOrderSchema(Schema):
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
     sales_item = fields.Nested(SalesItemSchema())
-    
+    # work_runs = fields.List(fields.Nested(WorkRunSchema))
+
 class WorkRunDetailSchema(WorkRunSchema):
+    current_phase = fields.Nested(WorkPhaseSchemaDetailed(), allow_none=True)
+    work_phases = fields.List(fields.Nested(WorkPhaseSchemaDetailed()))
     test_results = fields.List(fields.Nested(lambda: TestResultSchema()))
 
+class WorkRunWithTestSchema(WorkRunSchema):
+    test_results = fields.List(fields.Nested(lambda: TestResultSchema()))
+
+
 class WorkOrderSchemaDetail(WorkOrderSchema):
-    current_phase = fields.Nested(WorkPhaseSchema())
-    work_phases = fields.List(fields.Nested(WorkPhaseSchema()))
     item_components = fields.List(fields.Nested(ItemComponentSchema()))
-    work_runs = fields.List(fields.Nested(WorkRunDetailSchema()))
+    work_runs = fields.List(fields.Nested(WorkRunSchema()))
 
 class SalesOrderSearchSchema(Schema):
     doc_num = fields.Int()
@@ -399,12 +408,20 @@ class WorkPhaseSimpleSchema(Schema):
     end_date = fields.DateTime()
 
 
+class TestResultSimpleSchema(Schema):
+    test_result_id     = fields.Integer()
+    claimed_qty        = fields.Integer()
+    session_status     = fields.Enum(TestSessionStatus)
+    overall_status     = fields.Enum(TestResultStatus, allow_none=True)
+    test_date          = fields.DateTime(allow_none=True)
+    tested_by          = fields.String(allow_none=True)
+    created_date       = fields.DateTime()
+
+
 class WorkOrderTrackingSchema(Schema):
     work_order_id = fields.Integer()
     status = fields.Enum(WorkOrderStatus)
     quantity = fields.Integer()
-    current_phase = fields.Nested(WorkPhaseSimpleSchema(), allow_none=True)
-    work_phases = fields.List(fields.Nested(WorkPhaseSimpleSchema()))
     work_runs = fields.List(fields.Nested(WorkRunSchema()))
 
 
@@ -414,6 +431,7 @@ class QCWorkOrderTrackingSchema(Schema):
     qc_by = fields.String()
     quantity = fields.Integer()
     remark = fields.String()
+    test_results = fields.List(fields.Nested(TestResultSimpleSchema()))
 
 
 class SalesItemTrackingSchema(Schema):
@@ -426,8 +444,7 @@ class SalesItemTrackingSchema(Schema):
     doc_entry = fields.Integer()
     status = fields.Enum(SalesItemStatus)
     work_order = fields.Nested(WorkOrderTrackingSchema(), allow_none=True)
-    qc_work_orders = fields.List(fields.Nested(QCWorkOrderTrackingSchema()))
-
+    qc_work_orders = fields.List(fields.Nested(QCWorkOrderTrackingSchema(), allow_none=True))
 
 class MaterialTransactionSchema(Schema):
     transaction_id = fields.Integer(dump_only=True)

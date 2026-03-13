@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkRun, WorkOrder, SalesItem, SalesItemTransaction, TestResult
+from app.con_sqlalchemy import WorkRun, WorkOrder, WorkPhase, WorkAssignment, SalesItem, SalesItemTransaction, TestResult
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -31,13 +31,18 @@ def get_work_run_with_sales_item(work_run_id):
 
 
 def get_work_run_with_test_results(work_run_id):
-    """Full fetch — loads test_results list and work_order.sales_item chain."""
+    """Full fetch — loads test_results, work_phases, and work_order.sales_item chain."""
     try:
         query = (
             db.session.query(WorkRun)
             .options(
                 selectinload(WorkRun.test_results).selectinload(TestResult.test_result_items),
                 selectinload(WorkRun.work_order).selectinload(WorkOrder.sales_item),
+                selectinload(WorkRun.work_phases)
+                    .selectinload(WorkPhase.assignments)
+                    .selectinload(WorkAssignment.employee),
+                selectinload(WorkRun.work_phases).selectinload(WorkPhase.breaks),
+                selectinload(WorkRun.current_phase),
             )
             .filter(WorkRun.work_run_id == work_run_id)
         )
@@ -50,7 +55,14 @@ def get_work_runs_by_work_order(work_order_id):
     try:
         query = (
             db.session.query(WorkRun)
-            .options(selectinload(WorkRun.test_results).selectinload(TestResult.test_result_items))
+            .options(
+                selectinload(WorkRun.test_results).selectinload(TestResult.test_result_items),
+                selectinload(WorkRun.work_phases)
+                    .selectinload(WorkPhase.assignments)
+                    .selectinload(WorkAssignment.employee),
+                selectinload(WorkRun.work_phases).selectinload(WorkPhase.breaks),
+                selectinload(WorkRun.current_phase),
+            )
             .filter(WorkRun.work_order_id == work_order_id)
             .order_by(WorkRun.created_date.asc())
         )

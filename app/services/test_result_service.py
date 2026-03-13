@@ -44,12 +44,12 @@ def create_test_result(qc_work_order_id, data):
 
         claimed_qty = data.get("claimed_qty")
         if not claimed_qty or claimed_qty <= 0:
-            raise ValidationError("claimed_qty must be greater than 0")
+            raise ValidationError("จำนวนที่ขอเทสต้องมากกว่า 0")
 
         available = sales_item.available_for_test_qty
         if claimed_qty > available:
             raise ValidationError(
-                f"claimed_qty ({claimed_qty}) exceeds available items for testing ({available})"
+                f"จำนวนที่ขอเทส ({claimed_qty}) มีมากกว่าจำนวนสินค้าที่สามารถเทสได้ ({available})"
             )
 
         test_result = TestResult(
@@ -84,11 +84,11 @@ def finalize_test_result(test_result_id, data):
         if not test_result:
             raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
         if test_result.session_status == TestSessionStatus.COMPLETED:
-            raise ValidationError("Test session is already finalized")
+            raise ValidationError("เทสนี้จบไปแล้ว กรุณาตรวจสอบอีกครั้ง")
 
         items_data = data.get("items", [])
         if not items_data:
-            raise ValidationError("items are required to finalize a test result")
+            raise ValidationError("ไม่พบ TestItem กรุณาตรวจสอบอีกครั้ง")
 
         test_result.test_date = data.get("test_date")
         test_result.tested_by = data.get("tested_by")

@@ -61,15 +61,15 @@ def complete_work_run(work_run_id, data):
 
         usable_qty = data.get("usable_qty")
         if usable_qty is None:
-            raise ValidationError("usable_qty is required to complete a Work Run")
+            raise ValidationError("กรุณากรอกจำนวนที่ผลิตสำเร็จ")
         if usable_qty < 0 or usable_qty > work_run.quantity:
             raise ValidationError(
-                f"usable_qty ({usable_qty}) must be between 0 and planned quantity ({work_run.quantity})"
+                f"จำนวนที่ผลิตสำเร็จ ({usable_qty}) ต้องมากกว่า 0 และน้อยกว่าหรือเท่ากับจำนวนที่แพลนไว้ ({work_run.quantity})"
             )
 
         defect_qty = work_run.quantity - usable_qty
         if defect_qty > 0 and not data.get("completion_remark", "").strip():
-            raise ValidationError("completion_remark is required when there are defective items")
+            raise ValidationError("กรุณากรอกหมายเหตุ ในกรณีที่มีสินค้าผลิตผิดพลาด")
 
         work_run.usable_qty = usable_qty
         work_run.completion_remark = data.get("completion_remark")

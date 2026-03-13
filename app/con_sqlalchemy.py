@@ -127,12 +127,9 @@ class WorkOrder(AuditMixin):
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
     quantity = db.Column(db.Integer, nullable=False, default=1)
-    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
-    current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order')
     item_components = db.relationship('ItemComponent', back_populates='work_order')
-    work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_order_id', back_populates='work_order')
     work_runs = db.relationship('WorkRun', back_populates='work_order', cascade='all, delete-orphan')
 
 class PhaseStatus(enum.Enum):
@@ -144,12 +141,12 @@ class PhaseStatus(enum.Enum):
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
-    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'), nullable=False)
+    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
     phase_name = db.Column(db.String(100), nullable=False)
     phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.PENDING)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
-    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='work_phases', lazy='noload')
+    work_run = db.relationship('WorkRun', foreign_keys=[work_run_id], back_populates='work_phases', lazy='noload')
     breaks = db.relationship('WorkPhaseBreak', back_populates='work_phase', order_by='WorkPhaseBreak.break_start')
     assignments = db.relationship('WorkAssignment', back_populates='work_phase')
 
@@ -262,7 +259,10 @@ class WorkRun(AuditMixin):
     completion_remark = db.Column(db.String(500), nullable=True)          # required when usable_qty < quantity
     wms_pick_reference = db.Column(db.String(100), nullable=True)
     status = db.Column(db.Enum(WorkRunStatus), nullable=False, default=WorkRunStatus.INPROGRESS)
+    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=True)
+    current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     work_order = db.relationship('WorkOrder', back_populates='work_runs', lazy='noload')
+    work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_run_id', back_populates='work_run')
     test_results = db.relationship('TestResult', back_populates='work_run', cascade='all, delete-orphan')
 
     @property
@@ -309,8 +309,9 @@ class SalesItem(AuditMixin):
 
     @property
     def unavailable_for_test_qty(self):
-        """Items already claimed by a test session (IN_TESTING). Cumulative — includes finalized sessions."""
-        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.IN_TESTING) + self.passed_qty + self.failed_qty
+        """Items claimed by any test session (both active and finalized). IN_TESTING fires once per session
+        regardless of completion, so summing it already covers finalized sessions — no need to add passed/failed."""
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.IN_TESTING)
 
     @property
     def available_for_test_qty(self):
@@ -359,6 +360,7 @@ class QCWorkOrder(AuditMixin):
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders')
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
     qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
+    test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='noload')
 
 
 class QCForm(AuditMixin):
@@ -443,7 +445,7 @@ class TestResult(AuditMixin):
     remark             = db.Column(db.String(500), nullable=True)
     test_result_items  = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
     work_run           = db.relationship('WorkRun', back_populates='test_results', lazy='noload')
-    qc_work_order      = db.relationship('QCWorkOrder', lazy='noload')
+    qc_work_order      = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
 
 
 class TestResultItem(AuditMixin):
