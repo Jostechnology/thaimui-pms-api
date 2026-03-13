@@ -45,7 +45,9 @@ def create_operation_cost_monthly(data):
 
 def update_operation_cost_monthly(operation_cost_monthly_id, data):
     try:
-        operation_cost_monthly = get_operation_cost_monthly_by_id(operation_cost_monthly_id)
+        operation_cost_monthly = operation_cost_monthly_repository.get_operation_cost_monthly_by_id(operation_cost_monthly_id)
+        if not operation_cost_monthly:
+            raise Exception(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
 
         for key, value in data.items():
             if hasattr(operation_cost_monthly, key):
@@ -59,7 +61,9 @@ def update_operation_cost_monthly(operation_cost_monthly_id, data):
 
 def delete_operation_cost_monthly(operation_cost_monthly_id):
     try:
-        operation_cost_monthly = get_operation_cost_monthly_by_id(operation_cost_monthly_id)
+        operation_cost_monthly = operation_cost_monthly_repository.get_operation_cost_monthly_by_id(operation_cost_monthly_id)
+        if not operation_cost_monthly:
+            raise Exception(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
         
         db.session.delete(operation_cost_monthly)
         db.session.commit()

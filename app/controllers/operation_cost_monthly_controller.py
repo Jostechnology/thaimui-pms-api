@@ -4,6 +4,7 @@ from flask import request, jsonify
 from app.services.operation_cost_monthly_service import (
     get_all_operation_cost_monthly,
     create_operation_cost_monthly,
+    get_operation_cost_monthly_by_id,
     update_operation_cost_monthly,
     delete_operation_cost_monthly,
 )
@@ -59,4 +60,15 @@ def api_delete_operation_cost_monthly(operation_cost_monthly_id):
     except Exception as e:
         print(str(e))
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/get_operation_cost_monthly/<int:operation_cost_monthly_id>", methods=["GET"])
+@verify_required
+def api_get_operation_cost_monthly_by_id(operation_cost_monthly_id):
+    try:
+        result = get_operation_cost_monthly_by_id(operation_cost_monthly_id)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception as e:
+        print(str(e))
+        return jsonify({"error": str(e)}), 500
+
 
