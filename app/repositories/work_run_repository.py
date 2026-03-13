@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkRun, WorkOrder, WorkPhase, WorkAssignment, SalesItem, SalesItemTransaction, TestResult
+from app.con_sqlalchemy import WorkRun, WorkOrder, WorkPhase, WorkAssignment, SalesItem, TestResult
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -13,21 +13,6 @@ def get_work_run_by_id(work_run_id):
     except Exception:
         raise
 
-
-def get_work_run_with_sales_item(work_run_id):
-    """Loads work_order → sales_item → sales_item_transactions for transaction creation."""
-    try:
-        query = (
-            db.session.query(WorkRun)
-            .options(
-                selectinload(WorkRun.work_order).selectinload(WorkOrder.sales_item)
-                    .selectinload(SalesItem.sales_item_transactions)
-            )
-            .filter(WorkRun.work_run_id == work_run_id)
-        )
-        return query.first()
-    except Exception:
-        raise
 
 
 def get_work_run_with_test_results(work_run_id):

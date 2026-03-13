@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkRun, WorkRunStatus, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkRun, WorkRunStatus, ComponentMaterialUsage, ItemComponent
 from app.repositories import work_order_repository
 from app.app import db
 from app.services import sales_item_service, transaction_service

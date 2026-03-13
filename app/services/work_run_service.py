@@ -1,8 +1,7 @@
-from app.con_sqlalchemy import WorkRun, WorkRunStatus, SalesItemTransactionType
+from app.con_sqlalchemy import WorkRun, WorkRunStatus
 from app.repositories import work_run_repository, work_order_repository
 from app.app import db
 from app.exception import NotFoundError, ValidationError
-from app.services import transaction_service
 
 
 def get_work_run_by_id(work_run_id):
@@ -53,7 +52,7 @@ def complete_work_run(work_run_id, data):
     - completion_remark (str): required when usable_qty < quantity (explains the defects)
     """
     try:
-        work_run = work_run_repository.get_work_run_with_sales_item(work_run_id)
+        work_run = work_run_repository.get_work_run_by_id(work_run_id)
         if not work_run:
             raise NotFoundError(f"Work Run {work_run_id} not found")
         if work_run.status == WorkRunStatus.COMPLETED:
@@ -74,14 +73,6 @@ def complete_work_run(work_run_id, data):
         work_run.usable_qty = usable_qty
         work_run.completion_remark = data.get("completion_remark")
         work_run.status = WorkRunStatus.COMPLETED
-
-        if usable_qty > 0:
-            transaction_service.create_sales_item_transaction(
-                work_run.work_order.sales_item,
-                str(work_run.work_run_id),
-                SalesItemTransactionType.PRODUCED,
-                usable_qty,
-            )
 
         db.session.commit()
         return work_run

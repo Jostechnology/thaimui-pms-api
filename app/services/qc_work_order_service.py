@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem, SalesItemTransactionType
+from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem
 from app.repositories import qc_work_order_repository
 from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
@@ -103,11 +103,6 @@ def create_qc_work_order(data):
                 transaction_service.create_material_transaction(
                     material, qc, "REMOVE", int(usage.get("quantity"))
                 )
-
-        # Track items queued for testing
-        transaction_service.create_sales_item_transaction(
-            sales_item, qc, SalesItemTransactionType.QUEUED_FOR_TEST, qc_quantity
-        )
 
         db.session.commit()
         db.session.refresh(qc)

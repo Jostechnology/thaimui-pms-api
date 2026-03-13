@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, SalesItemTransactionType, SalesItemStatus, WorkRun
+from app.con_sqlalchemy import BreakType, EmployeeStatus, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, SalesItemStatus, WorkRun
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -207,14 +207,6 @@ class SalesOrderSchema(Schema):
     group_code = fields.String()
     group_name = fields.String()
 
-class SalesItemTransactionSchema(Schema):
-    transaction_id        = fields.Integer()
-    sales_item_id         = fields.Integer()
-    quantity              = fields.Integer()
-    type                  = fields.Enum(SalesItemTransactionType)
-    related_document_code = fields.String()
-    created_date          = fields.DateTime()
-    created_by            = fields.String()
 
 class SalesItemNoMaterialSchema(Schema):
     sales_item_id                = fields.Integer()
@@ -251,8 +243,6 @@ class SalesItemSchema(Schema):
     passed_qty                   = fields.Integer(dump_only=True)
     failed_qty                   = fields.Integer(dump_only=True)
 
-class SalesItemDetailSchema(SalesItemSchema):
-    sales_item_transactions = fields.List(fields.Nested(SalesItemTransactionSchema()))
 
 class QCFormSchema(Schema):
     qc_form_id              = fields.Integer()

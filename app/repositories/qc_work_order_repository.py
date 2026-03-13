@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, SalesItemTransaction, SalesOrder
+from app.con_sqlalchemy import QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -49,14 +49,19 @@ def get_qc_work_order_by_id(qc_work_order_id):
         raise
 
 
-def get_qc_work_order_with_sales_item_transactions(qc_work_order_id):
-    """Load QCWorkOrder → sales_item → sales_item_transactions for availability validation."""
+def get_qc_work_order_for_availability_check(qc_work_order_id):
+    """Load QCWorkOrder → sales_item → work_order → work_runs and qc_work_orders → test_results
+    so that available_for_test_qty can be computed from relations."""
     try:
         qc = (
             db.session.query(QCWorkOrder)
             .options(
                 selectinload(QCWorkOrder.sales_item)
-                    .selectinload(SalesItem.sales_item_transactions)
+                    .selectinload(SalesItem.work_order)
+                    .selectinload(WorkOrder.work_runs),
+                selectinload(QCWorkOrder.sales_item)
+                    .selectinload(SalesItem.qc_work_orders)
+                    .selectinload(QCWorkOrder.test_results),
             )
             .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
             .first()
