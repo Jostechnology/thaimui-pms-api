@@ -292,39 +292,40 @@ class SalesItem(AuditMixin):
     material_list = db.relationship('MaterialList', back_populates='sales_item')
     work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False)
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
-    sales_item_transactions = db.relationship('SalesItemTransaction', back_populates='sales_item')
 
-    # Right now we act as if 1 SalesItem per 1 WorkOrder
     @property
     def producing_qty(self):
-        """Items currently in-progress (not yet completed). Based on planned quantity."""
         if not self.work_order:
             return 0
         return sum(r.quantity for r in self.work_order.work_runs if r.status == WorkRunStatus.INPROGRESS)
 
     @property
     def produced_qty(self):
-        """Usable items produced — from PRODUCED transactions (fires on WorkRun completion)."""
-        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.PRODUCED)
+        if not self.work_order:
+            return 0
+        return sum(r.usable_qty or 0 for r in self.work_order.work_runs if r.status == WorkRunStatus.COMPLETED)
 
     @property
     def unavailable_for_test_qty(self):
-        """Items claimed by any test session (both active and finalized). IN_TESTING fires once per session
-        regardless of completion, so summing it already covers finalized sessions — no need to add passed/failed."""
-        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.IN_TESTING)
+        return sum(tr.claimed_qty for qc in self.qc_work_orders for tr in qc.test_results)
 
     @property
     def available_for_test_qty(self):
-        """Items produced but not yet claimed by any test session."""
         return self.produced_qty - self.unavailable_for_test_qty
 
     @property
     def passed_qty(self):
-        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED_PASSED)
+        return sum(
+            tr.claimed_qty for qc in self.qc_work_orders for tr in qc.test_results
+            if tr.overall_status == TestResultStatus.PASSED
+        )
 
     @property
     def failed_qty(self):
-        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED_FAILED)
+        return sum(
+            tr.claimed_qty for qc in self.qc_work_orders for tr in qc.test_results
+            if tr.overall_status == TestResultStatus.FAILED
+        )
 
 
 class MaterialList(AuditMixin):
@@ -576,22 +577,6 @@ class MaterialTransaction(AuditMixin):
 
     material_list = db.relationship('MaterialList', back_populates='transactions', lazy='noload')
 
-class SalesItemTransactionType(enum.Enum):
-    PRODUCED = 'PRODUCED'
-    IN_TESTING = 'IN_TESTING'
-    TESTED_PASSED = 'TESTED_PASSED'
-    TESTED_FAILED = 'TESTED_FAILED'
-
-class SalesItemTransaction(AuditMixin):
-    __tablename__ = "t_sales_item_transaction"
-
-    transaction_id = db.Column(db.Integer, primary_key=True)
-    sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
-    type = db.Column(db.Enum(SalesItemTransactionType), nullable=False)
-    related_document_code = db.Column(db.String(128), nullable=False)
-
-    sales_item = db.relationship('SalesItem', back_populates='sales_item_transactions', lazy='noload')
 
 class ComponentSpec(AuditMixin):
     __tablename__ = "t_component_spec"

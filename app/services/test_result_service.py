@@ -1,9 +1,8 @@
-from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, SalesItemTransactionType, SalesItem
+from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import test_result_repository, qc_work_order_repository
 from app.app import db
 from app.exception import NotFoundError, ValidationError
-from app.services import transaction_service
 
 
 def _resolve_status(val):
@@ -17,29 +16,13 @@ def _resolve_status(val):
         return TestResultStatus.PASSED
 
 
-def _create_tested_transactions(sales_item: SalesItem, test_result: TestResult):
-    """Fire TESTED_PASSED and TESTED_FAILED transactions based on individual item results."""
-    passed = sum(1 for i in test_result.test_result_items if i.result == TestResultStatus.PASSED)
-    failed = sum(1 for i in test_result.test_result_items if i.result == TestResultStatus.FAILED)
-    doc_code = str(test_result.test_result_id)
-    if passed > 0:
-        transaction_service.create_sales_item_transaction(
-            sales_item, doc_code, SalesItemTransactionType.TESTED_PASSED, passed
-        )
-    if failed > 0:
-        transaction_service.create_sales_item_transaction(
-            sales_item, doc_code, SalesItemTransactionType.TESTED_FAILED, failed
-        )
-
-
 def create_test_result(qc_work_order_id, data):
     """
     Phase 1 — claim items for a test session.
-    Fires IN_TESTING transaction for claimed_qty.
     Validates claimed_qty <= sales_item.available_for_test_qty.
     """
     try:
-        qc = qc_work_order_repository.get_qc_work_order_with_sales_item_transactions(qc_work_order_id)
+        qc = qc_work_order_repository.get_qc_work_order_for_availability_check(qc_work_order_id)
         sales_item = qc.sales_item
 
         claimed_qty = data.get("claimed_qty")
@@ -60,12 +43,6 @@ def create_test_result(qc_work_order_id, data):
             remark=data.get("remark"),
         )
         test_result_repository.create_test_result(test_result)
-        db.session.flush()
-
-        transaction_service.create_sales_item_transaction(
-            sales_item, str(test_result.test_result_id), SalesItemTransactionType.IN_TESTING, claimed_qty
-        )
-
         db.session.commit()
         db.session.refresh(test_result)
         return TestResultSchema().dump(test_result)
@@ -111,10 +88,6 @@ def finalize_test_result(test_result_id, data):
         overall = _resolve_status(data.get("overall_status"))
         test_result.overall_status = overall
         test_result.session_status = TestSessionStatus.COMPLETED
-
-        db.session.flush()
-
-        _create_tested_transactions(test_result.qc_work_order.sales_item, test_result)
 
         db.session.commit()
         db.session.refresh(test_result)
@@ -172,7 +145,7 @@ def get_test_results_by_doc_entry(doc_entry):
 
 
 def delete_test_result(test_result_id):
-    """Only INPROGRESS sessions can be deleted (IN_TESTING transaction would be orphaned otherwise)."""
+    """Only INPROGRESS sessions can be deleted."""
     try:
         test_result = test_result_repository.get_test_result_by_id(test_result_id)
         if not test_result:

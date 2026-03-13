@@ -1,7 +1,7 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import SalesItemSchema, SalesItemDetailSchema, SalesItemTrackingSchema
+from app.ma_sqlalchemy import SalesItemSchema, SalesItemTrackingSchema
 from app.services.sales_item_service import get_all_sales_items, create_sales_item, get_sales_item_detail, get_sales_item_tracking
 
 
@@ -30,7 +30,7 @@ def api_get_sales_item_list():
 def api_get_sales_item_detail(sales_item_id):
     try:
         result = get_sales_item_detail(sales_item_id)
-        return jsonify({"data": SalesItemDetailSchema().dump(result), "success": True}), 200
+        return jsonify({"data": SalesItemSchema().dump(result), "success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, SalesItemTransaction, TestResult, TestResultItem
+from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -12,12 +12,8 @@ def _test_result_options():
 
 
 def _test_result_finalize_options():
-    """Full chain needed for finalize — sales_item transactions for IN_TESTING write."""
     return [
         selectinload(TestResult.test_result_items),
-        selectinload(TestResult.qc_work_order)
-            .selectinload(QCWorkOrder.sales_item)
-            .selectinload(SalesItem.sales_item_transactions),
     ]
 
 
