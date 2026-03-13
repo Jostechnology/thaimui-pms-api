@@ -127,12 +127,10 @@ class WorkOrder(AuditMixin):
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
     quantity = db.Column(db.Integer, nullable=False, default=1)
-    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'))
-    current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order')
     item_components = db.relationship('ItemComponent', back_populates='work_order')
-    work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_order_id', back_populates='work_order')
+    work_runs = db.relationship('WorkRun', back_populates='work_order', cascade='all, delete-orphan')
 
 class PhaseStatus(enum.Enum):
     PENDING = 'PENDING'
@@ -143,12 +141,12 @@ class PhaseStatus(enum.Enum):
 class WorkPhase(AuditMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
-    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id'), nullable=False)
+    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
     phase_name = db.Column(db.String(100), nullable=False)
     phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.PENDING)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
-    work_order = db.relationship('WorkOrder', foreign_keys=[work_order_id], back_populates='work_phases', lazy='noload')
+    work_run = db.relationship('WorkRun', foreign_keys=[work_run_id], back_populates='work_phases', lazy='noload')
     breaks = db.relationship('WorkPhaseBreak', back_populates='work_phase', order_by='WorkPhaseBreak.break_start')
     assignments = db.relationship('WorkAssignment', back_populates='work_phase')
 
@@ -247,6 +245,32 @@ class WorkAssignment(AuditMixin):
     work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], back_populates='assignments', lazy='noload')
     employee = db.relationship('Employee', foreign_keys=[employee_id], back_populates='assignments')
 
+class WorkRunStatus(enum.Enum):
+    INPROGRESS = 'INPROGRESS'
+    COMPLETED = 'COMPLETED'
+
+class WorkRun(AuditMixin):
+    """One production attempt within a WorkOrder. Rework = new WorkRun on the same WorkOrder."""
+    __tablename__ = "t_work_run"
+    work_run_id = db.Column(db.Integer, primary_key=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False, default=1)           # planned/pick qty
+    usable_qty = db.Column(db.Integer, nullable=True)                     # set at completion — good items
+    completion_remark = db.Column(db.String(500), nullable=True)          # required when usable_qty < quantity
+    wms_pick_reference = db.Column(db.String(100), nullable=True)
+    status = db.Column(db.Enum(WorkRunStatus), nullable=False, default=WorkRunStatus.INPROGRESS)
+    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=True)
+    current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
+    work_order = db.relationship('WorkOrder', back_populates='work_runs', lazy='noload')
+    work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_run_id', back_populates='work_run')
+    test_results = db.relationship('TestResult', back_populates='work_run', cascade='all, delete-orphan')
+
+    @property
+    def defect_qty(self):
+        if self.usable_qty is None:
+            return None
+        return self.quantity - self.usable_qty
+
 class SalesItemStatus(enum.Enum):
     PENDING = 'PENDING'
     INPROGRESS = 'INPROGRESS'
@@ -273,23 +297,34 @@ class SalesItem(AuditMixin):
     # Right now we act as if 1 SalesItem per 1 WorkOrder
     @property
     def producing_qty(self):
-        if self.work_order and self.work_order.status != WorkOrderStatus.COMPLETED:
-            return self.work_order.quantity
-        return 0
+        """Items currently in-progress (not yet completed). Based on planned quantity."""
+        if not self.work_order:
+            return 0
+        return sum(r.quantity for r in self.work_order.work_runs if r.status == WorkRunStatus.INPROGRESS)
 
     @property
     def produced_qty(self):
-        if self.work_order and self.work_order.status == WorkOrderStatus.COMPLETED:
-            return self.work_order.quantity
-        return 0
+        """Usable items produced — from PRODUCED transactions (fires on WorkRun completion)."""
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.PRODUCED)
 
     @property
-    def queued_for_test_qty(self):
-        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.QUEUED_FOR_TEST)
+    def unavailable_for_test_qty(self):
+        """Items claimed by any test session (both active and finalized). IN_TESTING fires once per session
+        regardless of completion, so summing it already covers finalized sessions — no need to add passed/failed."""
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.IN_TESTING)
 
     @property
-    def tested_qty(self):
-        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED)
+    def available_for_test_qty(self):
+        """Items produced but not yet claimed by any test session."""
+        return self.produced_qty - self.unavailable_for_test_qty
+
+    @property
+    def passed_qty(self):
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED_PASSED)
+
+    @property
+    def failed_qty(self):
+        return sum(t.quantity for t in self.sales_item_transactions if t.type == SalesItemTransactionType.TESTED_FAILED)
 
 
 class MaterialList(AuditMixin):
@@ -313,17 +348,11 @@ class MaterialList(AuditMixin):
         total_added = sum(t.amount for t in self.transactions if t.type == 'ADD')
         return self.original_num - (total_removed - total_added)
 
-class QCWorkOrderStatus(enum.Enum):
-    PENDING = 'PENDING'
-    INPROGRESS = 'INPROGRESS'
-    PASSED = 'PASSED'
-    FAILED = 'FAILED'
-
 class QCWorkOrder(AuditMixin):
+    """Test instruction template for a SalesItem. Pure specification — no status."""
     __tablename__ = "t_qc_work_order"
     qc_work_order_id = db.Column(db.Integer, primary_key=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
-    qc_status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
     qc_date = db.Column(db.DateTime, nullable=True)
     qc_by = db.Column(db.String(100), nullable=True)
     quantity = db.Column(db.Integer, nullable=False, default=1)
@@ -331,7 +360,7 @@ class QCWorkOrder(AuditMixin):
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders')
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
     qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
-    test_results = db.relationship('TestResult', back_populates='qc_work_order', cascade='all, delete-orphan')
+    test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='noload')
 
 
 class QCForm(AuditMixin):
@@ -391,20 +420,32 @@ class TestResultStatus(enum.Enum):
     FAILED = 'FAILED'
 
 
+class TestSessionStatus(enum.Enum):
+    INPROGRESS = 'INPROGRESS'
+    COMPLETED  = 'COMPLETED'
+
+
 class TestResult(AuditMixin):
-    """บันทึกการทดสอบจริง — 1 QCWorkOrder มีได้หลาย TestResult (กรณีทดสอบซ้ำ)"""
+    """
+    One test session covering claimed_qty items from a SalesItem.
+    Phase 1 (INPROGRESS): created with claimed_qty — fires IN_TESTING transaction.
+    Phase 2 (COMPLETED):  finalized with per-item results — fires TESTED_PASSED/TESTED_FAILED.
+    """
     __tablename__ = "t_test_result"
-    test_result_id    = db.Column(db.Integer, primary_key=True)
-    qc_work_order_id  = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='CASCADE'), nullable=False)
-    test_date         = db.Column(db.DateTime, nullable=True, default=bangkok_now)
-    tested_by         = db.Column(db.String(100), nullable=True)
-    test_method       = db.Column(db.String(255), nullable=True)
+    test_result_id     = db.Column(db.Integer, primary_key=True)
+    qc_work_order_id   = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='SET NULL'), nullable=True)
+    work_run_id        = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='SET NULL'), nullable=True)
+    claimed_qty        = db.Column(db.Integer, nullable=False)
+    session_status     = db.Column(db.Enum(TestSessionStatus), nullable=False, default=TestSessionStatus.INPROGRESS)
+    test_date          = db.Column(db.DateTime, nullable=True)
+    tested_by          = db.Column(db.String(100), nullable=True)
+    test_method        = db.Column(db.String(255), nullable=True)
     standard_reference = db.Column(db.String(255), nullable=True)
-    overall_status    = db.Column(db.Enum(TestResultStatus), nullable=False, default=TestResultStatus.PASSED)
-    remark            = db.Column(db.String(500), nullable=True)
-    test_result_items = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
-    # Kept as lazy='select': test_result_service navigates test_result.qc_work_order.sales_item
-    qc_work_order = db.relationship('QCWorkOrder', back_populates='test_results')
+    overall_status     = db.Column(db.Enum(TestResultStatus), nullable=True)
+    remark             = db.Column(db.String(500), nullable=True)
+    test_result_items  = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
+    work_run           = db.relationship('WorkRun', back_populates='test_results', lazy='noload')
+    qc_work_order      = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
 
 
 class TestResultItem(AuditMixin):
@@ -537,8 +578,9 @@ class MaterialTransaction(AuditMixin):
 
 class SalesItemTransactionType(enum.Enum):
     PRODUCED = 'PRODUCED'
-    QUEUED_FOR_TEST = 'QUEUED_FOR_TEST'
-    TESTED = 'TESTED'
+    IN_TESTING = 'IN_TESTING'
+    TESTED_PASSED = 'TESTED_PASSED'
+    TESTED_FAILED = 'TESTED_FAILED'
 
 class SalesItemTransaction(AuditMixin):
     __tablename__ = "t_sales_item_transaction"

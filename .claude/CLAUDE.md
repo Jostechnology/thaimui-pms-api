@@ -30,6 +30,7 @@ The app is structured in three layers. Each layer has a single responsibility an
 - **Returns SQLAlchemy model instances — never dicts, never `jsonify()` objects**
 - Returning raw models allows services to be composed and reused by other services
 - For data list return  "total": result.total, "page": result.page, "pages": result.pages from pagination as well.
+- If X service needs to creat Y object, do NOT create Y object with X service. Pass needed data to create_y in Y service.
 
 ### Repository (`app/repositories/`)
 - Contains only SQLAlchemy queries — no business logic

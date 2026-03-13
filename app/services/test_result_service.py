@@ -1,8 +1,8 @@
-from app.con_sqlalchemy import QCWorkOrder, TestResult, TestResultItem, TestResultStatus, SalesItemTransactionType
+from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, SalesItemTransactionType, SalesItem
 from app.ma_sqlalchemy import TestResultSchema
-from app.repositories import test_result_repository
+from app.repositories import test_result_repository, qc_work_order_repository
 from app.app import db
-from app.exception import NotFoundError
+from app.exception import NotFoundError, ValidationError
 from app.services import transaction_service
 
 
@@ -17,23 +17,86 @@ def _resolve_status(val):
         return TestResultStatus.PASSED
 
 
+def _create_tested_transactions(sales_item: SalesItem, test_result: TestResult):
+    """Fire TESTED_PASSED and TESTED_FAILED transactions based on individual item results."""
+    passed = sum(1 for i in test_result.test_result_items if i.result == TestResultStatus.PASSED)
+    failed = sum(1 for i in test_result.test_result_items if i.result == TestResultStatus.FAILED)
+    doc_code = str(test_result.test_result_id)
+    if passed > 0:
+        transaction_service.create_sales_item_transaction(
+            sales_item, doc_code, SalesItemTransactionType.TESTED_PASSED, passed
+        )
+    if failed > 0:
+        transaction_service.create_sales_item_transaction(
+            sales_item, doc_code, SalesItemTransactionType.TESTED_FAILED, failed
+        )
+
+
 def create_test_result(qc_work_order_id, data):
+    """
+    Phase 1 — claim items for a test session.
+    Fires IN_TESTING transaction for claimed_qty.
+    Validates claimed_qty <= sales_item.available_for_test_qty.
+    """
     try:
-        qc = db.session.query(QCWorkOrder).filter(QCWorkOrder.qc_work_order_id == qc_work_order_id).first()
-        if not qc:
-            raise NotFoundError("ไม่พบ QC Work Order ที่ระบุ")
+        qc = qc_work_order_repository.get_qc_work_order_with_sales_item_transactions(qc_work_order_id)
+        sales_item = qc.sales_item
+
+        claimed_qty = data.get("claimed_qty")
+        if not claimed_qty or claimed_qty <= 0:
+            raise ValidationError("จำนวนที่ขอเทสต้องมากกว่า 0")
+
+        available = sales_item.available_for_test_qty
+        if claimed_qty > available:
+            raise ValidationError(
+                f"จำนวนที่ขอเทส ({claimed_qty}) มีมากกว่าจำนวนสินค้าที่สามารถเทสได้ ({available})"
+            )
 
         test_result = TestResult(
             qc_work_order_id=qc_work_order_id,
-            test_date=data.get("test_date"),
-            tested_by=data.get("tested_by"),
-            test_method=data.get("test_method"),
-            standard_reference=data.get("standard_reference"),
-            overall_status=_resolve_status(data.get("overall_status")),
+            work_run_id=data.get("work_run_id"),
+            claimed_qty=claimed_qty,
+            session_status=TestSessionStatus.INPROGRESS,
             remark=data.get("remark"),
         )
+        test_result_repository.create_test_result(test_result)
+        db.session.flush()
 
-        for it in data.get("items", []):
+        transaction_service.create_sales_item_transaction(
+            sales_item, str(test_result.test_result_id), SalesItemTransactionType.IN_TESTING, claimed_qty
+        )
+
+        db.session.commit()
+        db.session.refresh(test_result)
+        return TestResultSchema().dump(test_result)
+    except Exception as e:
+        db.session.rollback()
+        raise Exception(str(e))
+
+
+def finalize_test_result(test_result_id, data):
+    """
+    Phase 2 — submit test results and close the session.
+    Fires TESTED_PASSED / TESTED_FAILED transactions based on per-item results.
+    """
+    try:
+        test_result = test_result_repository.get_test_result_for_finalize(test_result_id)
+        if not test_result:
+            raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
+        if test_result.session_status == TestSessionStatus.COMPLETED:
+            raise ValidationError("เทสนี้จบไปแล้ว กรุณาตรวจสอบอีกครั้ง")
+
+        items_data = data.get("items", [])
+        if not items_data:
+            raise ValidationError("ไม่พบ TestItem กรุณาตรวจสอบอีกครั้ง")
+
+        test_result.test_date = data.get("test_date")
+        test_result.tested_by = data.get("tested_by")
+        test_result.test_method = data.get("test_method")
+        test_result.standard_reference = data.get("standard_reference")
+        test_result.remark = data.get("remark", test_result.remark)
+
+        for it in items_data:
             item = TestResultItem(
                 unit_number=it.get("unit_number"),
                 serial_no=it.get("serial_no"),
@@ -45,18 +108,16 @@ def create_test_result(qc_work_order_id, data):
             )
             test_result.test_result_items.append(item)
 
-        test_result_repository.create_test_result(test_result)
+        overall = _resolve_status(data.get("overall_status"))
+        test_result.overall_status = overall
+        test_result.session_status = TestSessionStatus.COMPLETED
+
         db.session.flush()
 
-        # Track tested quantity when result is PASSED
-        if test_result.overall_status == TestResultStatus.PASSED:
-            tested_qty = len(test_result.test_result_items)
-            if tested_qty > 0:
-                transaction_service.create_sales_item_transaction(
-                    qc.sales_item, test_result, SalesItemTransactionType.TESTED, tested_qty
-                )
+        _create_tested_transactions(test_result.qc_work_order.sales_item, test_result)
 
         db.session.commit()
+        db.session.refresh(test_result)
         return TestResultSchema().dump(test_result)
     except Exception as e:
         db.session.rollback()
@@ -82,53 +143,18 @@ def get_test_result_by_id(test_result_id):
 
 
 def update_test_result(test_result_id, data):
+    """Update metadata on an INPROGRESS session only. Cannot edit a finalized session."""
     try:
         test_result = test_result_repository.get_test_result_by_id(test_result_id)
         if not test_result:
             raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
+        if test_result.session_status == TestSessionStatus.COMPLETED:
+            raise ValidationError("Cannot edit a finalized test session")
 
-        prev_status = test_result.overall_status
-
-        if "test_date" in data:
-            test_result.test_date = data["test_date"]
-        if "tested_by" in data:
-            test_result.tested_by = data["tested_by"]
-        if "test_method" in data:
-            test_result.test_method = data["test_method"]
-        if "standard_reference" in data:
-            test_result.standard_reference = data["standard_reference"]
-        if "overall_status" in data:
-            test_result.overall_status = _resolve_status(data["overall_status"])
         if "remark" in data:
             test_result.remark = data["remark"]
-
-        if "items" in data:
-            test_result.test_result_items.clear()
-            for it in data["items"]:
-                item = TestResultItem(
-                    unit_number=it.get("unit_number"),
-                    serial_no=it.get("serial_no"),
-                    wll_measured=float(it.get("wll_measured")) if it.get("wll_measured") is not None else None,
-                    load_test_value=float(it.get("load_test_value")) if it.get("load_test_value") is not None else None,
-                    description=it.get("description"),
-                    result=_resolve_status(it.get("result")),
-                    remark=it.get("remark"),
-                )
-                test_result.test_result_items.append(item)
-
-        test_result_repository.update_test_result(test_result)
-        db.session.flush()
-
-        # Create TESTED transaction only when status transitions to PASSED
-        if prev_status != TestResultStatus.PASSED and test_result.overall_status == TestResultStatus.PASSED:
-            tested_qty = len(test_result.test_result_items)
-            if tested_qty > 0:
-                transaction_service.create_sales_item_transaction(
-                    test_result.qc_work_order.sales_item,
-                    test_result,
-                    SalesItemTransactionType.TESTED,
-                    tested_qty,
-                )
+        if "work_run_id" in data:
+            test_result.work_run_id = data["work_run_id"]
 
         db.session.commit()
         return TestResultSchema().dump(test_result)
@@ -146,10 +172,13 @@ def get_test_results_by_doc_entry(doc_entry):
 
 
 def delete_test_result(test_result_id):
+    """Only INPROGRESS sessions can be deleted (IN_TESTING transaction would be orphaned otherwise)."""
     try:
         test_result = test_result_repository.get_test_result_by_id(test_result_id)
         if not test_result:
             raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
+        if test_result.session_status == TestSessionStatus.COMPLETED:
+            raise ValidationError("Cannot delete a finalized test session")
         test_result_repository.delete_test_result(test_result_id)
         db.session.commit()
         return {"message": f"ลบ Test Result ID {test_result_id} สำเร็จ"}

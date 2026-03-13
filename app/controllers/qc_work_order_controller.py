@@ -4,7 +4,6 @@ from app.app import app
 from app.exception import AppException
 from flask import request, jsonify
 from app.ma_sqlalchemy import QCWorkOrderSchema, QCWorkOrderSchemaDetail, search_qc_work_order_schema
-from app.con_sqlalchemy import QCWorkOrderStatus
 from app.services.qc_work_order_service import (
     get_all_qc_work_orders,
     get_qc_work_order_by_id,
@@ -23,8 +22,7 @@ def api_get_qc_work_order_list():
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 10, type=int)
         search = request.args.get("search", "", type=str)
-        filter = request.args.get("filter", None, type=QCWorkOrderStatus)
-        data = {"page": page, "per_page": per_page, "search": search, "filter": filter}
+        data = {"page": page, "per_page": per_page, "search": search}
         result = get_all_qc_work_orders(data)
         return jsonify({
             "data": {"items": QCWorkOrderSchema(many=True).dump(result["items"])},

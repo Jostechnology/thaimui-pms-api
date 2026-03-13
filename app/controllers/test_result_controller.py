@@ -4,6 +4,7 @@ from app.app import app
 from flask import request, jsonify
 from app.services.test_result_service import (
     create_test_result,
+    finalize_test_result,
     get_test_results_by_qc_work_order,
     get_test_results_by_doc_entry,
     get_test_result_by_id,
@@ -19,6 +20,18 @@ def api_create_test_result(qc_work_order_id):
         data = request.get_json()
         result = create_test_result(qc_work_order_id, data)
         return jsonify({"data": result, "success": True}), 201
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/test_result/<int:test_result_id>/finalize", methods=["PUT"])
+@verify_required
+def api_finalize_test_result(test_result_id):
+    try:
+        data = request.get_json()
+        result = finalize_test_result(test_result_id, data)
+        return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

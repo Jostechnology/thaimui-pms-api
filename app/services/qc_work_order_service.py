@@ -1,6 +1,5 @@
-from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, SalesItemTransactionType
+from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem, SalesItemTransactionType
 from app.repositories import qc_work_order_repository
-from app.repositories import work_order_repository
 from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
 
@@ -85,7 +84,6 @@ def create_qc_work_order(data):
 
         qc = QCWorkOrder(
             sales_item_id=sales_item_id,
-            qc_status=QCWorkOrderStatus.PENDING,
             qc_date=data.get("qc_date"),
             qc_by=data.get("qc_by"),
             quantity=qc_quantity,
@@ -119,25 +117,10 @@ def create_qc_work_order(data):
         raise Exception(str(e))
 
 
-def _to_qc_status(val):
-    if val is None:
-        return None
-    if isinstance(val, QCWorkOrderStatus):
-        return val
-    if isinstance(val, str):
-        try:
-            return QCWorkOrderStatus[val.strip().upper()]
-        except KeyError:
-            pass
-    raise ValueError(f"Invalid QC status: {val}")
-
-
 def update_qc_work_order(qc_work_order_id, data):
     try:
         qc = qc_work_order_repository.get_qc_work_order_by_id(qc_work_order_id)
 
-        if "qc_status" in data:
-            qc.qc_status = _to_qc_status(data.get("qc_status"))
         if "qc_date" in data:
             qc.qc_date = data.get("qc_date")
         if "qc_by" in data:

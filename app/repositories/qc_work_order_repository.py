@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, SalesOrder, TestResult, TestResultItem
+from app.con_sqlalchemy import QCWorkOrder, SalesItem, SalesItemTransaction, SalesOrder
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -9,12 +9,9 @@ from app.exception import NotFoundError
 def _qc_work_order_options():
     """Eager-load exactly what QCWorkOrderSchema needs — no deep SalesItem nesting."""
     return [
-        # Only the SalesItem scalar fields are used (item_code, item_name, doc_entry)
         selectinload(QCWorkOrder.sales_item),
         selectinload(QCWorkOrder.qc_form),
         selectinload(QCWorkOrder.qc_items),
-        selectinload(QCWorkOrder.test_results)
-            .selectinload(TestResult.test_result_items),
     ]
 
 
@@ -28,8 +25,6 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
                     QCWorkOrder.remark.ilike(f"%{search}%"),
                 )
             )
-        if filter:
-            query = query.filter(QCWorkOrder.qc_status == filter)
         query = query.options(selectinload(QCWorkOrder.sales_item))
         result = query.order_by(QCWorkOrder.created_date.desc()).paginate(
             page=page, per_page=limit, error_out=False
@@ -44,6 +39,25 @@ def get_qc_work_order_by_id(qc_work_order_id):
         qc = (
             db.session.query(QCWorkOrder)
             .options(*_qc_work_order_options())
+            .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
+            .first()
+        )
+        if not qc:
+            raise NotFoundError(f"ไม่พบ QC Work Order ID -> {qc_work_order_id}")
+        return qc
+    except Exception:
+        raise
+
+
+def get_qc_work_order_with_sales_item_transactions(qc_work_order_id):
+    """Load QCWorkOrder → sales_item → sales_item_transactions for availability validation."""
+    try:
+        qc = (
+            db.session.query(QCWorkOrder)
+            .options(
+                selectinload(QCWorkOrder.sales_item)
+                    .selectinload(SalesItem.sales_item_transactions)
+            )
             .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
             .first()
         )

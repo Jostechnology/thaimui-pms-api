@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkRun, WorkRunStatus, ComponentMaterialUsage, ItemComponent, SalesItemTransactionType
 from app.repositories import work_order_repository
 from app.app import db
 from app.services import sales_item_service, transaction_service
@@ -31,7 +31,6 @@ def create_work_order(data):
         # ตรวจสอบว่า SalesItem มีอยู่จริง
         sales_item = sales_item_service.get_sales_item_by_id(sales_item_id)
 
-        # ตรวจสอบว่ายังไม่มี WorkOrder สำหรับ SalesItem นี้
         if sales_item.work_order:
             raise UniqueError("มี Work Order สำหรับ Sales Item นี้อยู่แล้ว")
 
@@ -65,20 +64,6 @@ def create_work_order(data):
                 item_component.material_usages.append(material_usage)
 
         db.session.add(work_order)
-        db.session.flush()
-
-        # Create MaterialTransaction(REMOVE) for each material used
-        for comp in item_components_data:
-            for usage in comp.get("material_usage", []):
-                material = material_map[usage.get("material_list_id")]
-                transaction_service.create_material_transaction(
-                    material, work_order, "REMOVE", usage.get("quantity_used")
-                )
-
-        # Track production
-        transaction_service.create_sales_item_transaction(
-            sales_item, work_order, SalesItemTransactionType.PRODUCED, quantity
-        )
 
         db.session.commit()
         return work_order

@@ -1,15 +1,23 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, TestResult, TestResultItem
+from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, SalesItemTransaction, TestResult, TestResultItem
 from app.app import db
 from sqlalchemy.orm import selectinload
 
 
 def _test_result_options():
-    """Eager-load what TestResultSchema and test_result_service need."""
+    """Eager-load what TestResultSchema needs."""
     return [
         selectinload(TestResult.test_result_items),
-        # test_result_service navigates test_result.qc_work_order.sales_item
+        selectinload(TestResult.work_run),
+    ]
+
+
+def _test_result_finalize_options():
+    """Full chain needed for finalize — sales_item transactions for IN_TESTING write."""
+    return [
+        selectinload(TestResult.test_result_items),
         selectinload(TestResult.qc_work_order)
-            .selectinload(QCWorkOrder.sales_item),
+            .selectinload(QCWorkOrder.sales_item)
+            .selectinload(SalesItem.sales_item_transactions),
     ]
 
 
@@ -39,6 +47,18 @@ def get_test_result_by_id(test_result_id):
         return (
             db.session.query(TestResult)
             .options(*_test_result_options())
+            .filter(TestResult.test_result_id == test_result_id)
+            .first()
+        )
+    except Exception:
+        raise
+
+
+def get_test_result_for_finalize(test_result_id):
+    try:
+        return (
+            db.session.query(TestResult)
+            .options(*_test_result_finalize_options())
             .filter(TestResult.test_result_id == test_result_id)
             .first()
         )
