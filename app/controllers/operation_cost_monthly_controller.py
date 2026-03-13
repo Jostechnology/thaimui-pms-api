@@ -16,7 +16,9 @@ def api_get_all_operation_cost_monthly():
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 10, type=int)
         search = request.args.get("search", "", type=str)
-        data = {"page": page, "per_page": per_page, "search": search}
+        month = request.args.get("month", "", type=str)
+        data = {"page": page, "per_page": per_page, "search": search, "month": month}
+        
         result = get_all_operation_cost_monthly(data)
         return jsonify({"data": result, "success": True}), 200
     except Exception as e:

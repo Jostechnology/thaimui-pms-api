@@ -8,7 +8,8 @@ def get_all_operation_cost_monthly(data):
         page = data.get("page", 1)
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = operation_cost_monthly_repository.get_all_operation_cost_monthly(page, per_page, search)
+        month = data.get("month", "")
+        result = operation_cost_monthly_repository.get_all_operation_cost_monthly(page, per_page, search, month)
         return {"items": OperationCostMonthlySchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
     except Exception:
         raise
