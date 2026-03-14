@@ -76,6 +76,8 @@ from .controllers import test_result_controller
 from .controllers import inventory_controller
 from .controllers import item_component_controller
 from .controllers import work_run_controller
+from .controllers import machine_controller
+from .controllers import pm_machine_controller
 
 # with app.app_context():
 #     db.create_all()

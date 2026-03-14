@@ -327,6 +327,35 @@ class SalesItem(AuditMixin):
             if tr.overall_status == TestResultStatus.FAILED
         )
 
+class MachineStatus(enum.Enum):
+    RUNNING = "RUNNING"
+    DOWN = "DOWN"
+    IDLE = "IDLE"
+    OFFLINE = "OFFLINE"
+
+class Machine(AuditMixin):
+    __tablename__ = "m_machine"
+    machine_id = db.Column(db.Integer, primary_key=True)
+    machine_code = db.Column(db.String(50), nullable=False, unique=True)
+    machine_name = db.Column(db.String(255), nullable=False)
+    machine_description = db.Column(db.String(500))
+    manufacturer = db.Column(db.String(255), nullable=True)
+    purchase_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    maintenances = db.relationship('MachineMaintenance', back_populates='machine', lazy='noload')
+
+class MachineMaintenance(AuditMixin):
+    __tablename__ = "t_machine_maintenance"
+    maintenance_id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('m_machine.machine_id', ondelete='CASCADE'), nullable=False)
+    maintenance_date = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    maintenance_type = db.Column(db.String(50), nullable=False) # Preventive, Corrective
+    description = db.Column(db.String(500), nullable=True)
+    fix_cost = db.Column(db.Float, nullable=True, default=0)
+    machine = db.relationship('Machine', foreign_keys=[machine_id], back_populates='maintenances', lazy='noload')
+
+
 
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"
