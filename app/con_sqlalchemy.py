@@ -327,6 +327,22 @@ class SalesItem(AuditMixin):
             if tr.overall_status == TestResultStatus.FAILED
         )
 
+class MachineStatus(enum.Enum):
+    RUNNING = "RUNNING"
+    DOWN = "DOWN"
+    IDLE = "IDLE"
+    OFFLINE = "OFFLINE"
+
+class Machine(AuditMixin):
+    __tablename__ = "m_machine"
+    machine_id = db.Column(db.Integer, primary_key=True)
+    machine_code = db.Column(db.String(50), nullable=False, unique=True)
+    machine_name = db.Column(db.String(255), nullable=False)
+    machine_description = db.Column(db.String(500))
+    manufacturer = db.Column(db.String(255), nullable=True)
+    purchase_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
 
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"

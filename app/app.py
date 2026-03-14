@@ -79,6 +79,7 @@ from .controllers import work_run_controller
 
 # with app.app_context():
 #     db.create_all()
+from .controllers import machine_controller
 
 @app.route('/api/health_check', methods=['POST'])
 def health_check():

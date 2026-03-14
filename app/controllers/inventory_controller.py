@@ -11,12 +11,9 @@ from app.services.inventory_service import (
 )
 
 #API สำหรับ "จดประวัติ (เบิกออก/รับคืน)"
-@app.route("/api/material/transaction", methods=["POST", "OPTIONS"])
+@app.route("/api/material/transaction", methods=["POST"])
 @verify_required
 def api_record_material_transaction():
-    if request.method == "OPTIONS":
-        return jsonify({"success": True}), 200
-
     try:
         data = request.get_json()
         
@@ -45,14 +42,10 @@ def api_record_material_transaction():
         
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
-
-
-@app.route("/api/material/tracking", methods=["GET", "OPTIONS"])
+    
+@app.route("/api/material/tracking", methods=["GET"])
 @verify_required
 def api_get_all_material_tracking():
-    if request.method == "OPTIONS":
-        return jsonify({"success": True}), 200
-
     try:
         search = request.args.get("search", None)
         tracking_type = request.args.get("type", None)
@@ -63,12 +56,9 @@ def api_get_all_material_tracking():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-@app.route("/api/material/summary/<int:sales_item_id>", methods=["GET", "OPTIONS"])
+@app.route("/api/material/summary/<int:sales_item_id>", methods=["GET"])
 @verify_required
 def api_get_material_summary(sales_item_id):
-    if request.method == "OPTIONS":
-        return jsonify({"success": True}), 200
-
     try:
         result = get_material_tracking_summary(sales_item_id)
         
@@ -78,12 +68,9 @@ def api_get_material_summary(sales_item_id):
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/material/history/<int:material_list_id>", methods=["GET", "OPTIONS"])
+@app.route("/api/material/history/<int:material_list_id>", methods=["GET"])
 @verify_required
 def api_get_material_history(material_list_id):
-    if request.method == "OPTIONS":
-        return jsonify({"success": True}), 200
-
     try:
         result = get_material_history_service(material_list_id)
         status_code = 200 if result.get("success") else 400
