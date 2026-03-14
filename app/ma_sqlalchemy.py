@@ -67,20 +67,6 @@ class EmployeeSalaryHistorySchema(Schema):
     effective_date = fields.DateTime()
     remark = fields.String()
 
-class MachineSchema(Schema):
-    machine_id = fields.Integer()
-    machine_code = fields.String()
-    machine_name = fields.String()
-    machine_description = fields.String(allow_none=True)
-    manufacturer = fields.String(allow_none=True)
-    purchase_date = fields.DateTime(allow_none=True)
-    status = fields.Enum(MachineStatus)
-    is_active = fields.Boolean()
-    created_date = fields.DateTime()
-    updated_date = fields.DateTime()
-    created_by = fields.String(allow_none=True)
-    updated_by = fields.String(allow_none=True)
-
 class MaterialListSchema(Schema):
     material_list_id = fields.Integer()
     sales_item_id = fields.Integer()
@@ -473,3 +459,13 @@ class MachineSchema(Schema):
     updated_date = fields.DateTime()
     created_by = fields.String(allow_none=True)
     updated_by = fields.String(allow_none=True)
+
+class MachineMaintenanceSchema(Schema):
+    maintenance_id = fields.Integer()
+    machine_id = fields.Integer()
+    maintenance_date = fields.DateTime()
+    maintenance_type = fields.String() # Preventive, Corrective
+    description = fields.String(allow_none=True)
+    fix_cost = fields.Float(allow_none=True)
+    machine = fields.Nested(MachineSchema, dump_default=None)
+    created_date = fields.DateTime()
