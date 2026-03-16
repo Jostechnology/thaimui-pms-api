@@ -390,7 +390,7 @@ class QCWorkOrder(AuditMixin):
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders')
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
     qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
-    test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='noload')
+    test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='selectin')
 
 
 class QCForm(AuditMixin):
