@@ -2,7 +2,7 @@ from app.con_sqlalchemy import OperationCostMonthly
 from app.ma_sqlalchemy import OperationCostMonthlySchema
 from app.repositories import operation_cost_monthly_repository
 from app.app import db
-
+from app.exception import NotFoundError
 def get_all_operation_cost_monthly(data):
     try:
         page = data.get("page", 1)
@@ -18,13 +18,17 @@ def get_operation_cost_monthly_by_id(operation_cost_monthly_id):
     try:
         operation_cost_monthly = operation_cost_monthly_repository.get_operation_cost_monthly_by_id(operation_cost_monthly_id)
         if not operation_cost_monthly:
-            raise Exception(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
+            raise NotFoundError(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
         return OperationCostMonthlySchema().dump(operation_cost_monthly)
     except Exception:
         raise
 
 def create_operation_cost_monthly(data):
     try:
+        #all field must >= 0
+        for key, value in data.items():
+            if key != "operation_cost_date" and value is not None and value < 0:
+                raise ValueError(f"{key} must be greater than or equal to 0")
         operation_cost_monthly = OperationCostMonthly(
             operation_cost_date=data.get("operation_cost_date"),
             depreciation_building_cost=data.get("depreciation_building_cost", 0),
@@ -47,7 +51,7 @@ def update_operation_cost_monthly(operation_cost_monthly_id, data):
     try:
         operation_cost_monthly = operation_cost_monthly_repository.get_operation_cost_monthly_by_id(operation_cost_monthly_id)
         if not operation_cost_monthly:
-            raise Exception(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
+            raise NotFoundError(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
 
         for key, value in data.items():
             if hasattr(operation_cost_monthly, key):
@@ -63,7 +67,7 @@ def delete_operation_cost_monthly(operation_cost_monthly_id):
     try:
         operation_cost_monthly = operation_cost_monthly_repository.get_operation_cost_monthly_by_id(operation_cost_monthly_id)
         if not operation_cost_monthly:
-            raise Exception(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
+            raise NotFoundError(f"Operation Cost Monthly id {operation_cost_monthly_id} not found")
         
         db.session.delete(operation_cost_monthly)
         db.session.commit()
