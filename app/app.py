@@ -26,6 +26,10 @@ CORS(app)  # เปิดการเชื่อมต่อจากทุก�
 app.config['SQLALCHEMY_DATABASE_URI'] = connectdb  # กําหนด URI ของฐานข้อมูล
 app.config['JSON_SORT_KEYS'] = False  # แก้ไขการสะกดผิด
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+}
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
 db = SQLAlchemy(app)
@@ -68,11 +72,16 @@ from .controllers import sales_order_controller
 from .controllers import employee_salary
 from .controllers import qc_work_order_controller
 from .controllers import test_certificate_controller
+from .controllers import test_result_controller
+from .controllers import inventory_controller
 from .controllers import item_component_controller
 from .controllers import operation_cost_monthly_controller
+from .controllers import work_run_controller
+from .controllers import machine_controller
+from .controllers import pm_machine_controller
 
-with app.app_context():
-    db.create_all()
+# with app.app_context():
+#     db.create_all()
 
 @app.route('/api/health_check', methods=['POST'])
 def health_check():

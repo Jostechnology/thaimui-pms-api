@@ -1,5 +1,4 @@
-from app.ma_sqlalchemy import SalesOrderSearchSchema
-from app.repositories import sales_order_repository
+from app.repositories import material_repository, sales_item_repository, sales_order_repository
 from app.extensions import center_service
 from app.app import db
 from app.services import work_order_service
@@ -9,13 +8,65 @@ from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList
 def search_sales_order(data):
     try:
         page = data.get("page", 1)
-        limit = data.get("limit", 10)
+        per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = sales_order_repository.search_sales_order(page, limit, search)
-        sales_orders = SalesOrderSearchSchema(many=True).dump(result)
-        return sales_orders
+        result = sales_order_repository.search_sales_order(page, per_page, search)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
+
+
+def get_all_sales_orders(data):
+    try:
+        page = data.get("page", 1)
+        per_page = data.get("per_page", 10)
+        search = data.get("search", "")
+        result = sales_order_repository.get_all_sales_orders(page, per_page, search)
+
+        items_data = []
+        for row in result.items:
+            so = row.SalesOrder
+            items_data.append({
+                "doc_entry": so.doc_entry,
+                "doc_num": so.doc_num,
+                "card_code": so.card_code,
+                "card_name": so.card_name,
+                "slp_code": so.slp_code,
+                "slp_name": so.slp_name,
+                "bpl_code": so.bpl_code,
+                "bpl_name": so.bpl_name,
+                "group_code": so.group_code,
+                "group_name": so.group_name,
+                "created_date": so.created_date.strftime("%Y-%m-%d %H:%M:%S") if so.created_date else None,
+                "items_total": row.items_total,
+                "quantity_to_produce": row.quantity_to_produce,
+                "produced_qty": row.produced_qty,
+                "qc_count": row.qc_count,
+                "qc_passed": row.qc_passed,
+                "qc_failed": row.qc_failed,
+            })
+
+        return {
+            "items": items_data,
+            "total": result.total,
+            "page": result.page,
+            "pages": result.pages,
+        }
+    except Exception:
+        raise
+
+def get_sales_items_from_sales_order(doc_entry):
+    try:
+        return sales_item_repository.get_sales_items_by_doc_entry(doc_entry)
+    except Exception:
+        raise
+
+def get_material_list_from_sales_order(doc_entry):
+    try:
+        return material_repository.get_material_list_from_doc_entry(doc_entry)
+    except Exception:
+        raise
+
 
 def get_sales_order_detail(doc_entry):
     try:
@@ -77,7 +128,7 @@ def create_sales_order(data):
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
                     item_description=mat.get("item_description"),
-                    item_num=mat.get("item_num"),
+                    original_num=mat.get("item_num"),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
                     

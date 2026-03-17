@@ -1,7 +1,7 @@
 from app.con_sqlalchemy import PhaseStatus, WorkOrderStatus, WorkPhase, WorkAssignment, BreakType, WorkPhaseBreak, bangkok_now
 import unicodedata
 from app.ma_sqlalchemy import WorkPhaseSchema, WorkOrderSchema
-from app.repositories import work_order_repository, work_phase_repository, employee_salary_repository
+from app.repositories import work_order_repository, work_phase_repository, work_run_repository, employee_salary_repository
 from app.app import db
 from app.exception import MissingFieldsError, NotFoundError
 
@@ -31,7 +31,8 @@ def get_work_phase_detail(work_phase_id):
             work_ms = 0
 
         total_time_spent_seconds = work_ms / 1000
-        num_employees = len(work_phase.employee_list) if work_phase.employee_list else 1
+        employees = [a.employee for a in work_phase.assignments]
+        num_employees = len(employees) if employees else 1
 
         # Per-employee time (split evenly)
         per_employee_seconds = total_time_spent_seconds / num_employees if num_employees > 0 else 0
@@ -39,7 +40,7 @@ def get_work_phase_detail(work_phase_id):
         employee_breakdown = []
         total_labor_cost = 0.0
 
-        for emp in work_phase.employee_list:
+        for emp in employees:
             # Get salary at the time the phase was created
             salary = employee_salary_repository.get_salary_at_date(emp.employee_id, work_phase.created_date)
             if salary is None:
@@ -61,8 +62,9 @@ def get_work_phase_detail(work_phase_id):
                 "net_cost": net_cost,
             })
 
-        # Get work order info
-        work_order = work_order_repository.get_work_order_by_id(work_phase.work_order_id)
+        # Get work run and work order info for doc_num
+        work_run = work_run_repository.get_work_run_by_id(work_phase.work_run_id)
+        work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id) if work_run else None
 
         # Serialize breaks
         breaks_data = []
@@ -83,7 +85,7 @@ def get_work_phase_detail(work_phase_id):
             "created_date": work_phase.created_date.isoformat() if work_phase.created_date else None,
             "start_date": work_phase.start_date.isoformat() if work_phase.start_date else None,
             "end_date": work_phase.end_date.isoformat() if work_phase.end_date else None,
-            "work_order_id": work_phase.work_order_id,
+            "work_run_id": work_phase.work_run_id,
             "doc_num": str(work_order.doc_num) if work_order else "",
             "total_time_spent_seconds": round(total_time_spent_seconds, 2),
             "total_labor_cost": round(total_labor_cost, 2),
@@ -97,10 +99,10 @@ def create_work_phase(data):
     try:
         work_phases = []
         items = data.get("items", [])
-        work_order_id = items[0].get("work_order_id") if items else None
+        work_run_id = items[0].get("work_run_id") if items else None
         for item in items:
             work_phase = WorkPhase(
-                work_order_id=work_order_id,
+                work_run_id=work_run_id,
                 phase_name=item.get("phase_name"),
             )
             work_phase_repository.save_work_phase(work_phase)
@@ -125,8 +127,9 @@ def update_work_phase(data):
         results = []
         first_work_phase_id = data.get("items", [{}])[0].get("work_phase_id")
         first_work_phase = work_phase_repository.get_work_phase_by_id(first_work_phase_id)
-        work_order_id = first_work_phase.work_order_id if first_work_phase else None
-        work_order = work_order_repository.get_work_order_by_id(work_order_id)
+        work_run_id = first_work_phase.work_run_id if first_work_phase else None
+        work_run = work_run_repository.get_work_run_by_id(work_run_id)
+        work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id) if work_run else None
         for item in data.get("items", []):
             work_phase_id = item.get("work_phase_id")
             work_phase = work_phase_repository.get_work_phase_by_id(work_phase_id)
@@ -134,7 +137,7 @@ def update_work_phase(data):
                 raise ValueError(f"Cannot update COMPLETED work phase id {work_phase_id}")
             if not work_phase:
                 raise NotFoundError(f"Work phase id {work_phase_id} not found")
-            
+
             if "phase_name" in item:
                 work_phase.phase_name = item["phase_name"]
 
@@ -147,9 +150,9 @@ def update_work_phase(data):
                 if current_status == PhaseStatus.PENDING and new_status == PhaseStatus.INPROGRESS:
                     work_phase.phase_status = PhaseStatus.INPROGRESS
                     work_phase.start_date = now
-                    work_phase.start_date = now
-                    work_order.current_phase = work_phase
-                    work_order.status = WorkOrderStatus.INPROGRESS
+                    work_run.current_phase = work_phase
+                    if work_order:
+                        work_order.status = WorkOrderStatus.INPROGRESS
                 
                 elif current_status == PhaseStatus.INPROGRESS and new_status == PhaseStatus.PAUSED:
                     work_phase.phase_status = PhaseStatus.PAUSED

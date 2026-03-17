@@ -1,35 +1,25 @@
-from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkOrderStatus
-from app.ma_sqlalchemy import WorkOrderSchema, SalesOrderSchema
+from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkRun, WorkRunStatus, ComponentMaterialUsage, ItemComponent
 from app.repositories import work_order_repository
 from app.app import db
-from app.services import sales_item_service
-from app.con_sqlalchemy import ComponentMaterialUsage, ItemComponent, WorkOrder
+from app.services import sales_item_service, transaction_service
 from app.exception import NotFoundError, UniqueError
 
 def get_all_work_orders(data):
     try:
         page = data.get("page", 1)
-        limit = data.get("limit", 10)
+        per_page = data.get("per_page", 10)
         search = data.get("search", "")
         filter = data.get("filter", "")
         month = data.get("month", "")
-        result = work_order_repository.get_all_work_orders(page, limit, search,filter, month)
-        return {"items": WorkOrderSchema(many=True).dump(result["items"]), "total_pages": result["total_pages"]}
-    except Exception:
-        raise
-
-def get_sales_orders_for_qc(search="", statuses = []):
-    try:
-        statuses = [WorkOrderStatus(s) for s in statuses] if statuses else []
-        items = work_order_repository.get_sales_orders_for_qc(search, statuses)
-        return SalesOrderSchema(many=True).dump(items)
+        result = work_order_repository.get_all_work_orders(page, per_page, search,filter, month)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
 
 def get_work_order_by_id(work_order_id):
     try:
         work_order = work_order_repository.get_work_order_by_id(work_order_id)
-        return WorkOrderSchema().dump(work_order)
+        return work_order
     except Exception:
         raise
 
@@ -41,50 +31,29 @@ def create_work_order(data):
         # ตรวจสอบว่า SalesItem มีอยู่จริง
         sales_item = sales_item_service.get_sales_item_by_id(sales_item_id)
 
-        # ตรวจสอบว่ายังไม่มี WorkOrder สำหรับ SalesItem นี้
         if sales_item.work_order:
             raise UniqueError("มี Work Order สำหรับ Sales Item นี้อยู่แล้ว")
 
-        # สร้าง map ของ material_list ที่อยู่ใน SalesItem นี้
+        quantity = data.get("quantity") or sales_item.item_num
+
         material_map = {m.material_list_id: m for m in sales_item.material_list}
 
-        # ตรวจสอบ material ทุกตัวในทุก component ว่ามีอยู่จริงและมีจำนวนเพียงพอ
+        # Validate that all materials belong to this SalesItem
         for comp in item_components_data:
-            material_usage_list = comp.get("material_usage", [])
-            for usage in material_usage_list:
-                material_list_id = usage.get("material_list_id")
-                quantity_used = usage.get("quantity_used", 0)
+            for usage in comp.get("material_usage", []):
+                if usage.get("material_list_id") not in material_map:
+                    raise NotFoundError(f"Material ID {usage.get('material_list_id')} ไม่ได้อยู่ใน Sales Item นี้")
 
-                if material_list_id not in material_map:
-                    raise NotFoundError(
-                        f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้"
-                    )
-
-                material = material_map[material_list_id]
-                # คำนวณจำนวนที่ถูกใช้ไปแล้วจาก WorkOrder อื่น
-                already_used = sum(
-                    u.quantity_used for u in material.component_usages
-                )
-                available = material.item_num - already_used
-                if quantity_used > available:
-                    raise NotFoundError(
-                        f"วัสดุ '{material.item_name}' (ID: {material_list_id}) ไม่เพียงพอ "
-                        f"คงเหลือ: {available}, ต้องการ: {quantity_used}"
-                    )
-                material.item_num -= quantity_used  # อัปเดตจำนวนคงเหลือใน MaterialList
-
-        # สร้าง WorkOrder
         work_order = WorkOrder(
             doc_num=sales_item.doc_num,
             doc_entry=sales_item.doc_entry,
             sales_item_id=sales_item_id,
+            quantity=quantity,
         )
 
-        # สร้าง ItemComponent + ComponentMaterialUsage
+        # Create ItemComponent + ComponentMaterialUsage
         for comp in item_components_data:
-            item_component = ItemComponent(
-                component_name=comp.get("component_name", ""),
-            )
+            item_component = ItemComponent(component_name=comp.get("component_name", ""))
             work_order.item_components.append(item_component)
 
             for usage in comp.get("material_usage", []):
@@ -95,8 +64,9 @@ def create_work_order(data):
                 item_component.material_usages.append(material_usage)
 
         db.session.add(work_order)
+
         db.session.commit()
-        return WorkOrderSchema().dump(work_order)
+        return work_order
     except Exception:
         db.session.rollback()
         raise

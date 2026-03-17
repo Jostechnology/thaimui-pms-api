@@ -1,21 +1,17 @@
-from app.con_sqlalchemy import QCWorkOrder, QCWorkOrderStatus, QCForm, QCItem, SalesItem, WorkOrderStatus
-from app.ma_sqlalchemy import QCWorkOrderSchema,search_qc_work_order_schema
+from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem
 from app.repositories import qc_work_order_repository
-from app.repositories import work_order_repository
 from app.app import db
-from app.ma_sqlalchemy import SalesItemSchema
+from app.services import sales_item_service, sales_order_service, transaction_service
+from app.exception import ValidationError
 
 def get_all_qc_work_orders(data):
     try:
         page = data.get("page", 1)
-        limit = data.get("limit", 10)
+        per_page = data.get("per_page", 10)
         search = data.get("search", "")
         filter = data.get("filter", None)
-        result = qc_work_order_repository.get_all_qc_work_orders(page, limit, search, filter)
-        return {
-            "items": QCWorkOrderSchema(many=True).dump(result["items"]),
-            "total_pages": result["total_pages"],
-        }
+        result = qc_work_order_repository.get_all_qc_work_orders(page, per_page, search, filter)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
 
@@ -23,17 +19,7 @@ def get_all_qc_work_orders(data):
 def get_qc_work_order_by_id(qc_work_order_id):
     try:
         qc = qc_work_order_repository.get_qc_work_order_by_id(qc_work_order_id)
-        return QCWorkOrderSchema().dump(qc)
-    except Exception:
-        raise
-
-
-def get_sales_items_for_qc(search="", statuses = []):
-    
-    try:
-        statuses = [WorkOrderStatus(s) for s in statuses] if statuses else []
-        items = work_order_repository.get_sales_items_for_qc(search, statuses)
-        return SalesItemSchema(many=True).dump(items)
+        return qc
     except Exception:
         raise
 
@@ -86,16 +72,27 @@ def create_qc_work_order(data):
         if not sales_item_id:
             raise Exception("กรุณาระบุ Sales Item")
 
-        # ตรวจสอบสถานะ WorkOrder ผ่าน SalesItem
-        sales_item = db.session.query(SalesItem).filter_by(sales_item_id=sales_item_id).first()
+        sales_item = sales_item_service.get_sales_item_by_id(sales_item_id)
         if not sales_item:
             raise Exception(f"ไม่พบ Sales Item ID: {sales_item_id}")
 
+        material_usage_data = data.get("items", [])
+        qc_quantity = data.get("salesItemQuantity", 1)
+        
+        planned_qty = sales_item.item_num
+        existing_qc_qty = sum(qc.quantity for qc in sales_item.qc_work_orders)                                                                
+        if existing_qc_qty + qc_quantity > planned_qty:              
+            raise ValidationError(f"จำนวน QC รวม ({existing_qc_qty + qc_quantity}) เกินจำนวนที่วางแผนผลิต ({planned_qty})")      
+                
+        material_in_sales_order = sales_order_service.get_material_list_from_sales_order(sales_item.doc_entry)
+
+        material_map = {m.material_list_id: m for m in material_in_sales_order}
+
         qc = QCWorkOrder(
             sales_item_id=sales_item_id,
-            qc_status=QCWorkOrderStatus.PENDING,
             qc_date=data.get("qc_date"),
             qc_by=data.get("qc_by"),
+            quantity=qc_quantity,
             remark=data.get("remark"),
         )
         qc = qc_work_order_repository.create_qc_work_order(qc)
@@ -105,37 +102,33 @@ def create_qc_work_order(data):
         for item in _build_qc_items(qc.qc_work_order_id, data.get("items", [])):
             db.session.add(item)
 
+        # Create MaterialTransaction(REMOVE) for each material consumed
+        if material_usage_data:
+            for usage in material_usage_data:
+                material = material_map[usage.get("material_list_id")]
+                transaction_service.create_material_transaction(
+                    material, qc.qc_work_order_id, "REMOVE", int(usage.get("quantity"))
+                )
+
         db.session.commit()
         db.session.refresh(qc)
-        return QCWorkOrderSchema().dump(qc)
+        return qc
     except Exception as e:
         db.session.rollback()
         raise Exception(str(e))
-
-
-def _to_qc_status(val):
-    if val is None:
-        return None
-    if isinstance(val, QCWorkOrderStatus):
-        return val
-    if isinstance(val, str):
-        try:
-            return QCWorkOrderStatus[val.strip().upper()]
-        except KeyError:
-            pass
-    raise ValueError(f"Invalid QC status: {val}")
 
 
 def update_qc_work_order(qc_work_order_id, data):
     try:
         qc = qc_work_order_repository.get_qc_work_order_by_id(qc_work_order_id)
 
-        if "qc_status" in data:
-            qc.qc_status = _to_qc_status(data.get("qc_status"))
         if "qc_date" in data:
             qc.qc_date = data.get("qc_date")
         if "qc_by" in data:
             qc.qc_by = data.get("qc_by")
+        print(data.get("quantity"))
+        if "quantity" in data:
+            qc.quantity = data.get("quantity")
         if "remark" in data:
             qc.remark = data.get("remark")
 
@@ -173,7 +166,7 @@ def update_qc_work_order(qc_work_order_id, data):
 
         db.session.commit()
         db.session.refresh(qc)
-        return QCWorkOrderSchema().dump(qc)
+        return qc
     except Exception:
         db.session.rollback()
         raise
@@ -191,10 +184,9 @@ def delete_qc_work_order(qc_work_order_id):
 def search_qc_work_orders(data):
     try:
         page = data.get("page", 1)
-        limit = data.get("limit", 10)
+        per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = qc_work_order_repository.search_qc_work_orders(page, limit, search)
-        qc_work_orders = search_qc_work_order_schema(many=True).dump(result)
-        return qc_work_orders
+        result = qc_work_order_repository.search_qc_work_orders(page, per_page, search)
+        return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise

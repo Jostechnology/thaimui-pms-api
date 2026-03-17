@@ -1,6 +1,18 @@
-from app.con_sqlalchemy import QCCertification, QCCheckItem
+from app.con_sqlalchemy import QCCertification, QCCheckItem, SalesItem, TestResultItem
 from app.app import db
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
+
+
+def _certificate_options():
+    """Eager-load what QCCertificateSchema needs."""
+    return [
+        selectinload(QCCertification.check_items)
+            .selectinload(QCCheckItem.sales_item),
+        selectinload(QCCertification.check_items)
+            .selectinload(QCCheckItem.test_result_item),
+    ]
+
 
 def create_test_certificate(test_certificate):
     try:
@@ -9,10 +21,10 @@ def create_test_certificate(test_certificate):
     except Exception as e:
         raise e
 
-def get_test_certificate_list(search=""):
+def get_test_certificate_list(page, per_page, search=""):
     try:
-        query = db.session.query(QCCertification)
-        
+        query = db.session.query(QCCertification) #.options(*_certificate_options())
+
         if search:
             query = query.outerjoin(QCCheckItem).filter(
                 or_(
@@ -23,15 +35,20 @@ def get_test_certificate_list(search=""):
                     QCCheckItem.ref_number.ilike(f"%{search}%"),
                 )
             ).distinct()
-            
-        return query.order_by(QCCertification.qc_certification_id.desc()).all()
+
+        result = query.order_by(QCCertification.qc_certification_id.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
     except Exception:
         raise
 
 def get_test_certificate_by_id(qc_certification_id):
     try:
-        query = db.session.query(QCCertification).filter(QCCertification.qc_certification_id == qc_certification_id)
-        return query.first()
+        return (
+            db.session.query(QCCertification)
+            .options(*_certificate_options())
+            .filter(QCCertification.qc_certification_id == qc_certification_id)
+            .first()
+        )
     except Exception:
         raise
 
