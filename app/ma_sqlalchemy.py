@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, SalesItemStatus, WorkRun
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, SalesItemStatus, WorkRun, TestResultWorkRun
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -163,6 +163,8 @@ class WorkRunSchema(Schema):
     quantity = fields.Integer()
     usable_qty = fields.Integer(allow_none=True)
     defect_qty = fields.Integer(dump_only=True, allow_none=True)
+    tested_qty = fields.Integer(dump_only=True)
+    untested_qty = fields.Integer(dump_only=True, allow_none=True)
     completion_remark = fields.String(allow_none=True)
     wms_pick_reference = fields.String(allow_none=True)
     status = fields.Enum(WorkRunStatus)
@@ -181,10 +183,10 @@ class WorkOrderSchema(Schema):
 class WorkRunDetailSchema(WorkRunSchema):
     current_phase = fields.Nested(WorkPhaseSchemaDetailed(), allow_none=True)
     work_phases = fields.List(fields.Nested(WorkPhaseSchemaDetailed()))
-    test_results = fields.List(fields.Nested(lambda: TestResultSchema()))
+    test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
 
 class WorkRunWithTestSchema(WorkRunSchema):
-    test_results = fields.List(fields.Nested(lambda: TestResultSchema()))
+    test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
 
 
 class WorkOrderSchemaDetail(WorkOrderSchema):
@@ -331,10 +333,25 @@ class TestResultItemSchema(Schema):
     updated_by          = fields.String(dump_only=True)
 
 
+class TestResultWorkRunSchema(Schema):
+    """From TestResult POV — nested inside TestResultSchema."""
+    id           = fields.Integer(dump_only=True)
+    work_run_id  = fields.Integer(dump_only=True)
+    qty_from_run = fields.Integer()
+    work_run     = fields.Nested(WorkRunSchema(), dump_only=True)
+
+
+class TestResultWorkRunFromRunSchema(Schema):
+    """From WorkRun POV — nested inside WorkRunDetailSchema/WorkRunWithTestSchema."""
+    id             = fields.Integer(dump_only=True)
+    test_result_id = fields.Integer(dump_only=True)
+    qty_from_run   = fields.Integer()
+    test_result    = fields.Nested(lambda: TestResultSchema(), dump_only=True)
+
+
 class TestResultSchema(Schema):
     test_result_id      = fields.Integer(dump_only=True)
     qc_work_order_id    = fields.Integer(allow_none=True)
-    work_run_id         = fields.Integer(allow_none=True)
     claimed_qty         = fields.Integer()
     session_status      = fields.Enum(TestSessionStatus, dump_only=True)
     test_date           = fields.DateTime(allow_none=True)
@@ -344,6 +361,7 @@ class TestResultSchema(Schema):
     overall_status      = fields.Enum(TestResultStatus, allow_none=True)
     remark              = fields.String(allow_none=True)
     test_result_items   = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
+    work_run_sources    = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
     created_date        = fields.DateTime(dump_only=True)
     updated_date        = fields.DateTime(dump_only=True)
     created_by          = fields.String(dump_only=True)

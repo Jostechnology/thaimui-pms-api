@@ -21,6 +21,13 @@ def get_work_runs_by_work_order(work_order_id):
         raise
 
 
+def get_work_runs_by_sales_item(sales_item_id):
+    try:
+        return work_run_repository.get_work_runs_by_sales_item(sales_item_id)
+    except Exception:
+        raise
+
+
 def create_work_run(work_order_id, data):
     """Create a new WorkRun (rework) on an existing WorkOrder. No transaction yet — fires on completion."""
     try:

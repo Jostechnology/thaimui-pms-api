@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem
+from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -7,7 +7,7 @@ def _test_result_options():
     """Eager-load what TestResultSchema needs."""
     return [
         selectinload(TestResult.test_result_items),
-        selectinload(TestResult.work_run),
+        selectinload(TestResult.work_run_sources).selectinload(TestResultWorkRun.work_run),
     ]
 
 
@@ -91,5 +91,18 @@ def delete_test_result(test_result_id):
         test_result = get_test_result_by_id(test_result_id)
         if test_result:
             db.session.delete(test_result)
+    except Exception:
+        raise
+
+
+def get_committed_qty_for_work_run(work_run_id, exclude_test_result_id=None):
+    """Sum of qty_from_run already committed for a work_run across all test results."""
+    try:
+        query = db.session.query(
+            db.func.coalesce(db.func.sum(TestResultWorkRun.qty_from_run), 0)
+        ).filter(TestResultWorkRun.work_run_id == work_run_id)
+        if exclude_test_result_id:
+            query = query.filter(TestResultWorkRun.test_result_id != exclude_test_result_id)
+        return query.scalar()
     except Exception:
         raise
