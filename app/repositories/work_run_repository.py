@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkRun, WorkOrder, WorkPhase, WorkAssignment, SalesItem, TestResult
+from app.con_sqlalchemy import WorkRun, WorkOrder, WorkPhase, WorkAssignment, SalesItem, TestResult, TestResultWorkRun
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -16,12 +16,14 @@ def get_work_run_by_id(work_run_id):
 
 
 def get_work_run_with_test_results(work_run_id):
-    """Full fetch — loads test_results, work_phases, and work_order.sales_item chain."""
+    """Full fetch — loads test_result_sources, work_phases, and work_order.sales_item chain."""
     try:
         query = (
             db.session.query(WorkRun)
             .options(
-                selectinload(WorkRun.test_results).selectinload(TestResult.test_result_items),
+                selectinload(WorkRun.test_result_sources)
+                    .selectinload(TestResultWorkRun.test_result)
+                    .selectinload(TestResult.test_result_items),
                 selectinload(WorkRun.work_order).selectinload(WorkOrder.sales_item),
                 selectinload(WorkRun.work_phases)
                     .selectinload(WorkPhase.assignments)
@@ -41,7 +43,9 @@ def get_work_runs_by_work_order(work_order_id):
         query = (
             db.session.query(WorkRun)
             .options(
-                selectinload(WorkRun.test_results).selectinload(TestResult.test_result_items),
+                selectinload(WorkRun.test_result_sources)
+                    .selectinload(TestResultWorkRun.test_result)
+                    .selectinload(TestResult.test_result_items),
                 selectinload(WorkRun.work_phases)
                     .selectinload(WorkPhase.assignments)
                     .selectinload(WorkAssignment.employee),
@@ -49,6 +53,22 @@ def get_work_runs_by_work_order(work_order_id):
                 selectinload(WorkRun.current_phase),
             )
             .filter(WorkRun.work_order_id == work_order_id)
+            .order_by(WorkRun.created_date.asc())
+        )
+        return query.all()
+    except Exception:
+        raise
+
+
+def get_work_runs_by_sales_item(sales_item_id):
+    try:
+        query = (
+            db.session.query(WorkRun)
+            .options(
+                selectinload(WorkRun.test_result_sources),
+            )
+            .join(WorkOrder, WorkOrder.work_order_id == WorkRun.work_order_id)
+            .filter(WorkOrder.sales_item_id == sales_item_id)
             .order_by(WorkRun.created_date.asc())
         )
         return query.all()

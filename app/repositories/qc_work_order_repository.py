@@ -25,7 +25,12 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
                     QCWorkOrder.remark.ilike(f"%{search}%"),
                 )
             )
-        query = query.options(selectinload(QCWorkOrder.sales_item))
+        query = query.options(
+            selectinload(QCWorkOrder.sales_item).options(
+                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+            )
+        )
         result = query.order_by(QCWorkOrder.created_date.desc()).paginate(
             page=page, per_page=limit, error_out=False
         )
