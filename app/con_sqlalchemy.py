@@ -106,6 +106,7 @@ class Permission(BaseModel):
     )
 
 
+
 class RolePermission(BaseModel):
     __tablename__ = "m_role_permission"
     role_permission_id = db.Column(db.Integer, primary_key=True)
@@ -263,13 +264,23 @@ class WorkRun(AuditMixin):
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     work_order = db.relationship('WorkOrder', back_populates='work_runs', lazy='noload')
     work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_run_id', back_populates='work_run')
-    test_results = db.relationship('TestResult', back_populates='work_run', cascade='all, delete-orphan')
+    test_result_sources = db.relationship('TestResultWorkRun', back_populates='work_run', cascade='all, delete-orphan')
 
     @property
     def defect_qty(self):
         if self.usable_qty is None:
             return None
         return self.quantity - self.usable_qty
+
+    @property
+    def tested_qty(self):
+        return sum(src.qty_from_run for src in self.test_result_sources)
+
+    @property
+    def untested_qty(self):
+        if self.usable_qty is None:
+            return None
+        return self.usable_qty - self.tested_qty
 
 class SalesItemStatus(enum.Enum):
     PENDING = 'PENDING'
@@ -464,7 +475,6 @@ class TestResult(AuditMixin):
     __tablename__ = "t_test_result"
     test_result_id     = db.Column(db.Integer, primary_key=True)
     qc_work_order_id   = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='SET NULL'), nullable=True)
-    work_run_id        = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='SET NULL'), nullable=True)
     claimed_qty        = db.Column(db.Integer, nullable=False)
     session_status     = db.Column(db.Enum(TestSessionStatus), nullable=False, default=TestSessionStatus.INPROGRESS)
     test_date          = db.Column(db.DateTime, nullable=True)
@@ -474,7 +484,7 @@ class TestResult(AuditMixin):
     overall_status     = db.Column(db.Enum(TestResultStatus), nullable=True)
     remark             = db.Column(db.String(500), nullable=True)
     test_result_items  = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
-    work_run           = db.relationship('WorkRun', back_populates='test_results', lazy='noload')
+    work_run_sources   = db.relationship('TestResultWorkRun', back_populates='test_result', cascade='all, delete-orphan')
     qc_work_order      = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
 
 
@@ -491,6 +501,19 @@ class TestResultItem(AuditMixin):
     result              = db.Column(db.Enum(TestResultStatus), nullable=False, default=TestResultStatus.PASSED)
     remark              = db.Column(db.String(500), nullable=True)
     test_result = db.relationship('TestResult', back_populates='test_result_items', lazy='noload')
+
+
+class TestResultWorkRun(BaseModel):
+    """Association: which WorkRun(s) contributed items to a TestResult, and how many."""
+    __tablename__ = "t_test_result_work_run"
+    id             = db.Column(db.Integer, primary_key=True)
+    test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    work_run_id    = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
+    qty_from_run   = db.Column(db.Integer, nullable=False)
+
+    test_result = db.relationship('TestResult', back_populates='work_run_sources', lazy='noload')
+    work_run    = db.relationship('WorkRun',    back_populates='test_result_sources', lazy='noload')
+
 
 class CertificationStatus(enum.Enum):
     PASSED = 'PASSED'

@@ -2,6 +2,7 @@ from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem
 from app.repositories import qc_work_order_repository
 from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
+from app.exception import ValidationError
 
 def get_all_qc_work_orders(data):
     try:
@@ -78,6 +79,11 @@ def create_qc_work_order(data):
         material_usage_data = data.get("items", [])
         qc_quantity = data.get("salesItemQuantity", 1)
         
+        planned_qty = sales_item.item_num
+        existing_qc_qty = sum(qc.quantity for qc in sales_item.qc_work_orders)                                                                
+        if existing_qc_qty + qc_quantity > planned_qty:              
+            raise ValidationError(f"จำนวน QC รวม ({existing_qc_qty + qc_quantity}) เกินจำนวนที่วางแผนผลิต ({planned_qty})")      
+                
         material_in_sales_order = sales_order_service.get_material_list_from_sales_order(sales_item.doc_entry)
 
         material_map = {m.material_list_id: m for m in material_in_sales_order}
@@ -101,7 +107,7 @@ def create_qc_work_order(data):
             for usage in material_usage_data:
                 material = material_map[usage.get("material_list_id")]
                 transaction_service.create_material_transaction(
-                    material, qc, "REMOVE", int(usage.get("quantity"))
+                    material, qc.qc_work_order_id, "REMOVE", int(usage.get("quantity"))
                 )
 
         db.session.commit()
