@@ -1,6 +1,8 @@
 import enum
 from app.app import db
 from datetime import date, datetime, timezone, timedelta
+from sqlalchemy.orm import with_loader_criteria
+from sqlalchemy.orm import Session
 from sqlalchemy import event , Numeric
 from flask import g
 
@@ -26,6 +28,48 @@ class AuditMixin(BaseModel):
     created_by = db.Column(db.String(80))
     updated_by = db.Column(db.String(80))
 
+class BranchScopedMixin:
+    """
+    Mixin สำหรับบอกว่าตารางนี้ต้องถูกผูกติดกับสาขา (branch_id)
+    """
+    branch_id = db.Column(db.Integer, nullable=False, index=True)
+
+@event.listens_for(Session, "do_orm_execute")
+def _add_branch_filter(execute_state):
+    """เช็คว่า 1. เป็นคำสั่งดึงข้อมูล (SELECT) และ 2. User คนนี้ล็อกอินและมี g.branch_id อยู่"""
+    if execute_state.is_select and hasattr(g, "branch_id"):
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                BranchScopedMixin,
+                lambda cls: cls.branch_id == g.branch_id,
+                include_aliases=True,
+            )
+        )
+@event.listens_for(db.session, "before_flush")
+def manage_branch_data(session, flush_context, instances):
+    """ถ้า API รอบนี้ไม่มีข้อมูลสาขา (เช่น API สมัครสมาชิก/ล็อกอิน) ก็ปล่อยผ่านไป"""
+    if not hasattr(g, "branch_id"):
+        return
+
+    # ตอนสร้างของใหม่ (INSERT) -> ยัดสาขาให้อัตโนมัติ
+    for obj in session.new:
+        if isinstance(obj, BranchScopedMixin):
+            # ถ้าไม่ได้ส่ง branch_id มา ให้ดึงจาก g.branch_id ของคนที่ล็อกอินอยู่มาใส่
+            if getattr(obj, "branch_id", None) is None:
+                obj.branch_id = g.branch_id
+
+    # ตอนแก้ไขข้อมูล (UPDATE) -> เช็คว่าใช่ของสาขาตัวเองไหม
+    for obj in session.dirty:
+        if isinstance(obj, BranchScopedMixin):
+            if obj.branch_id != g.branch_id:
+                raise Exception("Unauthorized! ไม่ได้รับอนุญาตให้แก้ไขข้อมูลของสาขาอื่น")
+                
+    # ตอนลบข้อมูล (DELETE)
+    for obj in session.deleted:
+        if isinstance(obj, BranchScopedMixin):
+            if obj.branch_id != g.branch_id:
+                raise Exception("Unauthorized! ไม่ได้รับอนุญาตให้ลบข้อมูลของสาขาอื่น")
+
 @event.listens_for(AuditMixin, 'before_insert', propagate=True)
 def receive_before_insert(mapper, connection, target):
     """Set created_by when inserting"""
@@ -41,6 +85,13 @@ def receive_before_update(mapper, connection, target):
     if username:
         target.updated_by = username
 
+user_branch_mapping = db.Table(
+    'map_user_branch',
+    db.Model.metadata,
+    db.Column('user_id', db.Integer, db.ForeignKey('m_user.user_id', ondelete='CASCADE'), primary_key=True),
+    db.Column('branch_id', db.Integer, db.ForeignKey('m_branch.branch_id', ondelete='CASCADE'), primary_key=True)
+)
+
 class User(AuditMixin):
     __tablename__ = "m_user"
     user_id = db.Column(db.Integer, primary_key=True)
@@ -50,6 +101,7 @@ class User(AuditMixin):
     role = db.relationship('Role', back_populates="users")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
+    branches = db.relationship('Branch', secondary=user_branch_mapping, back_populates='users', lazy='dynamic')
 
 class Tokenlist(BaseModel):
     __tablename__ = "t_token_list"
@@ -71,6 +123,15 @@ class Role(BaseModel):
         if self.role_name == "Admin":
             return ["*"]
         return [perm.permission_code for perm in self.permissions]
+
+class Branch(BaseModel):
+    __tablename__ = 'm_branch'
+
+    branch_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    branch_code = db.Column(db.String(20), unique=True, nullable=False)
+    branch_name = db.Column(db.String(100), nullable=False) 
+
+    users = db.relationship('User', secondary=user_branch_mapping, back_populates='branches', lazy='dynamic')
 
 class Module(BaseModel):
     __tablename__ = "m_module"
