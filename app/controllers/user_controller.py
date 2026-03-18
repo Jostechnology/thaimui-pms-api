@@ -145,3 +145,11 @@ def api_delete_module(module_id=None):
         module_id = data.get("module_id")
     res = user_service.delete_module(module_id)
     return jsonify({"data" : res, "success" : True}), 200
+
+@app.route('/api/assign_branch_to_user', methods=['POST'])
+@verify_required
+def api_assign_branch_to_user():
+    data = request.get_json()
+    res = user_service.assign_branches_to_user(data)
+    return jsonify({"data" : res, "success" : True}), 200
+

@@ -25,3 +25,6 @@ def update_branch(branch):
     except Exception:
         db.session.rollback()
         raise
+
+def get_branches_by_ids(branch_ids):
+    return Branch.query.filter(Branch.branch_id.in_(branch_ids)).all()

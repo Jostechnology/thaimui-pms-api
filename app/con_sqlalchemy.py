@@ -101,7 +101,7 @@ class User(AuditMixin):
     role = db.relationship('Role', back_populates="users")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
-    branches = db.relationship('Branch', secondary=user_branch_mapping, back_populates='users', lazy='dynamic')
+    branches = db.relationship('Branch', secondary=user_branch_mapping, back_populates='users')
 
 class Tokenlist(BaseModel):
     __tablename__ = "t_token_list"
@@ -131,7 +131,7 @@ class Branch(BaseModel):
     branch_code = db.Column(db.String(20), unique=True, nullable=False)
     branch_name = db.Column(db.String(100), nullable=False) 
 
-    users = db.relationship('User', secondary=user_branch_mapping, back_populates='branches', lazy='dynamic')
+    users = db.relationship('User', secondary=user_branch_mapping, back_populates='branches')
 
 class Module(BaseModel):
     __tablename__ = "m_module"

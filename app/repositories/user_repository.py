@@ -1,6 +1,7 @@
 from app.app import db
 from app.con_sqlalchemy import User
 from app.exception import NotFoundError
+from sqlalchemy.orm import selectinload, joinedload
 
 def get_user_by_username(username):
     try:
@@ -56,7 +57,10 @@ def get_user_list_paginated(page, limit, username="", role_id=None):
     try:
         offset = (page - 1) * limit
         
-        query = User.query
+        query = User.query.options(
+            joinedload(User.role),      
+            selectinload(User.branches)  
+        )
         
         if role_id and role_id != "": 
             query = query.filter(User.role_id == role_id)
@@ -94,4 +98,13 @@ def update_user_password(username, new_password):
     except Exception:
         db.session.rollback()
         raise
+
+def update_user_branches(user, branches):
+    try:
+        user.branches = branches 
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        raise 
 
