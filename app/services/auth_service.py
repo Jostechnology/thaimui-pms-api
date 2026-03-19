@@ -4,8 +4,7 @@ from app.repositories import user_login_repository, user_repository
 from app.utils import create_token, hash_bcrypt, verify_bcrypt 
 from app.app import db
 from app.utils import decode_token
-from app.con_sqlalchemy import Tokenlist
-
+from app.con_sqlalchemy import Tokenlist,Branch
 def login_service(data):
     try:
         username = data.get("username")
@@ -21,14 +20,25 @@ def login_service(data):
         if not bool(user.is_active):
             raise NotFoundError("ผู้ใช้งานนี้ถูกระงับการใช้งาน")
         
+        user_branch_ids = []
+        user_branches = []
+
+        for branch in user.branches:
+            user_branches.append({
+                "branch_id": branch.branch_id,
+                "branch_name": branch.branch_name
+            })
+        
         token_data = {
             "user_id": user.user_id,
             "username" : user.username,
             "role_name" : user.role.role_name,
             "role_id" : user.role.role_id,
             "role_code" : user.role.role_code,
-            "permissions": user.role.get_permissions()
+            "permissions": user.role.get_permissions(),
+            "allowed_branches": user_branch_ids
         }
+
         access_token = create_token(token_data, "access")
         refresh_token = create_token(token_data, "refresh")
 
@@ -39,7 +49,7 @@ def login_service(data):
         db.session.add(Tokenlist(jwt_id=refresh_jti, user_id=user.user_id, token_type="refresh"))
         db.session.commit()
 
-        return access_token, refresh_token
+        return access_token, refresh_token, user_branches
     
     except AppException as e:
         db.session.rollback()

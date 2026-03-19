@@ -1,7 +1,7 @@
 import traceback
 from app.exception import AppException
 from app.extensions import init_center_service
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, g
 from app.config import CENTER_ACCESS_KEY, CENTER_URL, connectdb
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
@@ -37,6 +37,19 @@ migrate = Migrate(app, db)
 ma = Marshmallow(app)
 
 init_center_service(CENTER_ACCESS_KEY, CENTER_URL)
+
+@app.before_request
+def set_current_branch():
+    """ดักจับทุก Request เพื่อดูว่า User กำลังทำงานที่สาขาไหน"""
+    #อ่านค่า X-Branch-Id จาก Header ที่ React ส่งมา
+    branch_id = request.headers.get('X-Branch-Id')
+
+    if branch_id and branch_id.isdigit():
+        g.branch_id = int(branch_id)
+
+        # มีสิทธิ์ใน g.branch_id นี้จริงๆ ในตาราง map_user_branch หรือไม่
+    else:
+        g.branch_id = None
 
 @app.errorhandler(AppException)
 def handle_app_exception(e):

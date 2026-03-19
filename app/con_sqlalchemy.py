@@ -5,6 +5,7 @@ from sqlalchemy.orm import with_loader_criteria
 from sqlalchemy.orm import Session
 from sqlalchemy import event , Numeric
 from flask import g
+from sqlalchemy import UniqueConstraint
 
 def bangkok_now():
     """Return current datetime in Asia/Bangkok. If zoneinfo/tzdata is unavailable,
@@ -29,10 +30,8 @@ class AuditMixin(BaseModel):
     updated_by = db.Column(db.String(80))
 
 class BranchScopedMixin:
-    """
-    Mixin สำหรับบอกว่าตารางนี้ต้องถูกผูกติดกับสาขา (branch_id)
-    """
-    branch_id = db.Column(db.Integer, nullable=False, index=True)
+    """Mixin สำหรับบังคับให้ตารางต้องมี branch_id เสมอ"""
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=False, index=True)
 
 @event.listens_for(Session, "do_orm_execute")
 def _add_branch_filter(execute_state):
@@ -47,10 +46,10 @@ def _add_branch_filter(execute_state):
         )
 @event.listens_for(db.session, "before_flush")
 def manage_branch_data(session, flush_context, instances):
-    """ถ้า API รอบนี้ไม่มีข้อมูลสาขา (เช่น API สมัครสมาชิก/ล็อกอิน) ก็ปล่อยผ่านไป"""
+    """ถ้า API รอบนี้ไม่มีข้อมูลสาขา จะปล่อยผ่านไป"""
     if not hasattr(g, "branch_id"):
         return
-
+        
     # ตอนสร้างของใหม่ (INSERT) -> ยัดสาขาให้อัตโนมัติ
     for obj in session.new:
         if isinstance(obj, BranchScopedMixin):
@@ -357,10 +356,10 @@ class MachineStatus(enum.Enum):
     IDLE = "IDLE"
     OFFLINE = "OFFLINE"
 
-class Machine(AuditMixin):
+class Machine(AuditMixin,BranchScopedMixin):
     __tablename__ = "m_machine"
     machine_id = db.Column(db.Integer, primary_key=True)
-    machine_code = db.Column(db.String(50), nullable=False, unique=True)
+    machine_code = db.Column(db.String(50), nullable=False)
     machine_name = db.Column(db.String(255), nullable=False)
     machine_description = db.Column(db.String(500))
     manufacturer = db.Column(db.String(255), nullable=True)
@@ -368,8 +367,11 @@ class Machine(AuditMixin):
     status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     maintenances = db.relationship('MachineMaintenance', back_populates='machine', lazy='noload')
+    __table_args__ = (
+    UniqueConstraint('branch_id', 'machine_code', name='uq_branch_machine_code'),
+)
 
-class MachineMaintenance(AuditMixin):
+class MachineMaintenance(AuditMixin,BranchScopedMixin):
     __tablename__ = "t_machine_maintenance"
     maintenance_id = db.Column(db.Integer, primary_key=True)
     machine_id = db.Column(db.Integer, db.ForeignKey('m_machine.machine_id', ondelete='CASCADE'), nullable=False)
