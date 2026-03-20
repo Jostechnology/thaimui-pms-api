@@ -83,7 +83,7 @@ def get_material_history_service(material_list_id):
         for t in usage_detail['transactions']:
             history_list.append({
                 "transaction_id": t.transaction_id,
-                "action_type": t.type,
+                "action_type": t.type.value if t.type else None,
                 "amount": t.amount,
                 "document_code": t.related_document_code,
                 "action_date": t.created_date.strftime("%Y-%m-%d %H:%M:%S") if t.created_date else None,
