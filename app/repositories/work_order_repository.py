@@ -2,7 +2,6 @@ from app.con_sqlalchemy import (
     WorkOrder, WorkOrderStatus, WorkRun, SalesOrder, SalesItem,
     WorkPhase, WorkPhaseBreak, WorkAssignment, Employee,
     ItemComponent, ComponentMaterialUsage, MaterialList,
-    ComponentSpec, ComponentSpecType, ComponentOption, ComponentOptionType,
     TestResult,
 )
 from app.app import db
@@ -18,12 +17,6 @@ def _work_order_options():
         selectinload(WorkOrder.item_components)
             .selectinload(ItemComponent.material_usages)
             .selectinload(ComponentMaterialUsage.material_list),
-        selectinload(WorkOrder.item_components)
-            .selectinload(ItemComponent.component_specs)
-            .selectinload(ComponentSpec.component_spec_type),
-        selectinload(WorkOrder.item_components)
-            .selectinload(ItemComponent.component_options)
-            .selectinload(ComponentOption.component_option_type),
     ]
 
 
