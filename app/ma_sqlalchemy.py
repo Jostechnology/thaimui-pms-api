@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, SalesItemStatus, WorkRun, TestResultWorkRun
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -157,19 +157,41 @@ class ItemComponentSchema(Schema):
     remark = fields.String(allow_none=True)
     img_url = fields.String(allow_none=True)
 
+class WorkRunReworkSourceSchema(Schema):
+    id                 = fields.Integer(dump_only=True)
+    rework_work_run_id = fields.Integer(dump_only=True)
+    source_work_run_id = fields.Integer(dump_only=True)
+    qty                = fields.Integer()
+    created_date       = fields.DateTime(dump_only=True)
+
+
+class WorkRunTransactionSchema(Schema):
+    transaction_id        = fields.Integer(dump_only=True)
+    work_run_id           = fields.Integer(dump_only=True)
+    quantity              = fields.Integer(dump_only=True)
+    type                  = fields.Enum(WorkRunTransactionType, dump_only=True)
+    related_document_code = fields.String(dump_only=True)
+    created_date          = fields.DateTime(dump_only=True)
+    created_by            = fields.String(dump_only=True)
+
+
 class WorkRunSchema(Schema):
-    work_run_id = fields.Integer()
-    work_order_id = fields.Integer()
-    quantity = fields.Integer()
-    usable_qty = fields.Integer(allow_none=True)
-    defect_qty = fields.Integer(dump_only=True, allow_none=True)
-    tested_qty = fields.Integer(dump_only=True)
-    untested_qty = fields.Integer(dump_only=True, allow_none=True)
-    completion_remark = fields.String(allow_none=True)
-    wms_pick_reference = fields.String(allow_none=True)
-    status = fields.Enum(WorkRunStatus)
-    current_phase_id = fields.Integer(allow_none=True)
-    created_date = fields.DateTime()
+    work_run_id                      = fields.Integer()
+    work_order_id                    = fields.Integer()
+    quantity                         = fields.Integer()
+    usable_qty                       = fields.Integer(allow_none=True)
+    defect_qty                       = fields.Integer(dump_only=True, allow_none=True)
+    consumed_defect_qty              = fields.Integer(dump_only=True)
+    outstanding_defect_qty           = fields.Integer(dump_only=True, allow_none=True)
+    tested_qty                       = fields.Integer(dump_only=True)
+    untested_qty                     = fields.Integer(dump_only=True, allow_none=True)
+    completion_remark                = fields.String(allow_none=True)
+    wms_pick_reference               = fields.String(allow_none=True)
+    status                           = fields.Enum(WorkRunStatus)
+    current_phase_id                 = fields.Integer(allow_none=True)
+    rework_source_test_result_id     = fields.Integer(allow_none=True, dump_only=True)
+    qty_from_failed                  = fields.Integer(allow_none=True, dump_only=True)
+    created_date                     = fields.DateTime()
 
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
@@ -179,11 +201,15 @@ class WorkOrderSchema(Schema):
     status = fields.Enum(WorkOrderStatus)
     sales_item = fields.Nested(SalesItemSchema())
     # work_runs = fields.List(fields.Nested(WorkRunSchema))
+    
+class WorkRunDisplaySchema(WorkRunSchema):
+    current_phase       = fields.Nested(WorkPhaseSchemaDetailed(), allow_none=True)
+    work_phases         = fields.List(fields.Nested(WorkPhaseSchemaDetailed()))
 
 class WorkRunDetailSchema(WorkRunSchema):
-    current_phase = fields.Nested(WorkPhaseSchemaDetailed(), allow_none=True)
-    work_phases = fields.List(fields.Nested(WorkPhaseSchemaDetailed()))
     test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
+    rework_sources      = fields.List(fields.Nested(WorkRunReworkSourceSchema()), dump_only=True)
+    transactions        = fields.List(fields.Nested(WorkRunTransactionSchema()), dump_only=True)
 
 class WorkRunWithTestSchema(WorkRunSchema):
     test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
@@ -350,22 +376,25 @@ class TestResultWorkRunFromRunSchema(Schema):
 
 
 class TestResultSchema(Schema):
-    test_result_id      = fields.Integer(dump_only=True)
-    qc_work_order_id    = fields.Integer(allow_none=True)
-    claimed_qty         = fields.Integer()
-    session_status      = fields.Enum(TestSessionStatus, dump_only=True)
-    test_date           = fields.DateTime(allow_none=True)
-    tested_by           = fields.String(allow_none=True)
-    test_method         = fields.String(allow_none=True)
-    standard_reference  = fields.String(allow_none=True)
-    overall_status      = fields.Enum(TestResultStatus, allow_none=True)
-    remark              = fields.String(allow_none=True)
-    test_result_items   = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
-    work_run_sources    = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
-    created_date        = fields.DateTime(dump_only=True)
-    updated_date        = fields.DateTime(dump_only=True)
-    created_by          = fields.String(dump_only=True)
-    updated_by          = fields.String(dump_only=True)
+    test_result_id          = fields.Integer(dump_only=True)
+    qc_work_order_id        = fields.Integer(allow_none=True)
+    claimed_qty             = fields.Integer()
+    session_status          = fields.Enum(TestSessionStatus, dump_only=True)
+    test_date               = fields.DateTime(allow_none=True)
+    tested_by               = fields.String(allow_none=True)
+    test_method             = fields.String(allow_none=True)
+    standard_reference      = fields.String(allow_none=True)
+    overall_status          = fields.Enum(TestResultStatus, allow_none=True)
+    remark                  = fields.String(allow_none=True)
+    failed_item_qty         = fields.Integer(dump_only=True)
+    reworked_qty            = fields.Integer(dump_only=True)
+    outstanding_failed_qty  = fields.Integer(dump_only=True)
+    test_result_items       = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
+    work_run_sources        = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
+    created_date            = fields.DateTime(dump_only=True)
+    updated_date            = fields.DateTime(dump_only=True)
+    created_by              = fields.String(dump_only=True)
+    updated_by              = fields.String(dump_only=True)
 
 
 class QCCheckItemSchema(Schema):
@@ -458,8 +487,8 @@ class SalesItemTrackingSchema(Schema):
 class MaterialTransactionSchema(Schema):
     transaction_id = fields.Integer(dump_only=True)
     material_list_id = fields.Integer(required=True)
-    amount = fields.Integer(required=True)
-    type = fields.String(required=True) # 'ADD' หรือ 'REMOVE'
+    amount = fields.Integer(required=True)  # positive = in, negative = out
+    type = fields.Enum(MaterialTransactionType, dump_only=True)
     related_document_code = fields.String(required=True)
     created_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)

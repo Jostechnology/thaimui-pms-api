@@ -4,6 +4,7 @@ from flask import request, jsonify
 from app.ma_sqlalchemy import SalesItemSchema, SalesItemTrackingSchema, WorkRunSchema
 from app.services.sales_item_service import get_all_sales_items, create_sales_item, get_sales_item_detail, get_sales_item_tracking
 from app.services.work_run_service import get_work_runs_by_sales_item
+from app.services.test_result_service import get_test_results_by_sales_item
 
 
 @app.route("/api/get_sales_item_list", methods=["GET"])
@@ -52,6 +53,16 @@ def api_get_work_runs_by_sales_item(sales_item_id):
     try:
         result = get_work_runs_by_sales_item(sales_item_id)
         return jsonify({"data": WorkRunSchema(many=True).dump(result), "success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sales_item/<int:sales_item_id>/test_results", methods=["GET"])
+@verify_required
+def api_get_test_results_by_sales_item(sales_item_id):
+    try:
+        result = get_test_results_by_sales_item(sales_item_id)
+        return jsonify({"data": result, "success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
