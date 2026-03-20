@@ -8,6 +8,7 @@ def _test_result_options():
     return [
         selectinload(TestResult.test_result_items),
         selectinload(TestResult.work_run_sources).selectinload(TestResultWorkRun.work_run),
+        selectinload(TestResult.rework_work_runs),
     ]
 
 
@@ -71,6 +72,20 @@ def update_test_result(test_result):
         raise
 
 
+def get_test_results_by_sales_item(sales_item_id):
+    try:
+        query = (
+            db.session.query(TestResult)
+            .options(*_test_result_options())
+            .join(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
+            .filter(QCWorkOrder.sales_item_id == sales_item_id)
+            .order_by(TestResult.test_result_id.desc())
+        )
+        return query.all()
+    except Exception:
+        raise
+
+
 def get_test_results_by_doc_entry(doc_entry):
     try:
         return (
@@ -91,6 +106,17 @@ def delete_test_result(test_result_id):
         test_result = get_test_result_by_id(test_result_id)
         if test_result:
             db.session.delete(test_result)
+    except Exception:
+        raise
+
+
+def get_reworked_qty_for_test_result(test_result_id):
+    """Sum of qty_from_failed across all rework WorkRuns sourced from this test result."""
+    try:
+        query = db.session.query(
+            db.func.coalesce(db.func.sum(WorkRun.qty_from_failed), 0)
+        ).filter(WorkRun.rework_source_test_result_id == test_result_id)
+        return query.scalar()
     except Exception:
         raise
 
