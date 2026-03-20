@@ -587,7 +587,6 @@ class ItemComponent(AuditMixin):
     img_url = db.Column(db.String(500), nullable=True)
     component_template_sections = db.relationship('ComponentTemplateSectionData', back_populates='item_component', lazy='noload')
     component_template_id = db.Column(db.Integer, db.ForeignKey('m_component_template.component_template_id'), nullable=True)
-    component_template = db.relationship('ComponentTemplate', lazy='noload')
     component_template = db.relationship('ComponentTemplate', back_populates='item_components', lazy='noload')
 
 class ComponentMaterialUsage(AuditMixin):

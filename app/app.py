@@ -79,6 +79,7 @@ from .controllers import operation_cost_monthly_controller
 from .controllers import work_run_controller
 from .controllers import machine_controller
 from .controllers import pm_machine_controller
+from .controllers import component_template_controller
 
 # with app.app_context():
 #     db.create_all()

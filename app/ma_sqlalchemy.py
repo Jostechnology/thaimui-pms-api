@@ -478,3 +478,12 @@ class MachineMaintenanceSchema(Schema):
     fix_cost = fields.Float(allow_none=True)
     machine = fields.Nested(MachineSchema, dump_default=None)
     created_date = fields.DateTime()
+
+class ComponentTemplateSchema(Schema):
+    component_template_id = fields.Integer(dump_only=True)
+    name = fields.String()
+    sections = fields.Raw()
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)
