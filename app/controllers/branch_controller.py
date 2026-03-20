@@ -31,12 +31,13 @@ def api_update_branch(branch_id):
         print(f"Error: {str(e)}")
         return jsonify({"error" : str(e)}), 500
 
-@app.route("/api/delete_branch/<int:branch_id>", methods=["DELETE"])
+@app.route("/api/delete_branch/<int:branch_id>", methods=["PUT"])
 @verify_required
 def api_delete_branch(branch_id):
     try:
         data = request.get_json()
-        result = branch_service.delete_branch(branch_id)
+        is_active = data.get("is_active", False) if data else False
+        result = branch_service.delete_branch(branch_id, is_active)
         return jsonify({"data" : result, "success" : True}), 200
     except Exception as e:
         print(f"Error: {str(e)}")

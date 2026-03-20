@@ -129,6 +129,7 @@ class Branch(BaseModel):
     branch_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     branch_code = db.Column(db.String(20), unique=True, nullable=False)
     branch_name = db.Column(db.String(100), nullable=False) 
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
 
     users = db.relationship('User', secondary=user_branch_mapping, back_populates='branches')
 

@@ -45,14 +45,17 @@ def update_branch(branch_id, data):
         db.session.rollback()
         raise
 
-def delete_branch(branch_id):
+def delete_branch(branch_id, is_active):
     try:
         branch = Branch.query.get(branch_id)
         if not branch:
             raise Exception(f"Branch id {branch_id} not found")
-        db.session.delete(branch)
+
+        branch.is_active = is_active
         db.session.commit()
-        return {"message": f"Deleted branch id {branch_id} successfully"}
+
+        status_text = "เปิดการใช้งาน" if is_active else "ปิดการใช้งาน"
+        return {"message": f"{status_text}สาขา {branch.branch_name} สำเร็จ"}
     except Exception:
         db.session.rollback()
         raise

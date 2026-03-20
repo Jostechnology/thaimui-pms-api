@@ -24,11 +24,17 @@ def login_service(data):
         user_branches = []
 
         for branch in user.branches:
-            user_branches.append({
-                "branch_id": branch.branch_id,
-                "branch_name": branch.branch_name
-            })
+            if branch.is_active: 
+                user_branch_ids.append(branch.branch_id)
+                
+                user_branches.append({
+                    "branch_id": branch.branch_id,
+                    "branch_name": branch.branch_name
+                })
         
+        if not user_branch_ids:
+            raise NotFoundError("คุณไม่มีสิทธิ์เข้าถึงสาขาใดเลย หรือสาขาของคุณถูกระงับการใช้งาน")
+
         token_data = {
             "user_id": user.user_id,
             "username" : user.username,

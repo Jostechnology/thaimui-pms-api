@@ -19,6 +19,7 @@ class BranchSchema(Schema):
     branch_name = fields.String()
     created_date = fields.DateTime()
     updated_date = fields.DateTime()
+    is_active = fields.Boolean()
     
 class GetPermissionSchema(Schema):
     permission_id = fields.Integer()
