@@ -188,4 +188,3 @@ All transactional models inherit from `AuditMixin`, which adds `created_by`, `up
 | `app/api_auth.py` | `@verify_required` and permission decorators |
 | `app/utils.py` | JWT encode/decode, bcrypt, permission tree checker |
 | `app/extensions.py` | CenterService (external API client) |
-| `docs/การสร้าง-module-ใหม่.md` | Thai-language guide: module creation checklist |
