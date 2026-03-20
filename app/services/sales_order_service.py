@@ -1,7 +1,7 @@
 from app.repositories import material_repository, sales_item_repository, sales_order_repository
 from app.extensions import center_service
 from app.app import db
-from app.services import work_order_service
+from app.services import work_order_service, transaction_service
 from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList
 
 
@@ -131,8 +131,8 @@ def create_sales_order(data):
                     original_num=mat.get("item_num"),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
-                    
                 )
+                transaction_service.create_init_material_transaction(material_list, "INIT")
                 sales_item.material_list.append(material_list)
 
         db.session.add(sales_order)

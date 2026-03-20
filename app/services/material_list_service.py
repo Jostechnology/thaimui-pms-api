@@ -1,5 +1,6 @@
 from app.con_sqlalchemy import MaterialList
 from app.repositories import material_list_repository
+from app.services import transaction_service
 from app.app import db
 
 
@@ -26,6 +27,7 @@ def create_material_list(data):
             unit_price=data.get("unit_price"),
         )
         material = material_list_repository.create_material_list(material)
+        transaction_service.create_init_material_transaction(material, "INIT")
         db.session.commit()
         return material
     except Exception:

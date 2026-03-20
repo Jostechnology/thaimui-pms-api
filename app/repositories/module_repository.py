@@ -4,7 +4,7 @@ from sqlalchemy import desc
 
 def get_all_modules():
     try:
-        modules = db.session.query(Module).all()
+        modules = db.session.query(Module).order_by(Module.level, Module.sort_order).all()
         return modules
     except Exception:
         raise

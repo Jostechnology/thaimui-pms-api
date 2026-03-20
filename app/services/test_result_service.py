@@ -1,6 +1,7 @@
-from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, TestResultWorkRun, WorkRunStatus
+from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, TestResultWorkRun, WorkRunStatus, WorkRunTransactionType
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import test_result_repository, qc_work_order_repository, work_run_repository
+from app.services import transaction_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
 
@@ -94,6 +95,13 @@ def create_test_result(qc_work_order_id, data):
                 work_run_id=wr_id,
                 qty_from_run=qty,
             ))
+            source_run = work_run_repository.get_work_run_by_id(wr_id)
+            transaction_service.create_work_run_transaction(
+                source_run,
+                WorkRunTransactionType.SENT_TO_TESTING,
+                qty,
+                f"TEST-{test_result.test_result_id}",
+            )
 
         db.session.commit()
         db.session.refresh(test_result)
@@ -184,6 +192,14 @@ def update_test_result(test_result_id, data):
     except Exception as e:
         db.session.rollback()
         raise Exception(str(e))
+
+
+def get_test_results_by_sales_item(sales_item_id):
+    try:
+        results = test_result_repository.get_test_results_by_sales_item(sales_item_id)
+        return TestResultSchema(many=True).dump(results)
+    except Exception:
+        raise
 
 
 def get_test_results_by_doc_entry(doc_entry):

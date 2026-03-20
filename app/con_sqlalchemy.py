@@ -250,6 +250,10 @@ class WorkRunStatus(enum.Enum):
     INPROGRESS = 'INPROGRESS'
     COMPLETED = 'COMPLETED'
 
+class WorkRunTransactionType(enum.Enum):
+    SENT_TO_TESTING = 'SENT_TO_TESTING'
+    DEFECT_CONSUMED = 'DEFECT_CONSUMED'
+
 class WorkRun(AuditMixin):
     """One production attempt within a WorkOrder. Rework = new WorkRun on the same WorkOrder."""
     __tablename__ = "t_work_run"
@@ -261,16 +265,32 @@ class WorkRun(AuditMixin):
     wms_pick_reference = db.Column(db.String(100), nullable=True)
     status = db.Column(db.Enum(WorkRunStatus), nullable=False, default=WorkRunStatus.INPROGRESS)
     current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=True)
+    rework_source_test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='SET NULL'), nullable=True)
+    qty_from_failed = db.Column(db.Integer, nullable=True)
     current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     work_order = db.relationship('WorkOrder', back_populates='work_runs', lazy='noload')
     work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_run_id', back_populates='work_run')
     test_result_sources = db.relationship('TestResultWorkRun', back_populates='work_run', cascade='all, delete-orphan')
+    rework_sources = db.relationship('WorkRunReworkSource', foreign_keys='WorkRunReworkSource.rework_work_run_id', back_populates='rework_work_run', cascade='all, delete-orphan')
+    rework_destinations = db.relationship('WorkRunReworkSource', foreign_keys='WorkRunReworkSource.source_work_run_id', back_populates='source_work_run')
+    rework_source_test_result = db.relationship('TestResult', foreign_keys=[rework_source_test_result_id], back_populates='rework_work_runs', lazy='noload')
+    transactions = db.relationship('WorkRunTransaction', back_populates='work_run', cascade='all, delete-orphan')
 
     @property
     def defect_qty(self):
         if self.usable_qty is None:
             return None
         return self.quantity - self.usable_qty
+
+    @property
+    def consumed_defect_qty(self):
+        return sum(src.qty for src in self.rework_destinations)
+
+    @property
+    def outstanding_defect_qty(self):
+        if self.defect_qty is None:
+            return None
+        return self.defect_qty - self.consumed_defect_qty
 
     @property
     def tested_qty(self):
@@ -385,9 +405,7 @@ class MaterialList(AuditMixin):
 
     @property
     def remaining_num(self):
-        total_removed = sum(t.amount for t in self.transactions if t.type == 'REMOVE')
-        total_added = sum(t.amount for t in self.transactions if t.type == 'ADD')
-        return self.original_num - (total_removed - total_added)
+        return sum(t.amount for t in self.transactions)
 
 class QCWorkOrder(AuditMixin):
     """Test instruction template for a SalesItem. Pure specification — no status."""
@@ -486,6 +504,19 @@ class TestResult(AuditMixin):
     test_result_items  = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
     work_run_sources   = db.relationship('TestResultWorkRun', back_populates='test_result', cascade='all, delete-orphan')
     qc_work_order      = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
+    rework_work_runs   = db.relationship('WorkRun', foreign_keys='WorkRun.rework_source_test_result_id', back_populates='rework_source_test_result', lazy='noload')
+
+    @property
+    def failed_item_qty(self):
+        return sum(1 for item in self.test_result_items if item.result == TestResultStatus.FAILED)
+
+    @property
+    def reworked_qty(self):
+        return sum(wr.qty_from_failed or 0 for wr in self.rework_work_runs)
+
+    @property
+    def outstanding_failed_qty(self):
+        return self.failed_item_qty - self.reworked_qty
 
 
 class TestResultItem(AuditMixin):
@@ -513,6 +544,28 @@ class TestResultWorkRun(BaseModel):
 
     test_result = db.relationship('TestResult', back_populates='work_run_sources', lazy='noload')
     work_run    = db.relationship('WorkRun',    back_populates='test_result_sources', lazy='noload')
+
+
+class WorkRunReworkSource(BaseModel):
+    """Association: which source WorkRun(s) contributed defective items to a rework WorkRun, and how many."""
+    __tablename__ = "t_work_run_rework_source"
+    id                  = db.Column(db.Integer, primary_key=True)
+    rework_work_run_id  = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
+    source_work_run_id  = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
+    qty                 = db.Column(db.Integer, nullable=False)
+    rework_work_run = db.relationship('WorkRun', foreign_keys=[rework_work_run_id], back_populates='rework_sources', lazy='noload')
+    source_work_run = db.relationship('WorkRun', foreign_keys=[source_work_run_id], back_populates='rework_destinations', lazy='noload')
+
+
+class WorkRunTransaction(AuditMixin):
+    """Audit log of item movements on a WorkRun (sent to testing, defects consumed by rework)."""
+    __tablename__ = "t_work_run_transaction"
+    transaction_id        = db.Column(db.Integer, primary_key=True)
+    work_run_id           = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
+    quantity              = db.Column(db.Integer, nullable=False)
+    type                  = db.Column(db.Enum(WorkRunTransactionType), nullable=False)
+    related_document_code = db.Column(db.String(128), nullable=False)
+    work_run = db.relationship('WorkRun', back_populates='transactions', lazy='noload')
 
 
 class CertificationStatus(enum.Enum):
@@ -615,6 +668,11 @@ class ComponentSpecType(BaseModel):
         lazy='noload'
     )
 
+class MaterialTransactionType(enum.Enum):
+    INIT   = 'INIT'    # first stock entry when material arrives
+    ADD    = 'ADD'     # additional stock added (positive amount)
+    REMOVE = 'REMOVE'  # stock consumed/removed (negative amount)
+
 class MaterialTransaction(AuditMixin):
     __tablename__ = "t_material_transaction"
 
@@ -623,8 +681,8 @@ class MaterialTransaction(AuditMixin):
     #ผูกกับตาราง t_material_list
     material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='CASCADE'), nullable=False)
 
-    amount = db.Column(db.Integer, nullable=False)
-    type = db.Column(db.String(24), nullable=False)  # "ADD" หรือ "REMOVE"
+    amount = db.Column(db.Integer, nullable=False)  # positive = in, negative = out
+    type = db.Column(db.Enum(MaterialTransactionType), nullable=False)
     related_document_code = db.Column(db.String(128), nullable=False) # เอกสารที่อ้างอิง
 
     material_list = db.relationship('MaterialList', back_populates='transactions', lazy='noload')
