@@ -4,6 +4,7 @@ from app.con_sqlalchemy import (
     TestSessionStatus,
 )
 from app.repositories import picking_request_repository, work_run_repository, test_result_repository
+from app.services import document_code_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
 
@@ -50,6 +51,7 @@ def create_for_work_run(work_run_id, data):
 
         pr = PickingRequest(
             request_type=PickingRequestType.WORK_RUN,
+            picking_request_code=document_code_service.generate_number("PR"),
             work_run_id=work_run_id,
             status=PickingRequestStatus.PENDING,
             remark=data.get("remark"),
@@ -108,6 +110,7 @@ def create_for_test_result(test_result_id, data):
 
         pr = PickingRequest(
             request_type=PickingRequestType.TEST_RESULT,
+            picking_request_code=document_code_service.generate_number("PR"),
             test_result_id=test_result_id,
             status=PickingRequestStatus.PENDING,
             remark=data.get("remark"),

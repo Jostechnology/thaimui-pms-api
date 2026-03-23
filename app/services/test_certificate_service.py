@@ -3,6 +3,7 @@ from app.repositories import test_certificate_repository
 from app.app import db
 import datetime
 from app.exception import NotFoundError
+from app.services import document_code_service
 
 def create_test_certificate(data):
     try:
@@ -16,8 +17,7 @@ def create_test_certificate(data):
 
         cert_no = data.get("certification_name")
         if not cert_no or cert_no == "TC-AUTO-GEN":
-            now_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-            cert_no = f"TC-{now_str}"
+            cert_no = document_code_service.generate_number("CERT")
 
         cert = QCCertification(
             doc_entry=doc_entry,
@@ -32,7 +32,7 @@ def create_test_certificate(data):
         for it in data.get("items", []):
             test_no = it.get("test_no")
             if not test_no or test_no == "[Auto Gen]":
-                test_no = f"{cert_no}-{it.get('item_no')}"
+                test_no = document_code_service.generate_number("CERT_ITEM")
 
             item = QCCheckItem(
                 sales_item_id=it.get("sales_item_id"),
@@ -100,7 +100,7 @@ def update_test_certificate(qc_certification_id, data):
             for it in data.get("items", []):
                 test_no = it.get("test_no")
                 if not test_no or test_no == "[Auto Gen]":
-                    test_no = f"{cert.certification_number}-{it.get('item_no')}"
+                    test_no = document_code_service.generate_number("CERT_ITEM")
 
                 item = QCCheckItem(
                     sales_item_id=it.get("sales_item_id"),

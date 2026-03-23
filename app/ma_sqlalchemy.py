@@ -177,6 +177,7 @@ class WorkRunTransactionSchema(Schema):
 
 class WorkRunSchema(Schema):
     work_run_id                      = fields.Integer()
+    lot_number                       = fields.String(allow_none=True)
     work_order_id                    = fields.Integer()
     quantity                         = fields.Integer()
     usable_qty                       = fields.Integer(allow_none=True)
@@ -368,8 +369,9 @@ class PickingRequestItemSchema(Schema):
     remark                  = fields.String(allow_none=True)
 
 class PickingRequestSchema(Schema):
-    picking_request_id = fields.Integer()
-    request_type       = fields.Enum(PickingRequestType)
+    picking_request_id   = fields.Integer()
+    picking_request_code = fields.String(allow_none=True)
+    request_type         = fields.Enum(PickingRequestType)
     work_run_id        = fields.Integer(allow_none=True)
     test_result_id     = fields.Integer(allow_none=True)
     status             = fields.Enum(PickingRequestStatus)
@@ -402,6 +404,7 @@ class TestResultWorkRunFromRunSchema(Schema):
 
 class TestResultSchema(Schema):
     test_result_id          = fields.Integer(dump_only=True)
+    test_result_code        = fields.String(allow_none=True, dump_only=True)
     qc_work_order_id        = fields.Integer(allow_none=True)
     claimed_qty             = fields.Integer()
     session_status          = fields.Enum(TestSessionStatus, dump_only=True)
@@ -558,3 +561,24 @@ class MachineMaintenanceSchema(Schema):
     fix_cost = fields.Float(allow_none=True)
     machine = fields.Nested(MachineSchema, dump_default=None)
     created_date = fields.DateTime()
+
+class GenNumberConfigSchema(Schema):
+    gen_number_id = fields.Integer()
+    gen_number_type = fields.String()
+    gen_number_prefix = fields.String(allow_none=True)
+    gen_number_format = fields.String()
+    gen_number_current = fields.Integer()
+    year_buddhist = fields.Boolean()
+    document_code_id = fields.Integer(allow_none=True)
+    created_date = fields.DateTime()
+    updated_date = fields.DateTime()
+
+
+class DocumentCodeListSchema(Schema):
+    document_code_id = fields.Integer()
+    gen_number_type = fields.String()
+    description = fields.String(allow_none=True)
+    created_date = fields.DateTime()
+    updated_date = fields.DateTime()
+
+
