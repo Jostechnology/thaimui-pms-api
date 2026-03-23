@@ -8,7 +8,7 @@ def _test_result_options():
     return [
         selectinload(TestResult.test_result_items),
         selectinload(TestResult.work_run_sources).selectinload(TestResultWorkRun.work_run),
-        selectinload(TestResult.rework_work_runs),
+        selectinload(TestResult.picking_requests)
     ]
 
 
@@ -32,7 +32,6 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
             db.session.query(TestResult)
             .options(*_test_result_options())
             .filter(TestResult.qc_work_order_id == qc_work_order_id)
-            .order_by(TestResult.test_result_id.desc())
             .all()
         )
     except Exception:
@@ -79,7 +78,6 @@ def get_test_results_by_sales_item(sales_item_id):
             .options(*_test_result_options())
             .join(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
             .filter(QCWorkOrder.sales_item_id == sales_item_id)
-            .order_by(TestResult.test_result_id.desc())
         )
         return query.all()
     except Exception:
@@ -94,7 +92,6 @@ def get_test_results_by_doc_entry(doc_entry):
             .join(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
             .join(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
             .filter(SalesItem.doc_entry == doc_entry)
-            .order_by(TestResult.test_result_id.desc())
             .all()
         )
     except Exception:

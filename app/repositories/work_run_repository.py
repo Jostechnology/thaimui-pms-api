@@ -13,33 +13,6 @@ def get_work_run_by_id(work_run_id):
     except Exception:
         raise
 
-
-
-def get_work_run_with_test_results(work_run_id):
-    """Full fetch — loads test_result_sources, work_phases, rework_sources, rework_destinations, transactions."""
-    try:
-        query = (
-            db.session.query(WorkRun)
-            .options(
-                selectinload(WorkRun.test_result_sources)
-                    .selectinload(TestResultWorkRun.test_result)
-                    .selectinload(TestResult.test_result_items),
-                selectinload(WorkRun.work_order).selectinload(WorkOrder.sales_item),
-                selectinload(WorkRun.work_phases)
-                    .selectinload(WorkPhase.assignments)
-                    .selectinload(WorkAssignment.employee),
-                selectinload(WorkRun.work_phases).selectinload(WorkPhase.breaks),
-                selectinload(WorkRun.current_phase),
-                selectinload(WorkRun.rework_sources),
-                selectinload(WorkRun.rework_destinations),
-                selectinload(WorkRun.transactions),
-            )
-            .filter(WorkRun.work_run_id == work_run_id)
-        )
-        return query.first()
-    except Exception:
-        raise
-
 def get_work_run_display(work_run_id):
     """Full fetch — loads test_result_sources, work_phases, rework_sources, rework_destinations, transactions."""
     try:
@@ -52,6 +25,7 @@ def get_work_run_display(work_run_id):
                     .selectinload(WorkAssignment.employee),
                 selectinload(WorkRun.work_phases).selectinload(WorkPhase.breaks),
                 selectinload(WorkRun.current_phase),
+                selectinload(WorkRun.picking_requests)
             )
             .filter(WorkRun.work_run_id == work_run_id)
         )
@@ -74,8 +48,6 @@ def get_work_runs_by_work_order(work_order_id):
                 selectinload(WorkRun.work_phases).selectinload(WorkPhase.breaks),
                 selectinload(WorkRun.current_phase),
                 selectinload(WorkRun.rework_sources),
-                selectinload(WorkRun.rework_destinations),
-                selectinload(WorkRun.transactions),
             )
             .filter(WorkRun.work_order_id == work_order_id)
             .order_by(WorkRun.created_date.asc())
