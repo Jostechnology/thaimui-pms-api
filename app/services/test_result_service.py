@@ -1,7 +1,7 @@
 from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, TestResultWorkRun, WorkRunStatus, WorkRunTransactionType
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import test_result_repository, qc_work_order_repository, work_run_repository
-from app.services import transaction_service
+from app.services import transaction_service, document_code_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
 
@@ -82,6 +82,7 @@ def create_test_result(qc_work_order_id, data):
 
         test_result = TestResult(
             qc_work_order_id=qc_work_order_id,
+            test_result_code=document_code_service.generate_number("TR"),
             claimed_qty=claimed_qty,
             session_status=TestSessionStatus.INPROGRESS,
             remark=data.get("remark"),

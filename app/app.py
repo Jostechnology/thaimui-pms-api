@@ -80,6 +80,7 @@ from .controllers import work_run_controller
 from .controllers import machine_controller
 from .controllers import pm_machine_controller
 from .controllers import picking_request_controller
+from .controllers import document_code_controller
 
 # with app.app_context():
 #     db.create_all()

@@ -258,6 +258,7 @@ class WorkRun(AuditMixin):
     """One production attempt within a WorkOrder. Rework = new WorkRun on the same WorkOrder."""
     __tablename__ = "t_work_run"
     work_run_id = db.Column(db.Integer, primary_key=True)
+    lot_number = db.Column(db.String(100), nullable=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=1)           # planned/pick qty
     usable_qty = db.Column(db.Integer, nullable=True)                     # set at completion — good items
@@ -496,6 +497,7 @@ class TestResult(AuditMixin):
     """
     __tablename__ = "t_test_result"
     test_result_id     = db.Column(db.Integer, primary_key=True)
+    test_result_code   = db.Column(db.String(100), nullable=True)
     qc_work_order_id   = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='SET NULL'), nullable=True)
     claimed_qty        = db.Column(db.Integer, nullable=False)
     session_status     = db.Column(db.Enum(TestSessionStatus), nullable=False, default=TestSessionStatus.INPROGRESS)
@@ -748,8 +750,9 @@ class PickingRequestType(enum.Enum):
 
 class PickingRequest(AuditMixin):
     __tablename__ = "t_picking_request"
-    picking_request_id = db.Column(db.Integer, primary_key=True)
-    request_type       = db.Column(db.Enum(PickingRequestType), nullable=False)
+    picking_request_id   = db.Column(db.Integer, primary_key=True)
+    picking_request_code = db.Column(db.String(100), nullable=True)
+    request_type         = db.Column(db.Enum(PickingRequestType), nullable=False)
     work_run_id        = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='SET NULL'), nullable=True)
     test_result_id     = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='SET NULL'), nullable=True)
     status             = db.Column(db.Enum(PickingRequestStatus), nullable=False, default=PickingRequestStatus.PENDING)
@@ -772,6 +775,28 @@ class PickingRequestItem(AuditMixin):
     remark                  = db.Column(db.String(500), nullable=True)
 
     picking_request = db.relationship('PickingRequest', back_populates='items', lazy='noload')
+class DocumentCodeList(BaseModel):
+    __tablename__ = "m_document_code_list"
+    document_code_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    gen_number_type = db.Column(db.String(50), nullable=False, unique=True)
+    description = db.Column(db.String(100), nullable=True)
+
+    gen_number_config = db.relationship('GenNumberConfig', back_populates='document_code', lazy='noload', uselist=False)
+
+
+class GenNumberConfig(BaseModel):
+    __tablename__ = "m_gen_number_config"
+    gen_number_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    gen_number_type = db.Column(db.String(50), nullable=False)
+    gen_number_prefix = db.Column(db.String(20), nullable=True)
+    gen_number_format = db.Column(db.String(100), nullable=False)
+    gen_number_current = db.Column(db.Integer, nullable=False, default=0)
+    year_buddhist = db.Column(db.Boolean, default=True)
+    document_code_id = db.Column(db.Integer, db.ForeignKey('m_document_code_list.document_code_id'), nullable=True)
+
+    document_code = db.relationship('DocumentCodeList', back_populates='gen_number_config', lazy='noload')
+
+
 class OperationCostMonthly(AuditMixin):
     __tablename__ = "m_operation_cost_monthly"
     operation_cost_monthly_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
