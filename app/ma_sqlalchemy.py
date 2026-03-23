@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, PhaseStatus, RolePermission, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, PickingRequestType
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, PhaseStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, PickingRequestType
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -228,6 +228,8 @@ class SalesOrderSchema(Schema):
     bpl_name = fields.String()
     group_code = fields.String()
     group_name = fields.String()
+    status = fields.Enum(SalesOrderStatus)
+    created_date = fields.String()
 
 
 class SalesItemNoMaterialSchema(Schema):
@@ -262,10 +264,12 @@ class SalesItemSchema(Schema):
     produced_qty                 = fields.Integer(dump_only=True)
     unavailable_for_test_qty     = fields.Integer(dump_only=True)
     available_for_test_qty       = fields.Integer(dump_only=True)
+    status                       = fields.Enum(SalesItemStatus, dump_only=True)
     passed_qty                   = fields.Integer(dump_only=True)
     failed_qty                   = fields.Integer(dump_only=True)
     num_qc_work_order            = fields.Integer(dump_only=True)
     num_qc_successed_work_order  = fields.Integer(dump_only=True)
+    is_completable               = fields.Boolean(dump_only=True)
 
 
 class QCFormSchema(Schema):

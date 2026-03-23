@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, WorkRun, QCWorkOrder, TestResult
+from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, WorkRun, QCWorkOrder, TestResult, SalesItemStatus
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -64,6 +64,32 @@ def get_sales_item_tracking_by_id(sales_item_id):
         return query.first()
     except Exception:
         raise
+
+
+def get_sales_item_for_complete(sales_item_id):
+    """Load work_order → work_runs (for produced_qty) and qc_work_orders (for is_completable)."""
+    try:
+        query = (
+            db.session.query(SalesItem)
+            .options(
+                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
+                selectinload(SalesItem.qc_work_orders),
+            )
+            .filter(SalesItem.sales_item_id == sales_item_id)
+        )
+        return query.first()
+    except Exception:
+        raise
+
+
+def has_incomplete_items_for_sales_order(doc_entry, exclude_sales_item_id):
+    """Return True if any sibling SalesItem (excluding current) is not yet COMPLETED."""
+    query = db.session.query(SalesItem).filter(
+        SalesItem.doc_entry == doc_entry,
+        SalesItem.sales_item_id != exclude_sales_item_id,
+        SalesItem.status != SalesItemStatus.COMPLETED,
+    )
+    return query.first() is not None
 
 
 def get_sales_items_by_doc_entry(doc_entry):
