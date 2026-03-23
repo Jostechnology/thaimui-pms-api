@@ -172,3 +172,4 @@ cython_debug/
 .pypirc
 uploads
 backup_key
+docs/
