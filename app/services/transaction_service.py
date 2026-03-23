@@ -12,13 +12,16 @@ def create_init_material_transaction(material_list: MaterialList, document: str)
     ))
 
 
-def create_material_transaction(material_list: MaterialList, document: str, transaction_type: MaterialTransactionType, quantity: int):
+def create_material_transaction(material_list: MaterialList, document: str, transaction_type, quantity: int, **kwargs):
     """
     Create a MaterialTransaction linked to the given document.
     - ADD: stores positive amount
     - REMOVE: validates availability then stores negative amount
+    Accepts either MaterialTransactionType enum or the equivalent string value.
     """
     try:
+        if isinstance(transaction_type, str):
+            transaction_type = MaterialTransactionType[transaction_type.upper()]
         if transaction_type == MaterialTransactionType.REMOVE:
             available = material_list.remaining_num
             if quantity > available:

@@ -15,6 +15,7 @@ def _test_result_options():
 def _test_result_finalize_options():
     return [
         selectinload(TestResult.test_result_items),
+        selectinload(TestResult.qc_work_order),
     ]
 
 

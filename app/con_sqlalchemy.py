@@ -1,7 +1,8 @@
 import enum
 from app.app import db
 from datetime import date, datetime, timezone, timedelta
-from sqlalchemy import event , Numeric
+from sqlalchemy import event, Numeric, select, func
+from sqlalchemy.orm import column_property
 from flask import g
 
 def bangkok_now():
@@ -363,6 +364,16 @@ class SalesItem(AuditMixin):
             if tr.overall_status == TestResultStatus.FAILED
         )
 
+    @property
+    def is_completable(self):
+        if self.status == SalesItemStatus.COMPLETED:
+            return False
+        if self.produced_qty < self.item_num:
+            return False
+        if self.num_qc_work_order == 0:
+            return True
+        return self.num_qc_successed_work_order == self.num_qc_work_order
+
 class MachineStatus(enum.Enum):
     RUNNING = "RUNNING"
     DOWN = "DOWN"
@@ -412,11 +423,15 @@ class MaterialList(AuditMixin):
     def remaining_num(self):
         return sum(t.amount for t in self.transactions)
 
+class QCWorkOrderStatus(enum.Enum):
+    PENDING = 'PENDING'
+    PASSED = 'PASSED'
+
 class QCWorkOrder(AuditMixin):
-    """Test instruction template for a SalesItem. Pure specification — no status."""
     __tablename__ = "t_qc_work_order"
     qc_work_order_id = db.Column(db.Integer, primary_key=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
+    status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
     qc_date = db.Column(db.DateTime, nullable=True)
     qc_by = db.Column(db.String(100), nullable=True)
     quantity = db.Column(db.Integer, nullable=False, default=1)
@@ -425,6 +440,22 @@ class QCWorkOrder(AuditMixin):
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
     qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
     test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='selectin')
+
+
+SalesItem.num_qc_work_order = column_property(
+    select(func.count(QCWorkOrder.qc_work_order_id))
+    .where(QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
+    .scalar_subquery()
+)
+
+SalesItem.num_qc_successed_work_order = column_property(
+    select(func.count(QCWorkOrder.qc_work_order_id))
+    .where(
+        QCWorkOrder.sales_item_id == SalesItem.sales_item_id,
+        QCWorkOrder.status == QCWorkOrderStatus.PASSED,
+    )
+    .scalar_subquery()
+)
 
 
 class QCForm(AuditMixin):
@@ -613,10 +644,15 @@ class QCCheckItem(AuditMixin): # Certificate Item
     wll         = db.Column(db.Float, nullable=True)
     load_test   = db.Column(db.Float, nullable=True)
 
+class SalesOrderStatus(enum.Enum):
+    INPROGRESS = 'INPROGRESS'
+    COMPLETED = 'COMPLETED'
+
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
     doc_entry = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
+    status = db.Column(db.Enum(SalesOrderStatus), nullable=False, default=SalesOrderStatus.INPROGRESS)
     card_code = db.Column(db.String(20), nullable=False)
     card_name = db.Column(db.String(200), nullable=False)
     po_number = db.Column(db.String(100), nullable=True)
@@ -630,6 +666,7 @@ class SalesOrder(AuditMixin):
     sales_items = db.relationship(
         "SalesItem",
         back_populates="sales_order",
+        lazy='noload',
     )
     certifications = db.relationship('QCCertification', back_populates='sales_order')
 

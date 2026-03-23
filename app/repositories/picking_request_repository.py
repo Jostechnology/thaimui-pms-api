@@ -37,6 +37,22 @@ def get_picking_requests_by_test_result(test_result_id):
     return query.all()
 
 
+def has_unsolved_picking_requests_for_work_run(work_run_id):
+    query = db.session.query(PickingRequest).filter(
+        PickingRequest.work_run_id == work_run_id,
+        PickingRequest.status.in_([PickingRequestStatus.PENDING, PickingRequestStatus.SENT])
+    )
+    return query.first() is not None
+
+
+def has_unsolved_picking_requests_for_test_result(test_result_id):
+    query = db.session.query(PickingRequest).filter(
+        PickingRequest.test_result_id == test_result_id,
+        PickingRequest.status.in_([PickingRequestStatus.PENDING, PickingRequestStatus.SENT])
+    )
+    return query.first() is not None
+
+
 def get_picking_request_list(page, per_page, search="", status=None, request_type=None):
     query = db.session.query(PickingRequest).options(
         selectinload(PickingRequest.items)

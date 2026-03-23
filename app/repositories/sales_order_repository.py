@@ -127,6 +127,11 @@ def get_all_sales_orders(page, limit, search):
         raise
 
 
+def get_sales_order_by_doc_entry(doc_entry):
+    query = db.session.query(SalesOrder).filter(SalesOrder.doc_entry == doc_entry)
+    return query.first()
+
+
 def get_sales_order_detail(doc_entry):
     try:
         sales_order = (

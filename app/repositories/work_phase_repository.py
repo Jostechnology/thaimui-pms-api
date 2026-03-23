@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkPhase, WorkAssignment, WorkPhaseBreak, bangkok_now, BreakType
+from app.con_sqlalchemy import WorkPhase, WorkAssignment, WorkPhaseBreak, bangkok_now, BreakType, PhaseStatus
 from app.app import db
 
 
@@ -38,6 +38,14 @@ def get_work_phases_by_run_id(work_run_id):
     """Get all phases for a work run, ordered by work_phase_id (creation order)"""
     query = db.session.query(WorkPhase).filter(WorkPhase.work_run_id == work_run_id).order_by(WorkPhase.work_phase_id)
     return query.all()
+
+
+def has_unfinished_phases_for_work_run(work_run_id):
+    query = db.session.query(WorkPhase).filter(
+        WorkPhase.work_run_id == work_run_id,
+        WorkPhase.phase_status != PhaseStatus.COMPLETED
+    )
+    return query.first() is not None
 
 
 def get_work_assignments_by_phase(work_phase_id):

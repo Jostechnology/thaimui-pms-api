@@ -1,6 +1,6 @@
-from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, TestResultWorkRun, WorkRunStatus, WorkRunTransactionType
+from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, TestResultWorkRun, WorkRunStatus, WorkRunTransactionType, QCWorkOrderStatus
 from app.ma_sqlalchemy import TestResultSchema
-from app.repositories import test_result_repository, qc_work_order_repository, work_run_repository
+from app.repositories import test_result_repository, qc_work_order_repository, work_run_repository, picking_request_repository
 from app.services import transaction_service, document_code_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
@@ -124,6 +124,9 @@ def finalize_test_result(test_result_id, data):
         if test_result.session_status == TestSessionStatus.COMPLETED:
             raise ValidationError("เทสนี้จบไปแล้ว กรุณาตรวจสอบอีกครั้ง")
 
+        if picking_request_repository.has_unsolved_picking_requests_for_test_result(test_result_id):
+            raise ValidationError("ไม่สามารถปิด Test Result ได้ เนื่องจากยังมี Picking Request ที่ยังไม่เสร็จสิ้น (PENDING/SENT)")
+
         items_data = data.get("items", [])
         if not items_data:
             raise ValidationError("ไม่พบ TestItem กรุณาตรวจสอบอีกครั้ง")
@@ -149,6 +152,9 @@ def finalize_test_result(test_result_id, data):
         overall = _resolve_status(data.get("overall_status"))
         test_result.overall_status = overall
         test_result.session_status = TestSessionStatus.COMPLETED
+
+        if overall == TestResultStatus.PASSED and test_result.qc_work_order:
+            test_result.qc_work_order.status = QCWorkOrderStatus.PASSED
 
         db.session.commit()
         db.session.refresh(test_result)

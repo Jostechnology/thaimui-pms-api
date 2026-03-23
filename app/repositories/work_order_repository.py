@@ -6,7 +6,7 @@ from app.con_sqlalchemy import (
     TestResult,
 )
 from app.app import db
-from sqlalchemy import extract, or_
+from sqlalchemy import desc, extract, or_
 from sqlalchemy.orm import selectinload
 
 
@@ -40,6 +40,7 @@ def get_all_work_orders(page, limit, search, filter, month):
                 extract('year', WorkOrder.created_date) == filter_year,
                 extract('month', WorkOrder.created_date) == filter_month
             )
+        query = query.order_by(desc(WorkOrder.created_date))
         query = query.paginate(page=page, per_page=limit, error_out=False)
         return {"items": query.items, "total": query.total, "page": query.page, "pages": query.pages}
     except Exception:
