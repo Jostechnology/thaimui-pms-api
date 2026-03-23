@@ -1,7 +1,7 @@
-from app.con_sqlalchemy import SalesItem
-from app.repositories import sales_item_repository
+from app.con_sqlalchemy import SalesItem, SalesItemStatus, WorkOrderStatus, SalesOrderStatus
+from app.repositories import sales_item_repository, sales_order_repository
 from app.app import db
-from app.exception import NotFoundError
+from app.exception import NotFoundError, ValidationError
 
 
 def get_all_sales_items(data):
@@ -38,6 +38,37 @@ def get_sales_item_tracking(sales_item_id):
             raise NotFoundError(f"Sales item with id {sales_item_id} not found")
         return sales_item
     except Exception:
+        raise
+
+
+def complete_sales_item(sales_item_id):
+    try:
+        sales_item = sales_item_repository.get_sales_item_for_complete(sales_item_id)
+        if not sales_item:
+            raise NotFoundError(f"Sales item {sales_item_id} not found")
+        if sales_item.status == SalesItemStatus.COMPLETED:
+            raise ValidationError("Sales item นี้เสร็จสิ้นแล้ว")
+        if not sales_item.is_completable:
+            raise ValidationError("Sales item ยังไม่ครบเงื่อนไขที่จะปิด — ตรวจสอบจำนวนที่ผลิตและ QC Work Order")
+
+        sales_item.status = SalesItemStatus.COMPLETED
+
+        if sales_item.work_order:
+            sales_item.work_order.status = WorkOrderStatus.COMPLETED
+
+        db.session.flush()
+
+        if sales_item.doc_entry and not sales_item_repository.has_incomplete_items_for_sales_order(
+            sales_item.doc_entry, sales_item_id
+        ):
+            sales_order = sales_order_repository.get_sales_order_by_doc_entry(sales_item.doc_entry)
+            if sales_order:
+                sales_order.status = SalesOrderStatus.COMPLETED
+
+        db.session.commit()
+        return sales_item
+    except Exception:
+        db.session.rollback()
         raise
 
 

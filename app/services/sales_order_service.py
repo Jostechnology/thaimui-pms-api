@@ -44,6 +44,7 @@ def get_all_sales_orders(data):
                 "qc_count": row.qc_count,
                 "qc_passed": row.qc_passed,
                 "qc_failed": row.qc_failed,
+                "status" : so.status.name
             })
 
         return {

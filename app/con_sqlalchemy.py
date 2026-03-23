@@ -363,7 +363,17 @@ class SalesItem(AuditMixin):
             tr.claimed_qty for qc in self.qc_work_orders for tr in qc.test_results
             if tr.overall_status == TestResultStatus.FAILED
         )
-    
+
+    @property
+    def is_completable(self):
+        if self.status == SalesItemStatus.COMPLETED:
+            return False
+        if self.produced_qty < self.item_num:
+            return False
+        if self.num_qc_work_order == 0:
+            return True
+        return self.num_qc_successed_work_order == self.num_qc_work_order
+
 class MachineStatus(enum.Enum):
     RUNNING = "RUNNING"
     DOWN = "DOWN"
@@ -634,10 +644,15 @@ class QCCheckItem(AuditMixin): # Certificate Item
     wll         = db.Column(db.Float, nullable=True)
     load_test   = db.Column(db.Float, nullable=True)
 
+class SalesOrderStatus(enum.Enum):
+    INPROGRESS = 'INPROGRESS'
+    COMPLETED = 'COMPLETED'
+
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
     doc_entry = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
+    status = db.Column(db.Enum(SalesOrderStatus), nullable=False, default=SalesOrderStatus.INPROGRESS)
     card_code = db.Column(db.String(20), nullable=False)
     card_name = db.Column(db.String(200), nullable=False)
     po_number = db.Column(db.String(100), nullable=True)
@@ -651,6 +666,7 @@ class SalesOrder(AuditMixin):
     sales_items = db.relationship(
         "SalesItem",
         back_populates="sales_order",
+        lazy='noload',
     )
     certifications = db.relationship('QCCertification', back_populates='sales_order')
 
