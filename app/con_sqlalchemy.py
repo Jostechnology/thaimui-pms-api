@@ -1,7 +1,8 @@
 import enum
 from app.app import db
 from datetime import date, datetime, timezone, timedelta
-from sqlalchemy import event , Numeric
+from sqlalchemy import event, Numeric, select, func
+from sqlalchemy.orm import column_property
 from flask import g
 
 def bangkok_now():
@@ -362,7 +363,7 @@ class SalesItem(AuditMixin):
             tr.claimed_qty for qc in self.qc_work_orders for tr in qc.test_results
             if tr.overall_status == TestResultStatus.FAILED
         )
-
+    
 class MachineStatus(enum.Enum):
     RUNNING = "RUNNING"
     DOWN = "DOWN"
@@ -412,11 +413,15 @@ class MaterialList(AuditMixin):
     def remaining_num(self):
         return sum(t.amount for t in self.transactions)
 
+class QCWorkOrderStatus(enum.Enum):
+    PENDING = 'PENDING'
+    PASSED = 'PASSED'
+
 class QCWorkOrder(AuditMixin):
-    """Test instruction template for a SalesItem. Pure specification — no status."""
     __tablename__ = "t_qc_work_order"
     qc_work_order_id = db.Column(db.Integer, primary_key=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
+    status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
     qc_date = db.Column(db.DateTime, nullable=True)
     qc_by = db.Column(db.String(100), nullable=True)
     quantity = db.Column(db.Integer, nullable=False, default=1)
@@ -425,6 +430,22 @@ class QCWorkOrder(AuditMixin):
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
     qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
     test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='selectin')
+
+
+SalesItem.num_qc_work_order = column_property(
+    select(func.count(QCWorkOrder.qc_work_order_id))
+    .where(QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
+    .scalar_subquery()
+)
+
+SalesItem.num_qc_successed_work_order = column_property(
+    select(func.count(QCWorkOrder.qc_work_order_id))
+    .where(
+        QCWorkOrder.sales_item_id == SalesItem.sales_item_id,
+        QCWorkOrder.status == QCWorkOrderStatus.PASSED,
+    )
+    .scalar_subquery()
+)
 
 
 class QCForm(AuditMixin):

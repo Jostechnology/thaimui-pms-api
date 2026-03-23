@@ -264,6 +264,8 @@ class SalesItemSchema(Schema):
     available_for_test_qty       = fields.Integer(dump_only=True)
     passed_qty                   = fields.Integer(dump_only=True)
     failed_qty                   = fields.Integer(dump_only=True)
+    num_qc_work_order            = fields.Integer(dump_only=True)
+    num_qc_successed_work_order  = fields.Integer(dump_only=True)
 
 
 class QCFormSchema(Schema):
