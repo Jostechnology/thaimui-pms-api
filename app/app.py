@@ -75,6 +75,7 @@ from .controllers import test_certificate_controller
 from .controllers import test_result_controller
 from .controllers import inventory_controller
 from .controllers import item_component_controller
+from .controllers import operation_cost_monthly_controller
 from .controllers import work_run_controller
 from .controllers import machine_controller
 from .controllers import pm_machine_controller

@@ -772,3 +772,17 @@ class PickingRequestItem(AuditMixin):
     remark                  = db.Column(db.String(500), nullable=True)
 
     picking_request = db.relationship('PickingRequest', back_populates='items', lazy='noload')
+class OperationCostMonthly(AuditMixin):
+    __tablename__ = "m_operation_cost_monthly"
+    operation_cost_monthly_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    operation_cost_date = db.Column(db.Date, nullable=False, default = bangkok_now)
+    depreciation_building_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    depreciation_building_period = db.Column(db.Integer, nullable=False, default=0)
+    depreciation_util_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    depreciation_util_period = db.Column(db.Integer, nullable=False, default=0)
+    office_rent_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    office_supplies_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    water_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    electricity_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    utility_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
+    
