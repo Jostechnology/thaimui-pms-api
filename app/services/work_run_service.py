@@ -1,6 +1,6 @@
 from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, TestSessionStatus, TestResultStatus
 from app.repositories import work_run_repository, work_order_repository, test_result_repository
-from app.services import transaction_service
+from app.services import transaction_service, document_code_service
 from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
 from app.exception import NotFoundError, ValidationError
@@ -102,6 +102,7 @@ def create_work_run(work_order_id, data):
             work_run = WorkRun(
                 work_order_id=work_order_id,
                 quantity=quantity,
+                lot_number=document_code_service.generate_number("LOT"),
                 wms_pick_reference=data.get("wms_pick_reference"),
                 status=WorkRunStatus.INPROGRESS,
             )
@@ -149,6 +150,7 @@ def create_work_run(work_order_id, data):
             work_run = WorkRun(
                 work_order_id=work_order_id,
                 quantity=quantity,
+                lot_number=document_code_service.generate_number("LOT"),
                 wms_pick_reference=data.get("wms_pick_reference"),
                 status=WorkRunStatus.INPROGRESS,
                 rework_source_test_result_id=rework_source_test_result_id,
@@ -161,6 +163,7 @@ def create_work_run(work_order_id, data):
             work_run = WorkRun(
                 work_order_id=work_order_id,
                 quantity=quantity,
+                lot_number=document_code_service.generate_number("LOT"),
                 wms_pick_reference=data.get("wms_pick_reference"),
                 status=WorkRunStatus.INPROGRESS,
             )
