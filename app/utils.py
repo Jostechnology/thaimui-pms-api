@@ -9,6 +9,8 @@ def create_token(data, token_type="access", expires_in=None):
             exp = datetime.utcnow() + timedelta(hours=10)
         elif token_type == "refresh":
             exp = datetime.utcnow() + timedelta(days=7)
+        elif token_type == "branch_select":
+            exp = datetime.utcnow() + timedelta(minutes=5)
         else:
             raise ValueError("Invalid token_type")
 

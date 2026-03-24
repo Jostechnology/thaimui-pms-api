@@ -59,8 +59,18 @@ def verify_required(f):
             _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: token not in DB")
             return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
 
+        if decoded.get("type") == "branch_select":
+            _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: branch_select token rejected")
+            return jsonify({"message": "Token ประเภทไม่ถูกต้อง"}), 401
+
+        branch_id = decoded.get("branch_id")
+        if branch_id is None:
+            _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: missing branch_id in token")
+            return jsonify({"message": "Token ไม่มีข้อมูลสาขา กรุณาเลือกสาขาใหม่"}), 401
+
         g.username = decoded.get("username")
-        _log_timer("verify_required", (time.perf_counter() - _start) * 1000, f"user: {g.username}")
+        g.branch_id = branch_id
+        _log_timer("verify_required", (time.perf_counter() - _start) * 1000, f"user: {g.username}, branch: {g.branch_id}")
         return f(*args, **kwargs)
     return decorated
 

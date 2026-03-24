@@ -1,9 +1,10 @@
 import enum
 from app.app import db
 from datetime import date, datetime, timezone, timedelta
-from sqlalchemy import event, Numeric, select, func
-from sqlalchemy.orm import column_property
+from sqlalchemy import event, Numeric, select, func, UniqueConstraint
+from sqlalchemy.orm import column_property, with_loader_criteria, Session
 from flask import g
+from app.exception import AuthorizationError
 
 def bangkok_now():
     """Return current datetime in Asia/Bangkok. If zoneinfo/tzdata is unavailable,
@@ -27,6 +28,46 @@ class AuditMixin(BaseModel):
     created_by = db.Column(db.String(80))
     updated_by = db.Column(db.String(80))
 
+class BranchScopedMixin:
+    """Mixin สำหรับบังคับให้ตารางต้องมี branch_id เสมอ"""
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=False, index=True)
+
+@event.listens_for(Session, "do_orm_execute")
+def _add_branch_filter(execute_state):
+    """เช็คว่า 1. เป็นคำสั่งดึงข้อมูล (SELECT) และ 2. User คนนี้ล็อกอินและมี g.branch_id อยู่"""
+    if execute_state.is_select and g.get("branch_id") is not None:
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                BranchScopedMixin,
+                lambda cls: cls.branch_id == g.branch_id,
+                include_aliases=True,
+            )
+        )
+@event.listens_for(db.session, "before_flush")
+def manage_branch_data(session, flush_context, instances):
+    """ถ้า API รอบนี้ไม่มีข้อมูลสาขา จะปล่อยผ่านไป"""
+    if not g.get("branch_id"):
+        return
+        
+    # ตอนสร้างของใหม่ (INSERT) -> ยัดสาขาให้อัตโนมัติ
+    for obj in session.new:
+        if isinstance(obj, BranchScopedMixin):
+            # ถ้าไม่ได้ส่ง branch_id มา ให้ดึงจาก g.branch_id ของคนที่ล็อกอินอยู่มาใส่
+            if getattr(obj, "branch_id", None) is None:
+                obj.branch_id = g.branch_id
+
+    # ตอนแก้ไขข้อมูล (UPDATE) -> เช็คว่าใช่ของสาขาตัวเองไหม
+    for obj in session.dirty:
+        if isinstance(obj, BranchScopedMixin):
+            if obj.branch_id != g.branch_id:
+                raise AuthorizationError("ไม่ได้รับอนุญาตให้แก้ไขข้อมูลของสาขาอื่น")
+                
+    # ตอนลบข้อมูล (DELETE)
+    for obj in session.deleted:
+        if isinstance(obj, BranchScopedMixin):
+            if obj.branch_id != g.branch_id:
+                raise AuthorizationError("ไม่ได้รับอนุญาตให้ลบข้อมูลของสาขาอื่น")
+
 @event.listens_for(AuditMixin, 'before_insert', propagate=True)
 def receive_before_insert(mapper, connection, target):
     """Set created_by when inserting"""
@@ -42,6 +83,23 @@ def receive_before_update(mapper, connection, target):
     if username:
         target.updated_by = username
 
+class Branch(AuditMixin):
+    __tablename__ = 'm_branch'
+
+    branch_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    branch_code = db.Column(db.String(20), unique=True, nullable=False)
+    branch_name = db.Column(db.String(100), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
+
+    users = db.relationship('User', secondary='map_user_branch', back_populates='branches', lazy='noload')
+
+user_branch_mapping = db.Table(
+    'map_user_branch',
+    db.Model.metadata,
+    db.Column('user_id', db.Integer, db.ForeignKey('m_user.user_id', ondelete='CASCADE'), primary_key=True),
+    db.Column('branch_id', db.Integer, db.ForeignKey('m_branch.branch_id', ondelete='CASCADE'), primary_key=True)
+)
+
 class User(AuditMixin):
     __tablename__ = "m_user"
     user_id = db.Column(db.Integer, primary_key=True)
@@ -51,6 +109,7 @@ class User(AuditMixin):
     role = db.relationship('Role', back_populates="users")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
+    branches = db.relationship('Branch', secondary='map_user_branch', back_populates='users')
 
 class Tokenlist(BaseModel):
     __tablename__ = "t_token_list"
@@ -380,10 +439,10 @@ class MachineStatus(enum.Enum):
     IDLE = "IDLE"
     OFFLINE = "OFFLINE"
 
-class Machine(AuditMixin):
+class Machine(AuditMixin,BranchScopedMixin):
     __tablename__ = "m_machine"
     machine_id = db.Column(db.Integer, primary_key=True)
-    machine_code = db.Column(db.String(50), nullable=False, unique=True)
+    machine_code = db.Column(db.String(50), nullable=False)
     machine_name = db.Column(db.String(255), nullable=False)
     machine_description = db.Column(db.String(500))
     manufacturer = db.Column(db.String(255), nullable=True)
@@ -391,8 +450,11 @@ class Machine(AuditMixin):
     status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     maintenances = db.relationship('MachineMaintenance', back_populates='machine', lazy='noload')
+    __table_args__ = (
+    UniqueConstraint('branch_id', 'machine_code', name='uq_branch_machine_code'),
+)
 
-class MachineMaintenance(AuditMixin):
+class MachineMaintenance(AuditMixin,BranchScopedMixin):
     __tablename__ = "t_machine_maintenance"
     maintenance_id = db.Column(db.Integer, primary_key=True)
     machine_id = db.Column(db.Integer, db.ForeignKey('m_machine.machine_id', ondelete='CASCADE'), nullable=False)
