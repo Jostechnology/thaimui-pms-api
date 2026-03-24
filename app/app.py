@@ -38,6 +38,7 @@ ma = Marshmallow(app)
 
 init_center_service(CENTER_ACCESS_KEY, CENTER_URL)
 
+
 @app.errorhandler(AppException)
 def handle_app_exception(e):
     traceback.print_exc()
@@ -81,6 +82,7 @@ from .controllers import machine_controller
 from .controllers import pm_machine_controller
 from .controllers import picking_request_controller
 from .controllers import document_code_controller
+from .controllers import branch_controller
 
 # with app.app_context():
 #     db.create_all()

@@ -3,8 +3,8 @@ from copy import deepcopy
 import json
 from app.app import db
 from app.exception import AppException, MissingFieldsError, NotFoundError, UniqueError
-from app.con_sqlalchemy import Role
-from app.repositories import module_repository, role_repository, user_repository
+from app.con_sqlalchemy import Role,Branch
+from app.repositories import module_repository, role_repository, user_repository, branch_repository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
 from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
 
@@ -501,12 +501,17 @@ def get_user_list(data):
         )
         items = []
         for user in result['items']:
+            branch_ids = [b.branch_id for b in user.branches]
+            branch_names = [b.branch_name for b in user.branches]
+
             items.append({
                 "username": user.username,
                 "role_id": user.role_id,
                 "role_name": user.role.role_name if user.role else "-",
                 "created_date": user.created_date.strftime("%Y-%m-%d %H:%M:%S") if user.created_date else "-",
-                "is_active": user.is_active
+                "is_active": user.is_active,
+                "branch_ids": branch_ids,
+                "branch_names": branch_names
             })
         return {
             "items": items,
@@ -609,3 +614,37 @@ def ban_user(data):
         raise AppException(str(e))
 
 
+def assign_branches_to_user(data):
+        username = data.get('username')
+        branch_ids = data.get('branch_ids', [])
+
+        if not username:
+            raise NotFoundError("กรุณาระบุ Username")
+
+        if not isinstance(branch_ids, list):
+            raise NotFoundError("branch_ids ต้องเป็นรูปแบบ Array (List) เท่านั้น")
+
+        #เช็คว่ามี User
+        user = user_repository.get_user_by_username(username)
+        if not user:
+            raise NotFoundError("ไม่พบผู้ใช้งานนี้ในระบบ")
+
+        #ค้นหาข้อมูลสาขาจาก branch_ids ที่ส่งมา
+        branches = []
+        if branch_ids:
+            branches = branch_repository.get_branches_by_ids(branch_ids)
+            if len(branches) != len(branch_ids):
+                return NotFoundError("ข้อมูลสาขาบางส่วนไม่ถูกต้องหรือไม่พบในระบบ")
+        try:
+            user_repository.update_user_branches(user, branches)
+            return {
+                "success": True, 
+                "message": f"อัปเดตสิทธิ์สาขาให้ {username} สำเร็จ",
+                "data": {
+                    "username": username,
+                    "assigned_branches": [b.branch_name for b in branches]
+                }
+            }
+        except Exception as e:
+            db.session.rollback()
+            raise AppException(str(e))

@@ -13,6 +13,14 @@ class RoleSchema(Schema):
     description = fields.String()
     active_flag = fields.Bool()
 
+class BranchSchema(Schema):
+    branch_id = fields.Integer()
+    branch_code = fields.String()
+    branch_name = fields.String()
+    created_date = fields.DateTime()
+    updated_date = fields.DateTime()
+    is_active = fields.Boolean()
+    
 class GetPermissionSchema(Schema):
     permission_id = fields.Integer()
     permission_code = fields.String()
