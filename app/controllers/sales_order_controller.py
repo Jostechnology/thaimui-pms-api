@@ -95,7 +95,7 @@ def api_get_sales_order_test_quick():
 
 @app.route("/api/sales_order/create_routine", methods=["POST"])
 @verify_required
-def api_get_sales_order_test_quick():
+def api_create_sales_order_routine():
     try:
         data = request.get_json()
         sales_orders = data.get("items", [])
