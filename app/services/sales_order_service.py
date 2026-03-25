@@ -96,6 +96,16 @@ def get_test_sales_order():
     except Exception:
         db.session.rollback()
         raise
+    
+def create_sales_order_routine(data):
+    try:
+        for so in data:  
+            create_sales_order(so)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise    
+
 def create_sales_order(data):
     try:
 
