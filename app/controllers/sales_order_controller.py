@@ -81,7 +81,17 @@ def api_get_sales_items_from_sales_order(doc_entry):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-
+@app.route("/api/sales_order/get_test_quick", methods=["POST"])
+@verify_required
+def api_get_sales_order_test_quick():
+    try:
+        get_test_sales_order()
+        return jsonify({"success": True}), 200
+    except AppException as e:
+        return jsonify({"error" : e.message}), e.status_code
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/sales_order/create_routine", methods=["POST"])
 @verify_required
