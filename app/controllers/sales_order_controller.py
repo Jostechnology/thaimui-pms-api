@@ -4,7 +4,7 @@ from app.app import app
 from app.exception import AppException
 from flask import request, jsonify
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
-from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order
+from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine
 
 
 @app.route("/api/sales_order/get_all", methods=["GET"])
@@ -83,11 +83,13 @@ def api_get_sales_items_from_sales_order(doc_entry):
 
 
 
-@app.route("/api/sales_order/get_test_quick", methods=["POST"])
+@app.route("/api/sales_order/create_routine", methods=["POST"])
 @verify_required
 def api_get_sales_order_test_quick():
     try:
-        get_test_sales_order()
+        data = request.get_json()
+        sales_orders = data.get("items", [])
+        create_sales_order_routine(sales_orders)
         return jsonify({"success": True}), 200
     except AppException as e:
         return jsonify({"error" : e.message}), e.status_code
