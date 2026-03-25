@@ -26,6 +26,7 @@ def search_sales_order(page, limit, search):
                 )
             )
             .distinct()
+            .order_by(desc(SalesOrder.created_date))
         )
 
         result = query.paginate(page=page, per_page=limit, error_out=False)
