@@ -124,6 +124,13 @@ class ComponentMaterialUsageSchema(Schema):
     quantity_used = fields.Integer()
     material_list = fields.Nested(MaterialListSchema())
 
+class ComponentTemplateSectionDataSchema(Schema):
+    section_data_id = fields.Integer(dump_only=True)
+    section_type = fields.String()
+    data = fields.Raw()
+    section_key = fields.String()
+    item_component_id = fields.Integer()
+
 class ItemComponentSchema(Schema):
     item_component_id = fields.Integer()
     work_order_id = fields.Integer()
@@ -131,6 +138,8 @@ class ItemComponentSchema(Schema):
     material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
     remark = fields.String(allow_none=True)
     img_url = fields.String(allow_none=True)
+    component_template_id = fields.Integer(allow_none=True)
+    component_template_sections = fields.List(fields.Nested(ComponentTemplateSectionDataSchema()), dump_default=[])
 
 class WorkRunSchema(Schema):
     work_run_id = fields.Integer()
