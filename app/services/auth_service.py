@@ -12,6 +12,9 @@ def login_service(data):
         password = data.get("password")
 
         user = user_repository.get_user_for_login(username)
+        
+        if not user:
+            raise NotFoundError("รหัสหรือชื่อผู้ใช้ไม่ถูกต้อง")
 
         if not verify_bcrypt(password, user.password):
             raise NotFoundError("รหัสหรือชื่อผู้ใช้ไม่ถูกต้อง")

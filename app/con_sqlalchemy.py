@@ -747,6 +747,8 @@ class ItemComponent(AuditMixin):
     component_template_sections = db.relationship('ComponentTemplateSectionData', back_populates='item_component', lazy='noload')
     component_template_id = db.Column(db.Integer, db.ForeignKey('m_component_template.component_template_id'), nullable=True)
     component_template = db.relationship('ComponentTemplate', back_populates='item_components', lazy='noload')
+    component_specs = db.relationship('ComponentSpec', back_populates='item_component', lazy='noload')
+    component_options = db.relationship('ComponentOption', back_populates='item_component', lazy='noload')
 
 class ComponentMaterialUsage(AuditMixin):
     __tablename__ = "t_component_material_usage"
@@ -790,7 +792,6 @@ class ComponentSpec(AuditMixin):
     __table_args__ = (
         db.UniqueConstraint(
             'item_component_id',
-            'component_spec_type_id',
             'end_side',
             name='uq_item_component_spec'
         ),
