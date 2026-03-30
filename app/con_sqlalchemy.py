@@ -742,17 +742,11 @@ class ItemComponent(AuditMixin):
         back_populates="item_component",
     )
     component_name = db.Column(db.String(255), nullable=False)
-    component_specs = db.relationship(
-        "ComponentSpec",
-        back_populates="item_component",
-    )
-    component_options = db.relationship(
-        "ComponentOption",
-        back_populates="item_component",
-    )
     remark = db.Column(db.String(255), nullable=True)
     img_url = db.Column(db.String(500), nullable=True)
-
+    component_template_sections = db.relationship('ComponentTemplateSectionData', back_populates='item_component', lazy='noload')
+    component_template_id = db.Column(db.Integer, db.ForeignKey('m_component_template.component_template_id'), nullable=True)
+    component_template = db.relationship('ComponentTemplate', back_populates='item_components', lazy='noload')
 
 class ComponentMaterialUsage(AuditMixin):
     __tablename__ = "t_component_material_usage"
@@ -763,16 +757,6 @@ class ComponentMaterialUsage(AuditMixin):
     item_component = db.relationship("ItemComponent", back_populates="material_usages", lazy='noload')
     material_list = db.relationship("MaterialList", back_populates="component_usages")
 
-class ComponentSpecType(BaseModel):
-    __tablename__ = "t_component_spec_type"
-    component_spec_type_id = db.Column(db.Integer, primary_key=True)
-    component_spec_type_name = db.Column(db.String(255), nullable=False)
-    spec_type = db.Column(db.Enum('boolean', 'decimal', 'text'), nullable=False)
-    component_specs = db.relationship(
-        "ComponentSpec",
-        back_populates="component_spec_type",
-        lazy='noload'
-    )
 
 class MaterialTransactionType(enum.Enum):
     INIT   = 'INIT'    # first stock entry when material arrives
@@ -798,13 +782,11 @@ class ComponentSpec(AuditMixin):
     __tablename__ = "t_component_spec"
     component_spec_id = db.Column(db.Integer, primary_key=True)
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
-    component_spec_type_id = db.Column(db.Integer, db.ForeignKey('t_component_spec_type.component_spec_type_id', ondelete='CASCADE'), nullable=False)
     end_side = db.Column(db.Enum('top', 'bottom'), nullable=True)
     bool_value = db.Column(db.Boolean, nullable=True)
     decimal_value = db.Column(db.Numeric(10, 4), nullable=True)
     text_value = db.Column(db.String(255), nullable=True)
     item_component = db.relationship("ItemComponent", back_populates="component_specs", lazy='noload')
-    component_spec_type = db.relationship("ComponentSpecType", back_populates="component_specs")
     __table_args__ = (
         db.UniqueConstraint(
             'item_component_id',
@@ -910,3 +892,18 @@ class OperationCostMonthly(AuditMixin):
     electricity_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
     utility_cost = db.Column(db.Numeric(10, 4), nullable=False, default=0.0)
     
+class ComponentTemplate(AuditMixin):
+    __tablename__ = "m_component_template"
+    component_template_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(255), nullable=False)
+    sections = db.Column(db.JSON, nullable=False)
+    item_components = db.relationship('ItemComponent', back_populates='component_template', lazy='noload')
+
+class ComponentTemplateSectionData(AuditMixin):
+    __tablename__ = "m_component_template_section_data"
+    section_data_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    section_type = db.Column(db.String(255), nullable=False)
+    data = db.Column(db.JSON, nullable=False)
+    section_key = db.Column(db.String(255), nullable=False)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
+    item_component = db.relationship('ItemComponent', back_populates='component_template_sections', lazy='noload')

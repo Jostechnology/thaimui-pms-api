@@ -122,31 +122,8 @@ class WorkPhaseSchemaDetailed(WorkPhaseSchema):
 
     def get_employee_list(self, obj):
         return EmployeeSchema(many=True).dump([a.employee for a in obj.assignments])
-    
-class ComponentSpecTypeSchema(Schema):
-    component_spec_type_id = fields.Integer()
-    component_spec_type_name = fields.String()
-    spec_type = fields.String()
 
-class ComponentSpecSchema(Schema):
-    component_spec_id = fields.Integer()
-    item_component_id = fields.Integer()
-    component_spec_type_id = fields.Integer()
-    end_side = fields.String(allow_none=True)
-    bool_value = fields.Boolean(allow_none=True)
-    decimal_value = fields.Float(allow_none=True)
-    text_value = fields.String(allow_none=True)
-    component_spec_type = fields.Nested(ComponentSpecTypeSchema)
 
-class ComponentOptionTypeSchema(Schema):
-    component_option_type_id = fields.Integer()
-    component_option_type_name = fields.String()
-
-class ComponentOptionSchema(Schema):
-    component_option_id = fields.Integer()
-    component_option_type_id = fields.Integer()
-    item_component_id = fields.Integer()
-    component_option_type = fields.Nested(ComponentOptionTypeSchema)
 
 class ComponentMaterialUsageSchema(Schema):
     usage_id = fields.Integer()
@@ -155,15 +132,22 @@ class ComponentMaterialUsageSchema(Schema):
     quantity_used = fields.Integer()
     material_list = fields.Nested(MaterialListSchema())
 
+class ComponentTemplateSectionDataSchema(Schema):
+    section_data_id = fields.Integer(dump_only=True)
+    section_type = fields.String()
+    data = fields.Raw()
+    section_key = fields.String()
+    item_component_id = fields.Integer()
+
 class ItemComponentSchema(Schema):
     item_component_id = fields.Integer()
     work_order_id = fields.Integer()
     component_name = fields.String()
     material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
-    component_specs = fields.List(fields.Nested(ComponentSpecSchema()))
-    component_options = fields.List(fields.Nested(ComponentOptionSchema()))
     remark = fields.String(allow_none=True)
     img_url = fields.String(allow_none=True)
+    component_template_id = fields.Integer(allow_none=True)
+    component_template_sections = fields.List(fields.Nested(ComponentTemplateSectionDataSchema()), dump_default=[])
 
 class WorkRunReworkSourceSchema(Schema):
     id                 = fields.Integer(dump_only=True)
@@ -596,3 +580,11 @@ class DocumentCodeListSchema(Schema):
     updated_date = fields.DateTime()
 
 
+class ComponentTemplateSchema(Schema):
+    component_template_id = fields.Integer(dump_only=True)
+    name = fields.String()
+    sections = fields.Raw()
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)

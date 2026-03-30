@@ -83,6 +83,7 @@ from .controllers import pm_machine_controller
 from .controllers import picking_request_controller
 from .controllers import document_code_controller
 from .controllers import branch_controller
+from .controllers import component_template_controller
 
 # with app.app_context():
 #     db.create_all()
