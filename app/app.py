@@ -59,7 +59,8 @@ def handle_ratelimit_error(e):
 def handle_generic_exception(e):
     traceback.print_exc()
     return jsonify({
-        "error": "Internal server error "
+        "error": "Internal server error ",
+        "success" : False
     }), 500
 
 from .controllers import auth_controller

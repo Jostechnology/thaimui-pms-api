@@ -747,8 +747,6 @@ class ItemComponent(AuditMixin):
     component_template_sections = db.relationship('ComponentTemplateSectionData', back_populates='item_component', lazy='noload')
     component_template_id = db.Column(db.Integer, db.ForeignKey('m_component_template.component_template_id'), nullable=True)
     component_template = db.relationship('ComponentTemplate', back_populates='item_components', lazy='noload')
-    component_specs = db.relationship('ComponentSpec', back_populates='item_component', lazy='noload')
-    component_options = db.relationship('ComponentOption', back_populates='item_component', lazy='noload')
 
 class ComponentMaterialUsage(AuditMixin):
     __tablename__ = "t_component_material_usage"
@@ -778,43 +776,6 @@ class MaterialTransaction(AuditMixin):
     related_document_code = db.Column(db.String(128), nullable=False) # เอกสารที่อ้างอิง
 
     material_list = db.relationship('MaterialList', back_populates='transactions', lazy='noload')
-
-
-class ComponentSpec(AuditMixin):
-    __tablename__ = "t_component_spec"
-    component_spec_id = db.Column(db.Integer, primary_key=True)
-    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
-    end_side = db.Column(db.Enum('top', 'bottom'), nullable=True)
-    bool_value = db.Column(db.Boolean, nullable=True)
-    decimal_value = db.Column(db.Numeric(10, 4), nullable=True)
-    text_value = db.Column(db.String(255), nullable=True)
-    item_component = db.relationship("ItemComponent", back_populates="component_specs", lazy='noload')
-    __table_args__ = (
-        db.UniqueConstraint(
-            'item_component_id',
-            'end_side',
-            name='uq_item_component_spec'
-        ),
-    )
-
-class ComponentOptionType(BaseModel):
-    __tablename__ = "t_component_option_type"
-    component_option_type_id = db.Column(db.Integer, primary_key=True)
-    component_option_type_name = db.Column(db.String(255), nullable=False)
-    component_options = db.relationship(
-        "ComponentOption",
-        back_populates="component_option_type",
-        lazy='noload'
-    )
-
-class ComponentOption(AuditMixin):
-    __tablename__ = "t_component_option"
-    component_option_id = db.Column(db.Integer, primary_key=True)
-    component_option_type_id = db.Column(db.Integer, db.ForeignKey('t_component_option_type.component_option_type_id', ondelete='CASCADE'), nullable=False)
-    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
-    component_option_type = db.relationship("ComponentOptionType", back_populates="component_options")
-    item_component = db.relationship("ItemComponent", back_populates="component_options", lazy='noload')
-
 
 # ---------------------------------------------------------------------------
 # Picking Request

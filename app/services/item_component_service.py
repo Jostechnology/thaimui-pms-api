@@ -46,3 +46,30 @@ def save_component_section_data(item_component_id, data):
     except Exception:
         db.session.rollback()
         raise
+
+
+def batch_save_component_section_data(items_data):
+    try:
+        for entry in items_data:
+            item_component_id = entry.get("item_component_id")
+            template_id = entry.get("component_template_id")
+            sections_data = entry.get("sections_data", [])
+
+            if not item_component_id:
+                raise ValidationError("กรุณาระบุ item_component_id")
+            if not template_id:
+                raise ValidationError(f"กรุณาเลือก Template สำหรับ item_component_id {item_component_id}")
+
+            item = item_component_repository.save_section_data(item_component_id, template_id, sections_data)
+            if not item:
+                raise NotFoundError(f"ไม่พบข้อมูล Item Component id {item_component_id}")
+
+        db.session.commit()
+
+        results = []
+        for entry in items_data:
+            results.append(get_item_component_with_sections(entry["item_component_id"]))
+        return results
+    except Exception:
+        db.session.rollback()
+        raise
