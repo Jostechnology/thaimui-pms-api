@@ -6,6 +6,7 @@ from app.services.item_component_service import (
     get_item_component_detail,
     get_item_component_with_sections,
     save_component_section_data,
+    batch_save_component_section_data,
 )
 
 
@@ -31,6 +32,20 @@ def api_get_item_component_sections(item_component_id):
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/item_component/sections/batch", methods=["POST"])
+@verify_required
+def api_batch_save_item_component_sections():
+    try:
+        data = request.get_json()
+        data = data.get("data")
+        result = batch_save_component_section_data(data)
+        return jsonify({"data": result, "success": True}), 200
+    except AppException as e:
+        return jsonify({"error": e.message}), e.status_code
+    except Exception as e:
+        raise
 
 
 @app.route("/api/item_component/<int:item_component_id>/sections", methods=["POST"])
