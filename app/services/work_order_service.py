@@ -1,6 +1,7 @@
 from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, WorkRun, WorkRunStatus, ComponentMaterialUsage, ItemComponent
 from app.repositories import work_order_repository
 from app.app import db
+from app.repositories import sales_item_repository
 from app.services import sales_item_service, transaction_service
 from app.exception import NotFoundError, UniqueError
 
@@ -36,6 +37,11 @@ def create_work_order(data):
 
         quantity = data.get("quantity") or sales_item.item_num
 
+        item_order = sales_item_repository.get_sales_item_order_in_sales_order(
+            sales_item_id, sales_item.doc_entry
+        )
+        work_order_code = f"{sales_item.doc_num}-{item_order}"
+
         material_map = {m.material_list_id: m for m in sales_item.material_list}
 
         # Validate that all materials belong to this SalesItem
@@ -46,6 +52,7 @@ def create_work_order(data):
 
         work_order = WorkOrder(
             doc_num=sales_item.doc_num,
+            work_order_code=work_order_code,
             doc_entry=sales_item.doc_entry,
             sales_item_id=sales_item_id,
             quantity=quantity,

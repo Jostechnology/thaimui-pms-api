@@ -24,7 +24,12 @@ def get_all_work_orders(page, limit, search, filter, month):
     try:
         query = db.session.query(WorkOrder).options(selectinload(WorkOrder.sales_item))
         if search:
-            query = query.filter(WorkOrder.doc_num.ilike(f"%{search}%"))
+            query = query.filter(
+                db.or_(
+                    WorkOrder.doc_num.ilike(f"%{search}%"),
+                    WorkOrder.work_order_code.ilike(f"%{search}%"),
+                )
+            )
         if filter:
             query = query.filter(WorkOrder.status == filter)
         if month:
