@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem
-from app.repositories import qc_work_order_repository
+from app.repositories import qc_work_order_repository, sales_item_repository
 from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
 from app.exception import ValidationError
@@ -66,6 +66,16 @@ def _build_qc_items(qc_work_order_id, items_data):
     return items
 
 
+def generate_qc_work_order_code(sales_item, qc_work_order_id):
+    sales_item_order = sales_item_repository.get_sales_item_order_in_sales_order(
+        sales_item.sales_item_id, sales_item.doc_entry
+    )
+    qc_order = qc_work_order_repository.get_qc_work_order_order_in_sales_item(
+        qc_work_order_id, sales_item.sales_item_id
+    )
+    return f"{sales_item.doc_num}-{sales_item_order}-{qc_order}"
+
+
 def create_qc_work_order(data):
     try:
         sales_item_id = data.get("salesItemId") or data.get("sales_item_id")
@@ -97,6 +107,8 @@ def create_qc_work_order(data):
         )
         qc = qc_work_order_repository.create_qc_work_order(qc)
         db.session.flush()
+
+        qc.qc_work_order_code = generate_qc_work_order_code(sales_item, qc.qc_work_order_id)
 
         db.session.add(_build_qc_form(qc.qc_work_order_id, data))
         for item in _build_qc_items(qc.qc_work_order_id, data.get("items", [])):

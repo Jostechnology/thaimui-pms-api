@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus, PickingRequestType
+from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus, PickingRequestType, WorkRun, TestResult
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -55,7 +55,9 @@ def has_unsolved_picking_requests_for_test_result(test_result_id):
 
 def get_picking_request_list(page, per_page, search="", status=None, request_type=None):
     query = db.session.query(PickingRequest).options(
-        selectinload(PickingRequest.items)
+        selectinload(PickingRequest.items),
+        selectinload(PickingRequest.work_run),
+        selectinload(PickingRequest.test_result),
     )
 
     if search:

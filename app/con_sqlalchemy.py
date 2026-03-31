@@ -185,6 +185,7 @@ class WorkOrder(AuditMixin):
     __tablename__ = "t_work_order"
     work_order_id = db.Column(db.Integer, primary_key=True)
     doc_num = db.Column(db.Integer, nullable=False)
+    work_order_code = db.Column(db.String(50), nullable=True)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
     quantity = db.Column(db.Integer, nullable=False, default=1)
@@ -492,6 +493,7 @@ class QCWorkOrderStatus(enum.Enum):
 class QCWorkOrder(AuditMixin):
     __tablename__ = "t_qc_work_order"
     qc_work_order_id = db.Column(db.Integer, primary_key=True)
+    qc_work_order_code = db.Column(db.String(50), nullable=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
     status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
     qc_date = db.Column(db.DateTime, nullable=True)

@@ -189,6 +189,7 @@ class WorkRunSchema(Schema):
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.Int()
+    work_order_code = fields.String(allow_none=True)
     quantity = fields.Integer()
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
@@ -306,6 +307,7 @@ class search_qc_work_order_schema(Schema):
 
 class QCWorkOrderSchema(Schema):
     qc_work_order_id = fields.Integer()
+    qc_work_order_code = fields.String(allow_none=True)
     sales_item_id = fields.Integer()
     qc_date = fields.DateTime()
     qc_by = fields.String()
@@ -372,6 +374,8 @@ class PickingRequestSchema(Schema):
     request_type         = fields.Enum(PickingRequestType)
     work_run_id        = fields.Integer(allow_none=True)
     test_result_id     = fields.Integer(allow_none=True)
+    lot_number         = fields.Method("get_lot_number")
+    test_result_code   = fields.Method("get_test_result_code")
     status             = fields.Enum(PickingRequestStatus)
     wms_reference      = fields.String(allow_none=True)
     remark             = fields.String(allow_none=True)
@@ -379,6 +383,12 @@ class PickingRequestSchema(Schema):
     created_date       = fields.DateTime()
     updated_by         = fields.String(allow_none=True)
     updated_date       = fields.DateTime(allow_none=True)
+
+    def get_lot_number(self, obj):
+        return obj.work_run.lot_number if obj.work_run else None
+
+    def get_test_result_code(self, obj):
+        return obj.test_result.test_result_code if obj.test_result else None
 
 class PickingRequestDetailSchema(PickingRequestSchema):
     items              = fields.List(fields.Nested(PickingRequestItemSchema()))
@@ -501,6 +511,7 @@ class TestResultSimpleSchema(Schema):
 
 class WorkOrderTrackingSchema(Schema):
     work_order_id = fields.Integer()
+    work_order_code = fields.String()
     status = fields.Enum(WorkOrderStatus)
     quantity = fields.Integer()
     work_runs = fields.List(fields.Nested(WorkRunSchema()))
@@ -513,6 +524,8 @@ class QCWorkOrderTrackingSchema(Schema):
     quantity = fields.Integer()
     remark = fields.String()
     test_results = fields.List(fields.Nested(TestResultSimpleSchema()))
+    created_by = fields.String()
+    created_at = fields.String()
 
 
 class SalesItemTrackingSchema(Schema):
