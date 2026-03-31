@@ -34,6 +34,17 @@ def get_sales_item_by_id(sales_item_id):
     except Exception:
         raise
 
+def get_sales_item_order_in_sales_order(sales_item_id, doc_entry):
+    """Return the 1-based position of sales_item_id among items in the same sales order, ordered by sales_item_id."""
+    try:
+        query = db.session.query(SalesItem).filter(
+            SalesItem.doc_entry == doc_entry,
+            SalesItem.sales_item_id <= sales_item_id
+        )
+        return query.count()
+    except Exception:
+        raise
+
 
 def get_sales_item_detail_by_id(sales_item_id):
     try:

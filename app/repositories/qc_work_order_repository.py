@@ -78,6 +78,18 @@ def get_qc_work_order_for_availability_check(qc_work_order_id):
         raise
 
 
+def get_qc_work_order_order_in_sales_item(qc_work_order_id, sales_item_id):
+    """Return the 1-based position of qc_work_order_id among QC work orders for the same sales item, ordered by qc_work_order_id."""
+    try:
+        query = db.session.query(QCWorkOrder).filter(
+            QCWorkOrder.sales_item_id == sales_item_id,
+            QCWorkOrder.qc_work_order_id <= qc_work_order_id,
+        )
+        return query.count()
+    except Exception:
+        raise
+
+
 def create_qc_work_order(qc_work_order):
     try:
         db.session.add(qc_work_order)
