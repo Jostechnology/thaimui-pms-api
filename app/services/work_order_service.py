@@ -24,6 +24,15 @@ def get_work_order_by_id(work_order_id):
     except Exception:
         raise
 
+def get_work_order_by_center_sales_item_id(center_sales_item_id):
+    try:
+        work_order = work_order_repository.get_work_order_by_center_sales_item_id(center_sales_item_id)
+        # if not work_order:
+        #     raise NotFoundError(f"Work order for center sales item {center_sales_item_id} not found")
+        return work_order
+    except Exception:
+        raise
+
 def create_work_order(data):
     try:
         sales_item_id = data.get("sales_item_id")

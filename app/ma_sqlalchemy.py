@@ -77,6 +77,7 @@ class EmployeeSalaryHistorySchema(Schema):
 
 class MaterialListSchema(Schema):
     material_list_id = fields.Integer()
+    center_material_id = fields.Integer()
     sales_item_id = fields.Integer()
     item_code = fields.String()
     item_name = fields.String()
@@ -88,6 +89,7 @@ class MaterialListSchema(Schema):
     created_date = fields.DateTime()
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
+    center_sales_item_id = fields.Integer()
     item_code = fields.String()
     item_num = fields.Integer()
     item_name = fields.String()
@@ -143,10 +145,11 @@ class ItemComponentSchema(Schema):
     item_component_id = fields.Integer()
     work_order_id = fields.Integer()
     component_name = fields.String()
-    material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
     remark = fields.String(allow_none=True)
     img_url = fields.String(allow_none=True)
+    doc_version = fields.Integer()
     component_template_id = fields.Integer(allow_none=True)
+    material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
     component_template_sections = fields.List(fields.Nested(ComponentTemplateSectionDataSchema()), dump_default=[])
 
 class WorkRunReworkSourceSchema(Schema):
@@ -186,6 +189,9 @@ class WorkRunSchema(Schema):
     qty_from_failed                  = fields.Integer(allow_none=True, dump_only=True)
     created_date                     = fields.DateTime()
 
+class WorkRunWithTestSchema(WorkRunSchema):
+    test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
+
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.Int()
@@ -194,12 +200,6 @@ class WorkOrderSchema(Schema):
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
     sales_item = fields.Nested(SalesItemSchema())
-    # work_runs = fields.List(fields.Nested(WorkRunSchema))
-
-
-class WorkRunWithTestSchema(WorkRunSchema):
-    test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
-
 
 class WorkOrderSchemaDetail(WorkOrderSchema):
     item_components = fields.List(fields.Nested(ItemComponentSchema()))
@@ -212,6 +212,7 @@ class SalesOrderSearchSchema(Schema):
 class SalesOrderSchema(Schema):
     doc_num = fields.Int()
     doc_entry = fields.Int()
+    center_sales_order_id = fields.Integer()
     card_code = fields.String()
     card_name = fields.String()
     po_number = fields.String()
@@ -227,6 +228,7 @@ class SalesOrderSchema(Schema):
 
 class SalesItemNoMaterialSchema(Schema):
     sales_item_id                = fields.Integer()
+    center_sales_item_id         = fields.Integer()
     item_code                    = fields.String()
     item_num                     = fields.Integer()
     item_name                    = fields.String()
@@ -244,6 +246,7 @@ class SalesItemNoMaterialSchema(Schema):
 
 class SalesItemSchema(Schema):
     sales_item_id                = fields.Integer()
+    center_sales_item_id         = fields.Integer()
     item_code                    = fields.String()
     item_num                     = fields.Integer()
     item_name                    = fields.String()

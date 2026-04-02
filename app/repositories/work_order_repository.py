@@ -56,3 +56,16 @@ def get_work_order_by_id(work_order_id):
     except Exception:
         raise
 
+def get_work_order_by_center_sales_item_id(center_sales_item_id):
+    try:
+        work_order = (
+            db.session.query(WorkOrder)
+            .join(WorkOrder.sales_item)
+            .options(*_work_order_options())
+            .filter(SalesItem.center_sales_item_id == center_sales_item_id)
+            .first()
+        )
+        return work_order
+    except Exception:
+        raise
+

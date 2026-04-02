@@ -373,6 +373,7 @@ class SalesItemStatus(enum.Enum):
 class SalesItem(AuditMixin):
     __tablename__ = "t_sales_items"
     sales_item_id = db.Column(db.Integer, primary_key=True)
+    center_sales_item_id = db.Column(db.Integer, nullable=True)
     status = db.Column(db.Enum(SalesItemStatus), nullable=False , default=SalesItemStatus.PENDING)
     item_code = db.Column(db.String(50), nullable=False)
     item_num = db.Column(db.Integer, nullable=False)
@@ -470,6 +471,7 @@ class MachineMaintenance(AuditMixin,BranchScopedMixin):
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"
     material_list_id = db.Column(db.Integer, primary_key=True)
+    center_material_id = db.Column(db.Integer, nullable=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
     item_code = db.Column(db.String(50), nullable=False)
     item_name = db.Column(db.String(255), nullable=False)
@@ -715,6 +717,7 @@ class SalesOrderStatus(enum.Enum):
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
     doc_entry = db.Column(db.Integer, primary_key=True)
+    center_sales_order_id = db.Column(db.Integer, nullable=True)
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
     status = db.Column(db.Enum(SalesOrderStatus), nullable=False, default=SalesOrderStatus.INPROGRESS)
     card_code = db.Column(db.String(20), nullable=False)

@@ -1,8 +1,8 @@
-from app.api_auth import verify_required
+from app.api_auth import verify_required, verify_required_center
 from app.app import app
 from flask import request, jsonify
 from app.ma_sqlalchemy import WorkOrderSchema, WorkOrderSchemaDetail
-from app.services.work_order_service import get_all_work_orders, create_work_order, get_work_order_by_id
+from app.services.work_order_service import get_all_work_orders, create_work_order, get_work_order_by_id, get_work_order_by_center_sales_item_id
 from app.con_sqlalchemy import WorkOrderStatus
 
 
@@ -32,6 +32,15 @@ def api_get_work_order_by_id(work_order_id):
     try:
         result = get_work_order_by_id(work_order_id)
         return jsonify({"data": WorkOrderSchemaDetail().dump(result), "success": True}), 200
+    except Exception:
+        raise
+
+@app.route("/api/get_work_order_by_center_sales_item_id/<int:center_sales_item_id>", methods=["GET"])
+@verify_required_center
+def api_get_work_order_by_center_sales_item_id(center_sales_item_id):
+    try:
+        result = get_work_order_by_center_sales_item_id(center_sales_item_id)
+        return jsonify({"data": WorkOrderSchemaDetail().dump(result) if result else None, "success": True}), 200
     except Exception:
         raise
 
