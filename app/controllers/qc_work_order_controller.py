@@ -1,7 +1,5 @@
-import traceback
 from app.api_auth import verify_required
 from app.app import app
-from app.exception import AppException
 from flask import request, jsonify
 from app.ma_sqlalchemy import QCWorkOrderSchema, QCWorkOrderSchemaDetail, search_qc_work_order_schema
 from app.services.qc_work_order_service import (
@@ -12,7 +10,6 @@ from app.services.qc_work_order_service import (
     update_qc_work_order,
     delete_qc_work_order,
 )
-
 
 
 @app.route("/api/get_qc_work_order_list", methods=["GET"])
@@ -29,9 +26,8 @@ def api_get_qc_work_order_list():
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
             "success": True,
         }), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/qc_work_order/<int:qc_work_order_id>", methods=["GET"])
@@ -40,11 +36,8 @@ def api_get_qc_work_order_by_id(qc_work_order_id):
     try:
         result = get_qc_work_order_by_id(qc_work_order_id)
         return jsonify({"data": QCWorkOrderSchemaDetail().dump(result), "success": True}), 200
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/qc_work_order/create", methods=["POST"])
@@ -54,11 +47,8 @@ def api_create_qc_work_order():
         data = request.get_json()
         result = create_qc_work_order(data)
         return jsonify({"data": QCWorkOrderSchema().dump(result), "success": True}), 201
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/qc_work_order/update/<int:qc_work_order_id>", methods=["PUT"])
@@ -68,11 +58,8 @@ def api_update_qc_work_order(qc_work_order_id):
         data = request.get_json() or {}
         result = update_qc_work_order(qc_work_order_id, data)
         return jsonify({"data": QCWorkOrderSchema().dump(result), "success": True}), 200
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/qc_work_order/delete/<int:qc_work_order_id>", methods=["DELETE"])
@@ -81,11 +68,8 @@ def api_delete_qc_work_order(qc_work_order_id):
     try:
         result = delete_qc_work_order(qc_work_order_id)
         return jsonify({"data": result, "success": True}), 200
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/search_qc_work_order", methods=["GET"])
@@ -103,6 +87,5 @@ def api_search_qc_work_order():
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
             "success": True,
         }), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise

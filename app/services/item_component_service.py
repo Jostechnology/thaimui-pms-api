@@ -5,6 +5,7 @@ from app.ma_sqlalchemy import (
 from app.repositories import item_component_repository
 from app.app import db
 from app.exception import NotFoundError, ValidationError
+from app.services import document_generator_service
 
 
 def get_item_component_detail(item_component_id):
@@ -39,6 +40,9 @@ def save_component_section_data(item_component_id, data):
         if not item:
             raise NotFoundError("ไม่พบข้อมูล Item Component")
 
+        # Increment version and fire document generation (version saved in same commit)
+        document_generator_service.generate_component_detail(item_component_id)
+
         db.session.commit()
 
         # Re-fetch with sections loaded
@@ -50,6 +54,7 @@ def save_component_section_data(item_component_id, data):
 
 def batch_save_component_section_data(items_data):
     try:
+        saved_items = []
         for entry in items_data:
             item_component_id = entry.get("item_component_id")
             template_id = entry.get("component_template_id")
@@ -63,6 +68,11 @@ def batch_save_component_section_data(items_data):
             item = item_component_repository.save_section_data(item_component_id, template_id, sections_data)
             if not item:
                 raise NotFoundError(f"ไม่พบข้อมูล Item Component id {item_component_id}")
+            saved_items.append(item)
+
+        # Increment version and fire document generation for each component
+        for item in saved_items:
+            document_generator_service.generate_component_detail(item.item_component_id)
 
         db.session.commit()
 

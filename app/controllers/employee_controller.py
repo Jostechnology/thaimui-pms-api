@@ -4,7 +4,6 @@ from flask import request, jsonify
 from app.services.employee_service import delete_employee, get_all_employees, create_employee, get_employee_by_id, update_employee
 
 
-
 @app.route("/api/get_employee_list", methods=["GET"])
 @verify_required
 def api_get_employee_list():
@@ -12,12 +11,10 @@ def api_get_employee_list():
         search = request.args.get("search", "", type=str)
         status = request.args.get("status", "", type=str)
         data = {"search": search, "status": status}
-        
         result = get_all_employees(data)
-        return jsonify({"data": result, "success": True}), 200  
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
 
 
 @app.route("/api/get_employee_id/<int:employee_id>", methods=["GET"])
@@ -25,10 +22,9 @@ def api_get_employee_list():
 def api_get_employee_by_id(employee_id):
     try:
         result = get_employee_by_id(employee_id)
-        return jsonify({"data": result, "success": True}), 200  
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
 
 
 @app.route("/api/create_employee", methods=["POST"])
@@ -38,9 +34,8 @@ def api_create_employee():
         data = request.get_json()
         result = create_employee(data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/update_employee/<int:employee_id>", methods=["PUT"])
@@ -50,9 +45,9 @@ def api_update_employee(employee_id):
         data = request.get_json() or {}
         result = update_employee(employee_id, data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
+
 
 @app.route("/api/delete_employee/<int:employee_id>", methods=["DELETE"])
 @verify_required
@@ -68,6 +63,5 @@ def api_delete_employee(employee_id):
         else:
             result = delete_employee(employee_id)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise

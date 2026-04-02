@@ -15,6 +15,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - CENTER_ACCESS_KEY=${CENTER_ACCESS_KEY}
       - CENTER_URL=${CENTER_URL}
+      - DOCUMENT_GENERATOR_URL=${DOCUMENT_GENERATOR_URL}
     
     networks:
       - thaimui

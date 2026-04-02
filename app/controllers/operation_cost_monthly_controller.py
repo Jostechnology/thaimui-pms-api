@@ -19,12 +19,10 @@ def api_get_all_operation_cost_monthly():
         search = request.args.get("search", "", type=str)
         month = request.args.get("month", "", type=str)
         data = {"page": page, "per_page": per_page, "search": search, "month": month}
-        
         result = get_all_operation_cost_monthly(data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/create_operation_cost_monthly", methods=["POST"])
@@ -34,9 +32,8 @@ def api_create_operation_cost_monthly():
         data = request.get_json()
         result = create_operation_cost_monthly(data)
         return jsonify({"data": result, "success": True}), 201
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/update_operation_cost_monthly/<int:operation_cost_monthly_id>", methods=["PUT"])
@@ -46,9 +43,8 @@ def api_update_operation_cost_monthly(operation_cost_monthly_id):
         data = request.get_json()
         result = update_operation_cost_monthly(operation_cost_monthly_id, data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/delete_operation_cost_monthly/<int:operation_cost_monthly_id>", methods=["DELETE"])
@@ -57,9 +53,9 @@ def api_delete_operation_cost_monthly(operation_cost_monthly_id):
     try:
         result = delete_operation_cost_monthly(operation_cost_monthly_id)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
+
 
 @app.route("/api/get_operation_cost_monthly/<int:operation_cost_monthly_id>", methods=["GET"])
 @verify_required
@@ -67,8 +63,5 @@ def api_get_operation_cost_monthly_by_id(operation_cost_monthly_id):
     try:
         result = get_operation_cost_monthly_by_id(operation_cost_monthly_id)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
-
-
+    except Exception:
+        raise

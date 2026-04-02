@@ -3,15 +3,16 @@ from app.app import app
 from flask import request, jsonify
 from app.services.work_phase_service import create_work_phase, update_work_phase, delete_work_phase, get_work_phase_detail
 
+
 @app.route("/api/get_work_phase_detail/<int:work_phase_id>", methods=["GET"])
 @verify_required
 def api_get_work_phase_detail(work_phase_id):
     try:
         result = get_work_phase_detail(work_phase_id)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e), "success": False}), 500
+    except Exception:
+        raise
+
 
 @app.route("/api/create_work_phase", methods=["POST"])
 @verify_required
@@ -20,9 +21,9 @@ def api_create_work_phase():
         data = request.get_json()
         result = create_work_phase(data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
+
 
 @app.route("/api/update_work_phase", methods=["PUT"])
 @verify_required
@@ -33,9 +34,8 @@ def api_update_work_phase():
         return jsonify({"data": result, "success": True}), 200
     except ValueError as e:
         return jsonify({"error": str(e), "success": False}), 400
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/delete_work_phase", methods=["DELETE"])
@@ -46,6 +46,5 @@ def api_delete_work_phase():
         work_phase_ids = data.get("work_phase_ids", [])
         result = delete_work_phase(work_phase_ids)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise

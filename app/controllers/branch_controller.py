@@ -1,4 +1,4 @@
-from app.api_auth import verify_required
+from app.api_auth import verify_required, verify_required_center
 from app.app import app
 from flask import request, jsonify
 from app.services import branch_service
@@ -6,6 +6,7 @@ from app.ma_sqlalchemy import BranchSchema
 
 
 @app.route("/api/get_all_branchs", methods=["GET", "POST"])
+@verify_required_center
 def api_get_all_branchs():
     branchs = branch_service.get_all_branchs()
     return jsonify({"data": BranchSchema(many=True).dump(branchs), "success": True}), 200

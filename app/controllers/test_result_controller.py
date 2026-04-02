@@ -1,4 +1,3 @@
-import traceback
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
@@ -20,9 +19,8 @@ def api_create_test_result(qc_work_order_id):
         data = request.get_json()
         result = create_test_result(qc_work_order_id, data)
         return jsonify({"data": result, "success": True}), 201
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/test_result/<int:test_result_id>/finalize", methods=["PUT"])
@@ -32,9 +30,8 @@ def api_finalize_test_result(test_result_id):
         data = request.get_json()
         result = finalize_test_result(test_result_id, data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/qc_work_order/<int:qc_work_order_id>/test_result/list", methods=["GET"])
@@ -43,9 +40,8 @@ def api_get_test_results_by_qc_work_order(qc_work_order_id):
     try:
         result = get_test_results_by_qc_work_order(qc_work_order_id)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/sales_order/<int:doc_entry>/test_result/list", methods=["GET"])
@@ -54,9 +50,8 @@ def api_get_test_results_by_doc_entry(doc_entry):
     try:
         result = get_test_results_by_doc_entry(doc_entry)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/test_result/<int:test_result_id>", methods=["GET"])
@@ -65,9 +60,8 @@ def api_get_test_result_by_id(test_result_id):
     try:
         result = get_test_result_by_id(test_result_id)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/test_result/<int:test_result_id>/update", methods=["PUT"])
@@ -77,9 +71,8 @@ def api_update_test_result(test_result_id):
         data = request.get_json()
         result = update_test_result(test_result_id, data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/test_result/<int:test_result_id>/delete", methods=["DELETE"])
@@ -88,6 +81,5 @@ def api_delete_test_result(test_result_id):
     try:
         result = delete_test_result(test_result_id)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
