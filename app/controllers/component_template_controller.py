@@ -1,6 +1,5 @@
 from app.api_auth import verify_required
 from app.app import app
-from app.exception import AppException
 from flask import request, jsonify
 from app.ma_sqlalchemy import ComponentTemplateSchema
 from app.services.component_template_service import (
@@ -26,11 +25,8 @@ def api_get_component_templates():
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
             "success": True,
         }), 200
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/component_templates/<int:template_id>", methods=["GET"])
@@ -39,11 +35,8 @@ def api_get_component_template_by_id(template_id):
     try:
         result = get_template_by_id(template_id)
         return jsonify({"data": ComponentTemplateSchema().dump(result), "success": True}), 200
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/component_templates", methods=["POST"])
@@ -53,11 +46,8 @@ def api_create_component_template():
         data = request.get_json()
         result = create_template(data)
         return jsonify({"data": ComponentTemplateSchema().dump(result), "success": True}), 201
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/component_templates/<int:template_id>", methods=["PUT"])
@@ -67,11 +57,8 @@ def api_update_component_template(template_id):
         data = request.get_json()
         result = update_template(template_id, data)
         return jsonify({"data": ComponentTemplateSchema().dump(result), "success": True}), 200
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/component_templates/<int:template_id>", methods=["DELETE"])
@@ -80,8 +67,5 @@ def api_delete_component_template(template_id):
     try:
         result = delete_template(template_id)
         return jsonify({"data": ComponentTemplateSchema().dump(result), "success": True}), 200
-    except AppException as e:
-        return jsonify({"error": e.message}), e.status_code
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise

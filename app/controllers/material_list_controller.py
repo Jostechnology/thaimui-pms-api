@@ -20,9 +20,8 @@ def api_get_material_list():
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
             "success": True,
         }), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/create_material_list", methods=["POST"])
@@ -32,6 +31,5 @@ def api_create_material_list():
         data = request.get_json()
         result = create_material_list(data)
         return jsonify({"data": MaterialListSchema().dump(result), "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise

@@ -1,8 +1,8 @@
 import traceback
 from app.exception import AppException
-from app.extensions import init_center_service
+from app.extensions import init_center_service, init_document_generator_service
 from flask import Flask, jsonify
-from app.config import CENTER_ACCESS_KEY, CENTER_URL, connectdb
+from app.config import CENTER_ACCESS_KEY, CENTER_URL, DOCUMENT_GENERATOR_URL, connectdb
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
@@ -37,6 +37,7 @@ migrate = Migrate(app, db)
 ma = Marshmallow(app)
 
 init_center_service(CENTER_ACCESS_KEY, CENTER_URL)
+init_document_generator_service(DOCUMENT_GENERATOR_URL)
 
 
 @app.errorhandler(AppException)

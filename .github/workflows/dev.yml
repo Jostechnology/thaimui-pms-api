@@ -94,6 +94,7 @@ jobs:
           echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY_DEV }}' >> .env
           echo 'CENTER_ACCESS_KEY=${{ secrets.CENTER_ACCESS_KEY_DEV }}' >> .env
           echo 'CENTER_URL=${{ vars.CENTER_URL_DEV }}' >> .env
+          echo 'DOCUMENT_GENERATOR_URL=${{ vars.DOCUMENT_GENERATOR_URL }}' >> .env
 
 
           echo "Logging in to GitLab Container Registry"

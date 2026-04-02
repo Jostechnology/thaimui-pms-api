@@ -44,11 +44,6 @@ def verify_required(f):
             _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: missing token")
             return jsonify({"message": "Missing token"}), 401
 
-        if token == CENTER_ACCESS_KEY:
-            g.username = "SYSTEM_CENTER"
-            _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "SYSTEM_CENTER shortcut")
-            return f(*args, **kwargs)
-
         decoded = decode_token(token)
         if not decoded:
             _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: invalid token")
@@ -71,6 +66,61 @@ def verify_required(f):
         g.username = decoded.get("username")
         g.branch_id = branch_id
         _log_timer("verify_required", (time.perf_counter() - _start) * 1000, f"user: {g.username}, branch: {g.branch_id}")
+        return f(*args, **kwargs)
+    return decorated
+
+
+def verify_required_center(f):
+    """Like verify_required, but also accepts CENTER_ACCESS_KEY as a valid token."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        _start = time.perf_counter()
+        if request.method == "OPTIONS":
+            return f(*args, **kwargs)
+
+        token = None
+        if "Authorization" in request.headers:
+            parts = request.headers["Authorization"].split(" ")
+            if len(parts) == 2 and parts[0] == "Bearer":
+                token = parts[1]
+        if not token:
+            try:
+                body = request.get_json(silent=True)
+                if body and "token" in body:
+                    token = body["token"]
+            except Exception:
+                pass
+        if not token:
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: missing token")
+            return jsonify({"message": "Missing token"}), 401
+
+        if token == CENTER_ACCESS_KEY:
+            g.username = "SYSTEM_CENTER"
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "SYSTEM_CENTER shortcut")
+            return f(*args, **kwargs)
+
+        decoded = decode_token(token)
+        if not decoded:
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: invalid token")
+            return jsonify({"message": "Invalid or expired token"}), 401
+
+        jti = decoded.get("jti")
+        if not Tokenlist.query.filter_by(jwt_id=jti).first():
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: token not in DB")
+            return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
+
+        if decoded.get("type") == "branch_select":
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: branch_select token rejected")
+            return jsonify({"message": "Token ประเภทไม่ถูกต้อง"}), 401
+
+        branch_id = decoded.get("branch_id")
+        if branch_id is None:
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: missing branch_id in token")
+            return jsonify({"message": "Token ไม่มีข้อมูลสาขา กรุณาเลือกสาขาใหม่"}), 401
+
+        g.username = decoded.get("username")
+        g.branch_id = branch_id
+        _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, f"user: {g.username}, branch: {g.branch_id}")
         return f(*args, **kwargs)
     return decorated
 

@@ -20,16 +20,14 @@ def api_create_role():
         return jsonify({"data" : res, "success" : True}), 200
     except IntegrityError:
         return jsonify({"success": False, "error": "ชื่อบทบาทนี้มีอยู่ในระบบแล้ว"}), 400
-    except Exception as e:
-        error_msg = str(e)
-        
-        return jsonify({"success": False, "error": f"เกิดข้อผิดพลาด: {error_msg}"}), 500
+    except Exception:
+        raise
 
 @app.route("/api/get_module_tree", methods=["POST"])
 @verify_required
 def api_get_module_tree():
     module_tree = user_service.get_module_tree()
-    return jsonify({"data" : module_tree, "success" : True}), 200 
+    return jsonify({"data" : module_tree, "success" : True}), 200
 
 @app.route("/api/get_role_permission", methods=["POST"])
 def api_get_role_permission():
@@ -37,7 +35,7 @@ def api_get_role_permission():
     username = data.get("username")
     role_id = data.get("role_id")
     module_tree, signature = user_service.get_role_permission(username, role_id)
-    return jsonify({"data" : {"module_tree" : module_tree, "signature" : signature, "success" : True}}), 200 
+    return jsonify({"data" : {"module_tree" : module_tree, "signature" : signature, "success" : True}}), 200
 
 @app.route("/api/create_module", methods=["POST"])
 @verify_required
@@ -45,7 +43,7 @@ def api_get_role_permission():
 def api_create_module():
     data = request.get_json()
     res = user_service.create_module(data)
-    return jsonify({"data" : res, "success" : True}), 200 
+    return jsonify({"data" : res, "success" : True}), 200
 
 @app.route('/api/get_module/<int:module_id>', methods=['POST'])
 def api_get_module(module_id):
@@ -77,7 +75,7 @@ def upsert_role_permission():
 def api_create_user():
     data = request.get_json()
     res = user_service.create_user(data)
-    return jsonify({"data" : res, "success" : True}), 200 
+    return jsonify({"data" : res, "success" : True}), 200
 
 @app.route("/api/get_user_list", methods=["GET"])
 def api_get_user_list():
@@ -94,9 +92,8 @@ def api_get_user_list():
             "pagination": {"total": res["total"], "page": res["page"], "pages": res["pages"]},
             "success": True,
         }), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 @app.route("/api/change_user_role", methods=["PUT"])
 def api_change_user_role():
@@ -104,19 +101,17 @@ def api_change_user_role():
         data = request.get_json()
         res = user_service.change_user_role(data)
         return jsonify({"data": res, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-    
+    except Exception:
+        raise
+
 @app.route("/api/change_user_password", methods=["PUT"])
 def api_change_user_password():
     try:
         data = request.get_json()
         res = user_service.change_user_password(data)
         return jsonify({"data": res, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500    
+    except Exception:
+        raise
 
 @app.route("/api/ban_user", methods=["PUT"])
 def api_ban_user():
@@ -124,9 +119,8 @@ def api_ban_user():
         data = request.get_json()
         res = user_service.ban_user(data)
         return jsonify({"data": res, "success": True}), 200
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500    
+    except Exception:
+        raise
 
 @app.route('/api/edit_module/<int:module_id>', methods=['PUT'])
 @verify_required
@@ -156,4 +150,3 @@ def api_assign_branch_to_user():
     data = request.get_json()
     res = user_service.assign_branches_to_user(data)
     return jsonify({"data" : res, "success" : True}), 200
-
