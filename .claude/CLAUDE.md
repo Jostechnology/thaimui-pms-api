@@ -21,6 +21,7 @@ The app is structured in three layers. Each layer has a single responsibility an
 - Calls a service method and receives a SQLAlchemy model instance (or list)
 - **Dumps the model to a dict using Marshmallow schemas and returns `jsonify()` — this is the controller's responsibility**
 - Never accesses the database directly
+- Do NOT return jsonify at except Exception, just raise them so global exception handler at app.py can work.
 
 ### Service (`app/services/`)
 - Contains all business logic

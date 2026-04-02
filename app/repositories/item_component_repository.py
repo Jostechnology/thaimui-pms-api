@@ -1,6 +1,6 @@
-from app.con_sqlalchemy import ItemComponent, ComponentTemplateSectionData
+from app.con_sqlalchemy import ItemComponent, ComponentTemplateSectionData, ComponentMaterialUsage, WorkOrder
 from app.app import db
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 
 def get_item_component_by_id(item_component_id):
@@ -16,6 +16,21 @@ def get_item_component_with_sections(item_component_id):
             joinedload(ItemComponent.component_template_sections),
             joinedload(ItemComponent.material_usages),
         ).get(item_component_id)
+    except Exception:
+        raise
+
+
+def get_item_component_for_document(item_component_id):
+    try:
+        query = db.session.query(ItemComponent).options(
+            selectinload(ItemComponent.component_template),
+            selectinload(ItemComponent.component_template_sections),
+            selectinload(ItemComponent.material_usages)
+                .selectinload(ComponentMaterialUsage.material_list),
+            selectinload(ItemComponent.work_order)
+                .selectinload(WorkOrder.sales_item),
+        ).populate_existing().filter(ItemComponent.item_component_id == item_component_id)
+        return query.first()
     except Exception:
         raise
 

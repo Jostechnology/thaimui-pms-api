@@ -16,9 +16,8 @@ def api_get_employee_salary_list():
         data = {"search": search}
         result = get_employee_salary_list(data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/get_employee_salary_history/<int:employee_id>", methods=["GET"])
@@ -29,9 +28,8 @@ def api_get_employee_salary_history(employee_id):
         data = {"employee_id": employee_id, "month": month}
         result = get_employee_salary_history(data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise
 
 
 @app.route("/api/update_employee_salary/<int:employee_id>", methods=["PUT"])
@@ -41,6 +39,5 @@ def api_update_employee_salary(employee_id):
         data = request.get_json() or {}
         result = update_employee_salary(employee_id, data)
         return jsonify({"data": result, "success": True}), 200
-    except Exception as e:
-        print(str(e))
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        raise

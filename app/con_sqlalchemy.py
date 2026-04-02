@@ -749,6 +749,7 @@ class ItemComponent(AuditMixin):
     component_template_sections = db.relationship('ComponentTemplateSectionData', back_populates='item_component', lazy='noload')
     component_template_id = db.Column(db.Integer, db.ForeignKey('m_component_template.component_template_id'), nullable=True)
     component_template = db.relationship('ComponentTemplate', back_populates='item_components', lazy='noload')
+    doc_version = db.Column(db.Integer, nullable=False, default=0)
 
 class ComponentMaterialUsage(AuditMixin):
     __tablename__ = "t_component_material_usage"
