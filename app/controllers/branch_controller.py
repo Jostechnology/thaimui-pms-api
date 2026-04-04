@@ -9,7 +9,9 @@ from app.ma_sqlalchemy import BranchSchema
 @verify_required_center
 def api_get_all_branchs():
     branchs = branch_service.get_all_branchs()
-    return jsonify({"data": BranchSchema(many=True).dump(branchs), "success": True}), 200
+    branches_data = BranchSchema(many=True).dump(branchs)
+    print(branches_data)
+    return jsonify({"data": branches_data, "success": True}), 200
 
 
 @app.route("/api/create_branch", methods=["POST"])

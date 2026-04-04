@@ -65,6 +65,7 @@ def create_work_order(data):
             doc_entry=sales_item.doc_entry,
             sales_item_id=sales_item_id,
             quantity=quantity,
+            branch_id=sales_item.branch_id
         )
 
         # Create ItemComponent + ComponentMaterialUsage

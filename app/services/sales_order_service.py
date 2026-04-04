@@ -16,12 +16,22 @@ def search_sales_order(data):
         raise
 
 
-def get_all_sales_orders(data):
+def assign_branch_to_sales_order(doc_entry, branch_id):
+    try:
+        sales_order = sales_order_repository.assign_branch(doc_entry, branch_id)
+        db.session.commit()
+        return sales_order
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def get_all_sales_orders(data, show_unassigned=False, branch_id=None):
     try:
         page = data.get("page", 1)
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = sales_order_repository.get_all_sales_orders(page, per_page, search)
+        result = sales_order_repository.get_all_sales_orders(page, per_page, search, show_unassigned=show_unassigned, branch_id=branch_id)
 
         items_data = []
         for row in result.items:
@@ -130,7 +140,8 @@ def create_sales_order(data):
                 unit_price=item.get("unit_price"),
                 cost_price=item.get("cost_price"),
                 doc_num=item.get("doc_num"),
-                doc_entry=item.get("doc_entry")
+                doc_entry=item.get("doc_entry"),
+                center_sales_item_id=item.get("sales_item_id")
             )
             sales_order.sales_items.append(sales_item)
 

@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList
+from app.con_sqlalchemy import SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList, ItemComponent, ComponentMaterialUsage
 from app.app import db
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import selectinload
@@ -35,7 +35,64 @@ def search_sales_order(page, limit, search):
     except Exception:
         raise
 
-def get_all_sales_orders(page, limit, search):
+def assign_branch(doc_entry, branch_id):
+    query = db.session.query(SalesOrder).filter(SalesOrder.doc_entry == doc_entry)
+    sales_order = query.first()
+    if not sales_order:
+        raise NotFoundError(f"ไม่พบใบ Sales Order นี้ -> {doc_entry}")
+    sales_order.branch_id = branch_id
+
+    # Cascade to SalesItem
+    db.session.query(SalesItem).filter(
+        SalesItem.doc_entry == doc_entry
+    ).update({SalesItem.branch_id: branch_id}, synchronize_session=False)
+
+    # Get sales_item_ids for this order to reach MaterialList
+    sales_item_ids = [
+        row[0] for row in
+        db.session.query(SalesItem.sales_item_id).filter(SalesItem.doc_entry == doc_entry)
+    ]
+    if sales_item_ids:
+        db.session.query(MaterialList).filter(
+            MaterialList.sales_item_id.in_(sales_item_ids)
+        ).update({MaterialList.branch_id: branch_id}, synchronize_session=False)
+
+    # Cascade to QCWorkOrder (via sales_item_ids already fetched)
+    if sales_item_ids:
+        db.session.query(QCWorkOrder).filter(
+            QCWorkOrder.sales_item_id.in_(sales_item_ids)
+        ).update({QCWorkOrder.branch_id: branch_id}, synchronize_session=False)
+
+    # Cascade to WorkOrder
+    db.session.query(WorkOrder).filter(
+        WorkOrder.doc_entry == doc_entry
+    ).update({WorkOrder.branch_id: branch_id}, synchronize_session=False)
+
+    # Get work_order_ids to reach ItemComponent and ComponentMaterialUsage
+    work_order_ids = [
+        row[0] for row in
+        db.session.query(WorkOrder.work_order_id).filter(WorkOrder.doc_entry == doc_entry)
+    ]
+    if work_order_ids:
+        item_component_ids = [
+            row[0] for row in
+            db.session.query(ItemComponent.item_component_id).filter(
+                ItemComponent.work_order_id.in_(work_order_ids)
+            )
+        ]
+        db.session.query(ItemComponent).filter(
+            ItemComponent.work_order_id.in_(work_order_ids)
+        ).update({ItemComponent.branch_id: branch_id}, synchronize_session=False)
+
+        if item_component_ids:
+            db.session.query(ComponentMaterialUsage).filter(
+                ComponentMaterialUsage.item_component_id.in_(item_component_ids)
+            ).update({ComponentMaterialUsage.branch_id: branch_id}, synchronize_session=False)
+
+    return sales_order
+
+
+def get_all_sales_orders(page, limit, search, show_unassigned=False, branch_id=None):
     try:
         items_total_subq = (
             db.session.query(func.count(SalesItem.sales_item_id))
@@ -111,7 +168,12 @@ def get_all_sales_orders(page, limit, search):
             qc_count_subq.label("qc_count"),
             qc_passed_subq.label("qc_passed"),
             qc_failed_subq.label("qc_failed"),
-        ).order_by(desc(SalesOrder.created_date))
+        )
+
+        if show_unassigned:
+            query = query.filter(SalesOrder.branch_id.is_(None))
+        elif branch_id is not None:
+            query = query.filter(SalesOrder.branch_id == branch_id)
 
         if search:
             query = query.filter(
@@ -122,7 +184,7 @@ def get_all_sales_orders(page, limit, search):
                 )
             )
 
-        query = query.order_by(SalesOrder.doc_num.desc())
+        query = query.order_by(SalesOrder.created_date.desc())
         return query.paginate(page=page, per_page=limit, error_out=False)
     except Exception:
         raise

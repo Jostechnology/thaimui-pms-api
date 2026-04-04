@@ -124,6 +124,15 @@ def verify_required_center(f):
         return f(*args, **kwargs)
     return decorated
 
+def get_requests_permission(request):
+    data = request.get_json(silent=True) or {}
+    if "X-Permission-Token" in request.headers:
+        permission_token = request.headers["X-Permission-Token"]
+    else:
+        permission_token = data.get("permission_token") or request.args.get("permission_token")
+    
+    return permission_token
+
 
 def decode_and_verify_permission_jwt(authorizes=[]):
     def decorator(f):
@@ -132,8 +141,7 @@ def decode_and_verify_permission_jwt(authorizes=[]):
             _start = time.perf_counter()
             label = f"decode_and_verify_permission_jwt ({f.__name__})"
 
-            data = request.get_json(silent=True) or {}
-            permission_token = data.get("permission_token")
+            permission_token = get_requests_permission(request)
 
             if not permission_token:
                 if authorizes:

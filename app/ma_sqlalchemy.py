@@ -87,6 +87,7 @@ class MaterialListSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     created_date = fields.DateTime()
+    branch_id = fields.Integer(allow_none=True)
 class SalesItemSchema(Schema):
     sales_item_id = fields.Integer()
     center_sales_item_id = fields.Integer()
@@ -97,6 +98,7 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.Int()
+    branch_id = fields.Integer(allow_none=True)
 
 class SalesItemSchemaDetail(SalesItemSchema):
     material_list = fields.List(fields.Nested(MaterialListSchema()))
@@ -144,6 +146,7 @@ class ComponentTemplateSectionDataSchema(Schema):
 class ItemComponentSchema(Schema):
     item_component_id = fields.Integer()
     work_order_id = fields.Integer()
+    branch_id = fields.Integer(allow_none=True)
     component_name = fields.String()
     remark = fields.String(allow_none=True)
     img_url = fields.String(allow_none=True)
@@ -174,6 +177,7 @@ class WorkRunSchema(Schema):
     work_run_id                      = fields.Integer()
     lot_number                       = fields.String(allow_none=True)
     work_order_id                    = fields.Integer()
+    branch_id                        = fields.Integer()
     quantity                         = fields.Integer()
     usable_qty                       = fields.Integer(allow_none=True)
     defect_qty                       = fields.Integer(dump_only=True, allow_none=True)
@@ -199,6 +203,7 @@ class WorkOrderSchema(Schema):
     quantity = fields.Integer()
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
+    branch_id = fields.Integer(allow_none=True)
     sales_item = fields.Nested(SalesItemSchema())
 
 class WorkOrderSchemaDetail(WorkOrderSchema):
@@ -224,6 +229,7 @@ class SalesOrderSchema(Schema):
     group_name = fields.String()
     status = fields.Enum(SalesOrderStatus)
     created_date = fields.String()
+    branch_id = fields.Integer(allow_none=True)
 
 
 class SalesItemNoMaterialSchema(Schema):
@@ -237,6 +243,7 @@ class SalesItemNoMaterialSchema(Schema):
     unit_price                   = fields.Float()
     doc_num                      = fields.Integer()
     doc_entry                    = fields.Integer()
+    branch_id                    = fields.Integer(allow_none=True)
     producing_qty                = fields.Integer(dump_only=True)
     produced_qty                 = fields.Integer(dump_only=True)
     unavailable_for_test_qty     = fields.Integer(dump_only=True)
@@ -255,6 +262,7 @@ class SalesItemSchema(Schema):
     unit_price                   = fields.Float()
     doc_num                      = fields.Integer()
     doc_entry                    = fields.Integer()
+    branch_id                    = fields.Integer(allow_none=True)
     material_list                = fields.List(fields.Nested(MaterialListSchema()))
     producing_qty                = fields.Integer(dump_only=True)
     produced_qty                 = fields.Integer(dump_only=True)
@@ -312,6 +320,7 @@ class QCWorkOrderSchema(Schema):
     qc_work_order_id = fields.Integer()
     qc_work_order_code = fields.String(allow_none=True)
     sales_item_id = fields.Integer()
+    branch_id = fields.Integer(allow_none=True)
     qc_date = fields.DateTime()
     qc_by = fields.String()
     quantity = fields.Integer()
