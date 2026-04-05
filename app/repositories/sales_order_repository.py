@@ -1,12 +1,12 @@
-from app.con_sqlalchemy import SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList, ItemComponent, ComponentMaterialUsage
+from app.con_sqlalchemy import Branch, SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList, ItemComponent, ComponentMaterialUsage
 from app.app import db
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import selectinload
 
-from app.exception import NotFoundError
+from app.exception import NotFoundError, ValidationError
 
 
-def search_sales_order(page, limit, search):
+def search_sales_order(page, limit, search, show_unassigned=False, branch_id=None):
     try:
         query = (
             db.session.query(SalesOrder.doc_entry, SalesOrder.doc_num)
@@ -28,6 +28,13 @@ def search_sales_order(page, limit, search):
             .distinct()
             .order_by(desc(SalesOrder.created_date))
         )
+
+        if show_unassigned:
+            pass
+        elif branch_id is not None:
+            query = query.filter(SalesOrder.branch_id == branch_id)
+        else:
+            raise ValidationError("ไม่พบ branch_id และคุณไม่มีสิทธิ์ในการดู SalesOrder หลายสาขา")
 
         result = query.paginate(page=page, per_page=limit, error_out=False)
         return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
@@ -168,12 +175,15 @@ def get_all_sales_orders(page, limit, search, show_unassigned=False, branch_id=N
             qc_count_subq.label("qc_count"),
             qc_passed_subq.label("qc_passed"),
             qc_failed_subq.label("qc_failed"),
-        )
+            Branch
+        ).outerjoin(Branch, Branch.branch_id == SalesOrder.branch_id)
 
         if show_unassigned:
-            query = query.filter(SalesOrder.branch_id.is_(None))
+            pass
         elif branch_id is not None:
             query = query.filter(SalesOrder.branch_id == branch_id)
+        elif branch_id is None:
+            raise ValidationError("ไม่พบ branch_id และคุณไม่มีสิทธิ์ในการดู SalesOrder หลายสาขา")
 
         if search:
             query = query.filter(
@@ -195,19 +205,26 @@ def get_sales_order_by_doc_entry(doc_entry):
     return query.first()
 
 
-def get_sales_order_detail(doc_entry):
+def get_sales_order_detail(doc_entry, show_unassigned=False, branch_id=None):
     try:
-        sales_order = (
-            db.session.query(SalesOrder)
+        query = (
+            db.session.query(SalesOrder, Branch)
             .options(
                 selectinload(SalesOrder.sales_items)
                     .selectinload(SalesItem.material_list),
                 selectinload(SalesOrder.certifications)
                     .selectinload(QCCertification.check_items),
             )
+            .outerjoin(Branch, Branch.branch_id == SalesOrder.branch_id)
             .filter(SalesOrder.doc_entry == doc_entry)
-            .first()
         )
+
+        if not show_unassigned and branch_id is not None:
+            query = query.filter(SalesOrder.branch_id == branch_id)
+        elif not show_unassigned and branch_id is None:
+            raise ValidationError("ไม่พบ branch_id และคุณไม่มีสิทธิ์ในการดู SalesOrder หลายสาขา")
+
+        sales_order = query.first()
         if not sales_order:
             raise NotFoundError(f"ไม่พบใบ Sales Order นี้ -> {doc_entry}")
         return sales_order

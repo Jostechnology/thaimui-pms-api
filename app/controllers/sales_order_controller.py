@@ -71,7 +71,14 @@ def api_search_sales_order():
         search = request.args.get("search", "", type=str)
         data = {"page": page, "per_page": per_page, "search": search}
 
-        result = search_sales_order(data)
+        permission_token = get_requests_permission(request)
+        show_unassigned = bool(permission_token and _has_work_order_create_permission(permission_token))
+
+        result = search_sales_order(
+            data,
+            show_unassigned=show_unassigned,
+            branch_id=None if show_unassigned else g.branch_id,
+        )
         return jsonify({
             "data": {"items": SalesOrderSearchSchema(many=True).dump(result["items"])},
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
@@ -85,7 +92,14 @@ def api_search_sales_order():
 @verify_required
 def api_get_by_doc_entry(doc_entry):
     try:
-        sales_order, items, materials = get_sales_order_detail(doc_entry)
+        permission_token = get_requests_permission(request)
+        show_unassigned = bool(permission_token and _has_work_order_create_permission(permission_token))
+
+        sales_order, items, materials, branch = get_sales_order_detail(
+            doc_entry,
+            show_unassigned=show_unassigned,
+            branch_id=None if show_unassigned else g.branch_id,
+        )
         so_schema = SalesOrderSchema()
         item_schema = SalesItemSchema(many=True)
         mat_schema = MaterialListSchema(many=True)
@@ -96,6 +110,8 @@ def api_get_by_doc_entry(doc_entry):
         data = sales_order_data
         data["items"] = sales_items_data
         data["material_list"] = material_list_data
+        data["branch_code"] = branch.branch_code if branch else None
+        data["branch_name"] = branch.branch_name if branch else None
         return jsonify({"data": data, "success": True}), 200
     except Exception:
         raise
