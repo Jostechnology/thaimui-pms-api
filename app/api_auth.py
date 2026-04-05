@@ -124,6 +124,40 @@ def verify_required_center(f):
         return f(*args, **kwargs)
     return decorated
 
+def verify_required_center_only(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        _start = time.perf_counter()
+        if request.method == "OPTIONS":
+            return f(*args, **kwargs)
+
+        token = None
+        if "Authorization" in request.headers:
+            parts = request.headers["Authorization"].split(" ")
+            if len(parts) == 2 and parts[0] == "Bearer":
+                token = parts[1]
+        if not token:
+            try:
+                body = request.get_json(silent=True)
+                if body and "token" in body:
+                    token = body["token"]
+            except Exception:
+                pass
+        if not token:
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: missing token")
+            return jsonify({"message": "Missing token"}), 401
+
+        if token == CENTER_ACCESS_KEY:
+            g.username = "SYSTEM_CENTER"
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "SYSTEM_CENTER shortcut")
+            return f(*args, **kwargs)
+
+        else:
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: invalid token")
+            return jsonify({"message": "Invalid or expired token"}), 401
+
+    return decorated
+
 def get_requests_permission(request):
     data = request.get_json(silent=True) or {}
     if "X-Permission-Token" in request.headers:

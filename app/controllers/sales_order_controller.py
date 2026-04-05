@@ -1,4 +1,4 @@
-from app.api_auth import get_requests_permission, verify_required, verify_required_center
+from app.api_auth import decode_and_verify_permission_jwt, get_requests_permission, verify_required, verify_required_center, verify_required_center_only
 from app.app import app
 from flask import request, jsonify, g
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
@@ -7,7 +7,7 @@ from app.utils import decode_token, check_true_permissions
 import base64, json
 
 
-def _has_work_order_create_permission(permission_token: str) -> bool:
+def _has_unassigned_sales_order_view_permission(permission_token: str) -> bool:
     decoded = decode_token(permission_token)
     if not decoded:
         return False
@@ -16,11 +16,24 @@ def _has_work_order_create_permission(permission_token: str) -> bool:
         if not signed:
             return False
         permission_list = json.loads(base64.b64decode(signed).decode("utf-8"))
-        check_true_permissions([{"module_code": "WORKORDERS_LIST", "method": "create"}], permission_list)
+        check_true_permissions([{"module_code": "UNASSIGNED_SO", "method": "create"}], permission_list)
         return True
     except Exception:
         return False
 
+def _has_unassigned_sales_order_create_permission(permission_token: str) -> bool:
+    decoded = decode_token(permission_token)
+    if not decoded:
+        return False
+    try:
+        signed = decoded.get("signed_permission_tree")
+        if not signed:
+            return False
+        permission_list = json.loads(base64.b64decode(signed).decode("utf-8"))
+        check_true_permissions([{"module_code": "UNASSIGNED_SO", "method": "create"}], permission_list)
+        return True
+    except Exception:
+        return False
 
 @app.route("/api/sales_order/get_all", methods=["GET"])
 @verify_required
@@ -32,7 +45,7 @@ def api_get_all_sales_orders():
         data = {"page": page, "per_page": per_page, "search": search}
 
         permission_token = get_requests_permission(request)
-        show_unassigned = bool(permission_token and _has_work_order_create_permission(permission_token))
+        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
 
         result = get_all_sales_orders(
             data,
@@ -49,7 +62,7 @@ def api_get_all_sales_orders():
 
 
 @app.route("/api/sales_order/<int:doc_entry>/assign_branch", methods=["POST"])
-@verify_required_center
+@verify_required_center_only
 def api_assign_branch_to_sales_order(doc_entry):
     try:
         data = request.get_json()
@@ -61,6 +74,19 @@ def api_assign_branch_to_sales_order(doc_entry):
     except Exception:
         raise
 
+@app.route("/api/sales_order/<int:doc_entry>/pms_assign_branch", methods=["POST"])
+@verify_required_center
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "UNASSIGNED_SO", "method": "edit"}])
+def api_pms_assign_branch_to_sales_order(doc_entry):
+    try:
+        data = request.get_json()
+        branch_id = data.get("branch_id")
+        if branch_id is None:
+            return jsonify({"message": "branch_id is required"}), 400
+        sales_order = assign_branch_to_sales_order(doc_entry, branch_id)
+        return jsonify({"data": SalesOrderSchema().dump(sales_order), "success": True}), 200
+    except Exception:
+        raise
 
 @app.route("/api/search_sales_order", methods=["GET"])
 @verify_required
@@ -72,7 +98,7 @@ def api_search_sales_order():
         data = {"page": page, "per_page": per_page, "search": search}
 
         permission_token = get_requests_permission(request)
-        show_unassigned = bool(permission_token and _has_work_order_create_permission(permission_token))
+        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
 
         result = search_sales_order(
             data,
@@ -93,7 +119,7 @@ def api_search_sales_order():
 def api_get_by_doc_entry(doc_entry):
     try:
         permission_token = get_requests_permission(request)
-        show_unassigned = bool(permission_token and _has_work_order_create_permission(permission_token))
+        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
 
         sales_order, items, materials, branch = get_sales_order_detail(
             doc_entry,
