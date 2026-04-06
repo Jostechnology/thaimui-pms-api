@@ -250,6 +250,8 @@ class SalesItemNoMaterialSchema(Schema):
     available_for_test_qty       = fields.Integer(dump_only=True)
     passed_qty                   = fields.Integer(dump_only=True)
     failed_qty                   = fields.Integer(dump_only=True)
+    produce                      = fields.Boolean()
+    test                         = fields.Boolean()
 
 class SalesItemSchema(Schema):
     sales_item_id                = fields.Integer()
@@ -264,17 +266,19 @@ class SalesItemSchema(Schema):
     doc_entry                    = fields.Integer()
     branch_id                    = fields.Integer(allow_none=True)
     material_list                = fields.List(fields.Nested(MaterialListSchema()))
-    producing_qty                = fields.Integer(dump_only=True)
+    # producing_qty                = fields.Integer(dump_only=True)
     produced_qty                 = fields.Integer(dump_only=True)
-    unavailable_for_test_qty     = fields.Integer(dump_only=True)
-    available_for_test_qty       = fields.Integer(dump_only=True)
+    # unavailable_for_test_qty     = fields.Integer(dump_only=True)
+    # available_for_test_qty       = fields.Integer(dump_only=True)
     status                       = fields.Enum(SalesItemStatus, dump_only=True)
     passed_qty                   = fields.Integer(dump_only=True)
     failed_qty                   = fields.Integer(dump_only=True)
     num_qc_work_order            = fields.Integer(dump_only=True)
     num_qc_successed_work_order  = fields.Integer(dump_only=True)
     is_completable               = fields.Boolean(dump_only=True)
-
+    produce                      = fields.Boolean()
+    test                         = fields.Boolean()
+    work_order                   = fields.Nested(WorkOrderSchema)
 
 class QCFormSchema(Schema):
     qc_form_id              = fields.Integer()

@@ -385,9 +385,16 @@ class SalesItem(AuditMixin):
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
+    produce = db.Column(db.Boolean, nullable=False)
+    test = db.Column(db.Boolean, nullable=False)
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='noload')
+
+    __table_args__ = (
+        db.Index('ix_sales_items_doc_entry_produce', 'doc_entry', 'produce'),
+        db.Index('ix_sales_items_doc_entry_test', 'doc_entry', 'test'),
+    )
     material_list = db.relationship('MaterialList', back_populates='sales_item')
-    work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False)
+    work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False, lazy="noload")
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
 
     # Production

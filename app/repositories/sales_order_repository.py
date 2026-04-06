@@ -167,6 +167,48 @@ def get_all_sales_orders(page, limit, search, show_unassigned=False, branch_id=N
             .scalar_subquery()
         )
 
+        produce_total_subq = (
+            db.session.query(func.count(SalesItem.sales_item_id))
+            .filter(SalesItem.doc_entry == SalesOrder.doc_entry, SalesItem.produce == True)
+            .correlate(SalesOrder)
+            .scalar_subquery()
+        )
+
+        produce_has_workorder_subq = (
+            db.session.query(func.count(SalesItem.sales_item_id))
+            .filter(
+                SalesItem.doc_entry == SalesOrder.doc_entry,
+                SalesItem.produce == True,
+                db.session.query(WorkOrder)
+                    .filter(WorkOrder.sales_item_id == SalesItem.sales_item_id)
+                    .correlate(SalesItem)
+                    .exists()
+            )
+            .correlate(SalesOrder)
+            .scalar_subquery()
+        )
+
+        test_total_subq = (
+            db.session.query(func.count(SalesItem.sales_item_id))
+            .filter(SalesItem.doc_entry == SalesOrder.doc_entry, SalesItem.test == True)
+            .correlate(SalesOrder)
+            .scalar_subquery()
+        )
+
+        test_has_qcworkorder_subq = (
+            db.session.query(func.count(SalesItem.sales_item_id))
+            .filter(
+                SalesItem.doc_entry == SalesOrder.doc_entry,
+                SalesItem.test == True,
+                db.session.query(QCWorkOrder)
+                    .filter(QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
+                    .correlate(SalesItem)
+                    .exists()
+            )
+            .correlate(SalesOrder)
+            .scalar_subquery()
+        )
+
         query = db.session.query(
             SalesOrder,
             items_total_subq.label("items_total"),
@@ -175,6 +217,10 @@ def get_all_sales_orders(page, limit, search, show_unassigned=False, branch_id=N
             qc_count_subq.label("qc_count"),
             qc_passed_subq.label("qc_passed"),
             qc_failed_subq.label("qc_failed"),
+            produce_total_subq.label("produce_total"),
+            produce_has_workorder_subq.label("produce_has_workorder"),
+            test_total_subq.label("test_total"),
+            test_has_qcworkorder_subq.label("test_has_qcworkorder"),
             Branch
         ).outerjoin(Branch, Branch.branch_id == SalesOrder.branch_id)
 
@@ -210,8 +256,10 @@ def get_sales_order_detail(doc_entry, show_unassigned=False, branch_id=None):
         query = (
             db.session.query(SalesOrder, Branch)
             .options(
-                selectinload(SalesOrder.sales_items)
-                    .selectinload(SalesItem.material_list),
+                selectinload(SalesOrder.sales_items).options(
+                    selectinload(SalesItem.material_list),
+                    selectinload(SalesItem.work_order),
+                ),
                 selectinload(SalesOrder.certifications)
                     .selectinload(QCCertification.check_items),
             )
