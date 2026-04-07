@@ -387,6 +387,7 @@ class SalesItem(AuditMixin):
     branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     produce = db.Column(db.Boolean, nullable=False)
     test = db.Column(db.Boolean, nullable=False)
+    item_group = db.Column(db.String(64), nullable=False, default="Z-BOM")
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='noload')
 
     __table_args__ = (
@@ -437,12 +438,22 @@ class SalesItem(AuditMixin):
     @property
     def is_completable(self):
         if self.status == SalesItemStatus.COMPLETED:
-            return False
-        if self.produced_qty < self.item_num:
-            return False
+            return (False, "งานถูกปิดไปแล้ว")
+        
+        # produced means usable items by default itself.
+        if (self.produced_qty < self.item_num) and self.produce:
+            return (False, "ยังผลิตไม่ครบ")
+        
+        if self.produce and self.producing_qty > 0:               
+            return (False, "ยังมีรายการผลิตค้างอยู่")
+        
+        # Produced or not produced / Produced is done or not. If it has test and test is not done, False
+        if (self.num_qc_successed_work_order == self.num_qc_work_order) and self.num_qc_work_order != 0:
+            return (True, "สำเร็จ ทำการเทสผ่าน")
         if self.num_qc_work_order == 0:
-            return True
-        return self.num_qc_successed_work_order == self.num_qc_work_order
+            return (True, "สำเร็จ ไม่มีรายการเทส")
+        
+        return (False, "มีรายการเทสยังไม่เสร็จ (รายการนี้เป็นรายการ Fallback ด้วย หากเกิดข้อผิดพลาด หากตรวจสอบครบถ้วนว่าเทสผ่านหมดแล้ว อาจเกิดปัญหาที่โปรแกรม)")
 
 class MachineStatus(enum.Enum):
     RUNNING = "RUNNING"
@@ -489,6 +500,7 @@ class MaterialList(AuditMixin):
     original_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
+    item_group = db.Column(db.Float, nullable=False, default="OTHER")
     sales_item = db.relationship('SalesItem', back_populates='material_list', lazy='noload')
     component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='noload')
     # Forward: used by remaining_num property and transaction_service

@@ -57,8 +57,6 @@ def get_all_sales_orders(data, show_unassigned=False, branch_id=None):
                 "qc_failed": row.qc_failed,
                 "produce_total": row.produce_total,
                 "produce_has_workorder": row.produce_has_workorder,
-                "test_total": row.test_total,
-                "test_has_qcworkorder": row.test_has_qcworkorder,
                 "status" : so.status.name,
                 "branch_code" : branch.branch_code if branch else None,
                 "branch_name" : branch.branch_name if branch else None
