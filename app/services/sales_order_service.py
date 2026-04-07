@@ -147,12 +147,14 @@ def create_sales_order(data):
                 doc_num=item.get("doc_num"),
                 doc_entry=item.get("doc_entry"),
                 center_sales_item_id=item.get("sales_item_id"),
-                produce=sales_item.get("produce"),
-                test=sales_item.get("test")
+                produce=item.get("produce"),
+                test=item.get("test"),
+                item_group=item.get("item_group")
             )
             sales_order.sales_items.append(sales_item)
 
             for mat in item.get("material_list", []):
+                print(f"Mat : {mat}")
                 material_list = MaterialList(
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
@@ -160,6 +162,7 @@ def create_sales_order(data):
                     original_num=mat.get("item_num"),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
+                    item_group=mat.get("item_group")
                 )
                 transaction_service.create_init_material_transaction(material_list, "INIT")
                 sales_item.material_list.append(material_list)

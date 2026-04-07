@@ -500,7 +500,7 @@ class MaterialList(AuditMixin):
     original_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
-    item_group = db.Column(db.Float, nullable=False, default="OTHER")
+    item_group = db.Column(db.String(64), nullable=False, default="OTHER")
     sales_item = db.relationship('SalesItem', back_populates='material_list', lazy='noload')
     component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='noload')
     # Forward: used by remaining_num property and transaction_service

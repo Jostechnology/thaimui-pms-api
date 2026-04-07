@@ -88,7 +88,9 @@ class MaterialListSchema(Schema):
     unit_price = fields.Float()
     created_date = fields.DateTime()
     branch_id = fields.Integer(allow_none=True)
-class SalesItemSchema(Schema):
+    item_group = fields.String()
+    
+class SalesItemForWorkOrderSchema(Schema):
     sales_item_id = fields.Integer()
     center_sales_item_id = fields.Integer()
     item_code = fields.String()
@@ -99,8 +101,9 @@ class SalesItemSchema(Schema):
     unit_price = fields.Float()
     doc_num = fields.Int()
     branch_id = fields.Integer(allow_none=True)
+    item_group                   = fields.String()
 
-class SalesItemSchemaDetail(SalesItemSchema):
+class SalesItemSchemaDetail(SalesItemForWorkOrderSchema):
     material_list = fields.List(fields.Nested(MaterialListSchema()))
 
     
@@ -204,7 +207,7 @@ class WorkOrderSchema(Schema):
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
     branch_id = fields.Integer(allow_none=True)
-    sales_item = fields.Nested(SalesItemSchema())
+    sales_item = fields.Nested(SalesItemForWorkOrderSchema())
 
 class WorkOrderSchemaDetail(WorkOrderSchema):
     item_components = fields.List(fields.Nested(ItemComponentSchema()))
@@ -252,6 +255,7 @@ class SalesItemNoMaterialSchema(Schema):
     failed_qty                   = fields.Integer(dump_only=True)
     produce                      = fields.Boolean()
     test                         = fields.Boolean()
+    item_group                   = fields.String()
 
 class SalesItemSchema(Schema):
     sales_item_id                = fields.Integer()
@@ -277,6 +281,7 @@ class SalesItemSchema(Schema):
     num_qc_successed_work_order  = fields.Integer(dump_only=True)
     is_completable               = fields.Method("get_is_completable", dump_only=True)
     completable_reason           = fields.Method("get_completable_reason", dump_only=True)
+    item_group                   = fields.String()
 
     def get_is_completable(self, obj):
         return obj.is_completable[0]

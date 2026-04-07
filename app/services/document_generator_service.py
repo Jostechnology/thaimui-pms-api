@@ -63,6 +63,7 @@ def generate_component_detail(item_component_id):
                 "material_list": {
                     "item_name": ml.item_name if ml else None,
                     "item_code": ml.item_code if ml else None,
+                    "item_group": ml.item_group if ml else None,
                     "unit_price": ml.unit_price if ml else None,
                     "item_description": ml.item_description if ml else None,
                 }
@@ -75,6 +76,7 @@ def generate_component_detail(item_component_id):
             "sales_item": {
                 "item_name": sales_item.item_name if sales_item else None,
                 "item_code": sales_item.item_code if sales_item else None,
+                "item_num": sales_item.item_num if sales_item else None,
             }
         }
 
