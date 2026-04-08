@@ -111,6 +111,7 @@ def create_machine(data):
             purchase_date=_to_purchase_date(data.get("purchase_date")),
             status=_to_machine_status(data.get("status")),
             is_active=_to_bool(data.get("is_active"), True),
+            machine_type_id=data.get("machine_type_id") or None,
         )
 
         if not machine.machine_code:
@@ -145,6 +146,9 @@ def update_machine(machine_id, data):
 
         if "is_active" in data:
             machine.is_active = _to_bool(data.get("is_active"), machine.is_active)
+
+        if "machine_type_id" in data:
+            machine.machine_type_id = data.get("machine_type_id") or None
 
         machine = machine_repository.update_machine(machine)
         db.session.commit()

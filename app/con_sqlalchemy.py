@@ -338,6 +338,14 @@ class SalesItem(AuditMixin):
             if tr.overall_status == TestResultStatus.FAILED
         )
 
+class MachineType(AuditMixin):
+    __tablename__ = "m_machine_type"
+    machine_type_id = db.Column(db.Integer, primary_key=True)
+    type_name = db.Column(db.String(100), nullable=False)
+    type_description = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    machines = db.relationship('Machine', back_populates='machine_type', lazy='noload')
+
 class MachineStatus(enum.Enum):
     RUNNING = "RUNNING"
     DOWN = "DOWN"
@@ -354,6 +362,8 @@ class Machine(AuditMixin):
     purchase_date = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    machine_type_id = db.Column(db.Integer, db.ForeignKey('m_machine_type.machine_type_id'), nullable=True)
+    machine_type = db.relationship('MachineType', back_populates='machines', lazy='joined')
     maintenances = db.relationship('MachineMaintenance', back_populates='machine', lazy='noload')
 
 class MachineMaintenance(AuditMixin):
@@ -641,3 +651,20 @@ class ComponentTemplateSectionData(AuditMixin):
     section_key = db.Column(db.String(255), nullable=False)
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
     item_component = db.relationship('ItemComponent', back_populates='component_template_sections', lazy='noload')
+
+class PhaseTemplate(AuditMixin):
+    __tablename__ = "m_phase_template"
+    phase_template_id = db.Column(db.Integer, primary_key=True)
+    template_name = db.Column(db.String(255), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    items = db.relationship('PhaseTemplateItem', back_populates='phase_template', cascade='all, delete-orphan', order_by='PhaseTemplateItem.sort_order')
+
+class PhaseTemplateItem(AuditMixin):
+    __tablename__ = "m_phase_template_item"
+    phase_template_item_id = db.Column(db.Integer, primary_key=True)
+    phase_template_id = db.Column(db.Integer, db.ForeignKey('m_phase_template.phase_template_id', ondelete='CASCADE'), nullable=False)
+    phase_name = db.Column(db.String(100), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    machine_type_id = db.Column(db.Integer, db.ForeignKey('m_machine_type.machine_type_id'), nullable=True)
+    phase_template = db.relationship('PhaseTemplate', back_populates='items', lazy='noload')
+    machine_type = db.relationship('MachineType', lazy='joined')

@@ -464,6 +464,16 @@ class MaterialTransactionSchema(Schema):
     created_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)
 
+class MachineTypeSchema(Schema):
+    machine_type_id = fields.Integer(dump_only=True)
+    type_name = fields.String()
+    type_description = fields.String(allow_none=True)
+    is_active = fields.Boolean()
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)
+
 class MachineSchema(Schema):
     machine_id = fields.Integer()
     machine_code = fields.String()
@@ -473,6 +483,8 @@ class MachineSchema(Schema):
     purchase_date = fields.Date(allow_none=True)
     status = fields.Enum(MachineStatus)
     is_active = fields.Boolean()
+    machine_type_id = fields.Integer(allow_none=True)
+    machine_type = fields.Nested(MachineTypeSchema, allow_none=True)
     created_date = fields.DateTime()
     updated_date = fields.DateTime()
     created_by = fields.String(allow_none=True)
@@ -496,3 +508,25 @@ class ComponentTemplateSchema(Schema):
     updated_date = fields.DateTime(dump_only=True)
     created_by = fields.String(dump_only=True)
     updated_by = fields.String(dump_only=True)
+
+class PhaseTemplateItemSchema(Schema):
+    phase_template_item_id = fields.Integer(dump_only=True)
+    phase_template_id = fields.Integer()
+    phase_name = fields.String()
+    sort_order = fields.Integer()
+    machine_type_id = fields.Integer(allow_none=True)
+    machine_type = fields.Nested(MachineTypeSchema, allow_none=True, dump_only=True)
+
+class PhaseTemplateSchema(Schema):
+    phase_template_id = fields.Integer(dump_only=True)
+    template_name = fields.String()
+    is_active = fields.Boolean()
+    items = fields.List(fields.Nested(PhaseTemplateItemSchema), dump_only=True)
+    item_count = fields.Method("get_item_count")
+    created_date = fields.DateTime(dump_only=True)
+    updated_date = fields.DateTime(dump_only=True)
+    created_by = fields.String(dump_only=True)
+    updated_by = fields.String(dump_only=True)
+
+    def get_item_count(self, obj):
+        return len(obj.items) if obj.items else 0
