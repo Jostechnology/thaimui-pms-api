@@ -9,6 +9,22 @@ from app.services.component_template_service import (
     update_template,
     delete_template,
 )
+from app.services import cache_service
+from app.services.storage_service import get_presigned_url, PRESIGNED_CACHE_TTL
+
+
+def _cache_key(template_id: int) -> str:
+    return f"component_template:{template_id}"
+
+
+def _resolve_presigned_urls(template_dict: dict) -> dict:
+    """Replace MinIO object keys in image_select options with presigned URLs."""
+    for sec in template_dict.get("sections") or []:
+        if sec.get("type") == "image_select":
+            for opt in sec.get("options") or []:
+                if opt.get("imageUrl"):
+                    opt["imageUrl"] = get_presigned_url(opt["imageUrl"])
+    return template_dict
 
 
 @app.route("/api/component_templates", methods=["GET"])
@@ -33,8 +49,16 @@ def api_get_component_templates():
 @verify_required
 def api_get_component_template_by_id(template_id):
     try:
+        key = _cache_key(template_id)
+        cached = cache_service.get(key)
+        if cached:
+            return jsonify({"data": cached, "success": True}), 200
+
         result = get_template_by_id(template_id)
-        return jsonify({"data": ComponentTemplateSchema().dump(result), "success": True}), 200
+        dumped = ComponentTemplateSchema().dump(result)
+        resolved = _resolve_presigned_urls(dumped)
+        cache_service.set(key, resolved, ttl=PRESIGNED_CACHE_TTL)
+        return jsonify({"data": resolved, "success": True}), 200
     except Exception:
         raise
 
@@ -56,6 +80,7 @@ def api_update_component_template(template_id):
     try:
         data = request.get_json()
         result = update_template(template_id, data)
+        cache_service.delete(_cache_key(template_id))
         return jsonify({"data": ComponentTemplateSchema().dump(result), "success": True}), 200
     except Exception:
         raise
@@ -66,6 +91,7 @@ def api_update_component_template(template_id):
 def api_delete_component_template(template_id):
     try:
         result = delete_template(template_id)
+        cache_service.delete(_cache_key(template_id))
         return jsonify({"data": ComponentTemplateSchema().dump(result), "success": True}), 200
     except Exception:
         raise

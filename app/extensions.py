@@ -27,3 +27,8 @@ def init_document_generator_service(DOCUMENT_GENERATOR_URL):
 def init_storage_service(endpoint, access_key, secret_key, bucket, secure=False):
     from app.services import storage_service
     storage_service.init_storage(endpoint, access_key, secret_key, bucket, secure)
+
+
+def init_cache_service(redis_url: str):
+    from app.services import cache_service
+    cache_service.init_cache(redis_url)
