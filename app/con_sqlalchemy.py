@@ -814,10 +814,12 @@ class MaterialTransaction(AuditMixin):
 # ---------------------------------------------------------------------------
 
 class PickingRequestStatus(enum.Enum):
-    PENDING = 'PENDING'   # created, awaiting manual confirmation
-    SENT    = 'SENT'      # sent to WMS (manually marked)
-    SUCCESS = 'SUCCESS'   # WMS confirmed receipt
-    FAILED  = 'FAILED'    # failed / cancelled
+    PENDING  = 'PENDING'   # created, published to WMS
+    PICKING  = 'PICKING'   # WMS acknowledged and is picking
+    SENT     = 'SENT'      # WMS has dispatched the items
+    RECEIVED = 'RECEIVED'  # we clicked "receive" in our UI
+    SUCCESS  = 'SUCCESS'   # terminal success (legacy)
+    FAILED   = 'FAILED'    # failed / cancelled
 
 class PickingRequestType(enum.Enum):
     WORK_RUN    = 'WORK_RUN'

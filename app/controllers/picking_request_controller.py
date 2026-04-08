@@ -59,3 +59,10 @@ def api_update_picking_request_status(picking_request_id):
     data = request.get_json()
     result = picking_request_service.update_status(picking_request_id, data)
     return jsonify({"data": PickingRequestSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/picking_request/<int:picking_request_id>/receive", methods=["POST"])
+@verify_required
+def api_receive_picking_request(picking_request_id):
+    result = picking_request_service.mark_received(picking_request_id)
+    return jsonify({"data": PickingRequestDetailSchema().dump(result), "success": True}), 200

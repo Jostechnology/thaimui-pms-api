@@ -2,13 +2,14 @@ version: "3.8"
 
 services:
   thaimui-pms-api: 
+    build : .
     platform: linux/amd64
-    image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:${TAG}
+    image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:test
     container_name: thaimui-pms-api
     restart: always
 
     ports:
-      - "8002:5000"
+      - "5000:5000"
 
     environment:
       - connection_string=${connection_string}
@@ -16,7 +17,33 @@ services:
       - CENTER_ACCESS_KEY=${CENTER_ACCESS_KEY}
       - CENTER_URL=${CENTER_URL}
       - DOCUMENT_GENERATOR_URL=${DOCUMENT_GENERATOR_URL}
-    
+      - RABBITMQ_URL=${RABBITMQ_URL}
+
+    networks:
+      - thaimui
+
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"
+      - "/usr/share/zoneinfo:/usr/share/zoneinfo:ro"
+
+  thaimui-pms-worker:
+    build : .
+    platform: linux/amd64
+    image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:test
+    container_name: thaimui-pms-worker
+    restart: always
+    entrypoint: ["python", "worker.py"]
+
+    environment:
+      - connection_string=${connection_string}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CENTER_ACCESS_KEY=${CENTER_ACCESS_KEY}
+      - CENTER_URL=${CENTER_URL}
+      - DOCUMENT_GENERATOR_URL=${DOCUMENT_GENERATOR_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_RETRY_TTL_MS=${RABBITMQ_RETRY_TTL_MS:-30000}
+      - RABBITMQ_MAX_RETRIES=${RABBITMQ_MAX_RETRIES:-5}
+
     networks:
       - thaimui
 

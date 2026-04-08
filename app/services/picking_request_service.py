@@ -7,6 +7,23 @@ from app.repositories import picking_request_repository, work_run_repository, te
 from app.services import document_code_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
+from app.messaging import EXCHANGE_PICKING, RK_PICKING_REQUESTED, RK_PICKING_RECEIVED
+from app.messaging.publisher import publish_safely
+
+def _build_wms_payload(pr, items):
+    return {
+        "picking_request_id": pr.picking_request_id,
+        "picking_request_code": pr.picking_request_code,
+        "source_type": pr.request_type.value,
+        "work_run_id": pr.work_run_id,
+        "test_result_id": pr.test_result_id,
+        "remark": pr.remark,
+        "items": [
+            {"item_code": i.item_code, "item_name": i.item_name,
+             "quantity": i.quantity, "unit": i.unit, "remark": i.remark}
+            for i in items
+        ],
+    }
 
 
 def _build_items(items_data):
@@ -63,31 +80,9 @@ def create_for_work_run(work_run_id, data):
             item.picking_request_id = pr.picking_request_id
             db.session.add(item)
 
-        # --- WMS integration (not yet supported) ---
-        # from app.extensions import center_service
-        # try:
-        #     payload = {
-        #         "source_type": "WORK_RUN",
-        #         "source_id": work_run_id,
-        #         "internal_reference": f"PR-{pr.picking_request_id}",
-        #         "remark": pr.remark,
-        #         "items": [
-        #             {"item_code": i.item_code, "item_name": i.item_name,
-        #              "quantity": i.quantity, "unit": i.unit}
-        #             for i in items
-        #         ],
-        #     }
-        #     resp = center_service.request("POST", "/wms/picking", data=payload)
-        #     if 200 <= resp["status_code"] < 300:
-        #         pr.status = PickingRequestStatus.SENT
-        #         pr.wms_reference = (resp.get("json") or {}).get("reference")
-        #     else:
-        #         pr.status = PickingRequestStatus.FAILED
-        # except Exception:
-        #     pr.status = PickingRequestStatus.FAILED
-
         db.session.commit()
 
+        publish_safely(EXCHANGE_PICKING, RK_PICKING_REQUESTED, _build_wms_payload(pr, items))
         return picking_request_repository.get_picking_request_detail_by_id(pr.picking_request_id)
     except Exception:
         db.session.rollback()
@@ -122,32 +117,70 @@ def create_for_test_result(test_result_id, data):
             item.picking_request_id = pr.picking_request_id
             db.session.add(item)
 
-        # --- WMS integration (not yet supported) ---
-        # from app.extensions import center_service
-        # try:
-        #     payload = {
-        #         "source_type": "TEST_RESULT",
-        #         "source_id": test_result_id,
-        #         "internal_reference": f"PR-{pr.picking_request_id}",
-        #         "remark": pr.remark,
-        #         "items": [
-        #             {"item_code": i.item_code, "item_name": i.item_name,
-        #              "quantity": i.quantity, "unit": i.unit}
-        #             for i in items
-        #         ],
-        #     }
-        #     resp = center_service.request("POST", "/wms/picking", data=payload)
-        #     if 200 <= resp["status_code"] < 300:
-        #         pr.status = PickingRequestStatus.SENT
-        #         pr.wms_reference = (resp.get("json") or {}).get("reference")
-        #     else:
-        #         pr.status = PickingRequestStatus.FAILED
-        # except Exception:
-        #     pr.status = PickingRequestStatus.FAILED
-
         db.session.commit()
 
+        publish_safely(EXCHANGE_PICKING, RK_PICKING_REQUESTED, _build_wms_payload(pr, items))
         return picking_request_repository.get_picking_request_detail_by_id(pr.picking_request_id)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def _transition(pr, new_status, allowed_from):
+    """Idempotent state transition. No-op if already in new_status; error on illegal jumps."""
+    if pr.status == new_status:
+        return False
+    if pr.status not in allowed_from:
+        raise ValidationError(
+            f"Cannot transition picking request from {pr.status.value} to {new_status.value}"
+        )
+    pr.status = new_status
+    return True
+
+
+def mark_picking(picking_request_id, payload):
+    """Consumer handler: WMS is picking."""
+    pr = picking_request_repository.get_picking_request_by_id(picking_request_id)
+    if not pr:
+        raise NotFoundError(f"Picking Request {picking_request_id} not found")
+    if _transition(pr, PickingRequestStatus.PICKING, {PickingRequestStatus.PENDING}):
+        if payload.get("wms_reference"):
+            pr.wms_reference = payload["wms_reference"]
+    return pr
+
+
+def mark_sent(picking_request_id, payload):
+    """Consumer handler: WMS dispatched."""
+    pr = picking_request_repository.get_picking_request_by_id(picking_request_id)
+    if not pr:
+        raise NotFoundError(f"Picking Request {picking_request_id} not found")
+    _transition(
+        pr, PickingRequestStatus.SENT,
+        {PickingRequestStatus.PENDING, PickingRequestStatus.PICKING},
+    )
+    if payload.get("wms_reference"):
+        pr.wms_reference = payload["wms_reference"]
+    return pr
+
+
+def mark_received(picking_request_id):
+    """Called from our UI when the user clicks Receive."""
+    try:
+        pr = picking_request_repository.get_picking_request_by_id(picking_request_id)
+        if not pr:
+            raise NotFoundError(f"Picking Request {picking_request_id} not found")
+        changed = _transition(
+            pr, PickingRequestStatus.RECEIVED,
+            {PickingRequestStatus.SENT, PickingRequestStatus.PICKING},
+        )
+        db.session.commit()
+        if changed:
+            publish_safely(EXCHANGE_PICKING, RK_PICKING_RECEIVED, {
+                "picking_request_id": pr.picking_request_id,
+                "picking_request_code": pr.picking_request_code,
+                "wms_reference": pr.wms_reference,
+            })
+        return picking_request_repository.get_picking_request_detail_by_id(picking_request_id)
     except Exception:
         db.session.rollback()
         raise
