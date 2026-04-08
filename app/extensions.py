@@ -22,3 +22,8 @@ def init_document_generator_service(DOCUMENT_GENERATOR_URL):
         document_generator_service = DocumentGeneratorService(
             base_url=DOCUMENT_GENERATOR_URL,
         )
+
+
+def init_storage_service(endpoint, access_key, secret_key, bucket, secure=False):
+    from app.services import storage_service
+    storage_service.init_storage(endpoint, access_key, secret_key, bucket, secure)
