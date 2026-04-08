@@ -667,4 +667,4 @@ class PhaseTemplateItem(AuditMixin):
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     machine_type_id = db.Column(db.Integer, db.ForeignKey('m_machine_type.machine_type_id'), nullable=True)
     phase_template = db.relationship('PhaseTemplate', back_populates='items', lazy='noload')
-    machine_type = db.relationship('MachineType', lazy='joined')
+    machine_type = db.relationship('MachineType', lazy='noload')
