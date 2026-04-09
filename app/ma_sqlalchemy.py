@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, PhaseStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, PickingRequestType
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, PickingRequestType
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -107,28 +107,29 @@ class SalesItemSchemaDetail(SalesItemForWorkOrderSchema):
     material_list = fields.List(fields.Nested(MaterialListSchema()))
 
     
-class WorkPhaseBreakSchema(Schema):
+class WorkRunBreakSchema(Schema):
     break_id = fields.Integer()
-    work_phase_id = fields.Integer()
+    work_run_id = fields.Integer()
     break_start = fields.DateTime()
     break_end = fields.DateTime(allow_none=True)
     break_type = fields.Enum(BreakType)
+    remark = fields.String(allow_none=True)
 
-class WorkPhaseSchema(Schema):
-    work_phase_id = fields.Integer()
+class WorkRunAssignmentSchema(Schema):
+    work_run_assignment_id = fields.Integer()
     work_run_id = fields.Integer()
-    phase_name = fields.String()
-    phase_status = fields.Enum(PhaseStatus)
-    start_date = fields.DateTime()
-    end_date = fields.DateTime()
-    created_date = fields.DateTime()
-    
-class WorkPhaseSchemaDetailed(WorkPhaseSchema):
-    employee_list = fields.Method("get_employee_list")
-    breaks = fields.List(fields.Nested(WorkPhaseBreakSchema()))
+    employee_id = fields.Integer()
+    from_time = fields.DateTime()
+    to_time = fields.DateTime(allow_none=True)
+    employee = fields.Nested(lambda: EmployeeSchema())
 
-    def get_employee_list(self, obj):
-        return EmployeeSchema(many=True).dump([a.employee for a in obj.assignments])
+class WorkRunMachineSchema(Schema):
+    work_run_machine_id = fields.Integer()
+    work_run_id = fields.Integer()
+    machine_id = fields.Integer()
+    from_time = fields.DateTime()
+    to_time = fields.DateTime(allow_none=True)
+    machine = fields.Nested(lambda: MachineSchema())
 
 
 
@@ -191,7 +192,8 @@ class WorkRunSchema(Schema):
     completion_remark                = fields.String(allow_none=True)
     wms_pick_reference               = fields.String(allow_none=True)
     status                           = fields.Enum(WorkRunStatus)
-    current_phase_id                 = fields.Integer(allow_none=True)
+    start_date                       = fields.DateTime(allow_none=True)
+    end_date                         = fields.DateTime(allow_none=True)
     rework_source_test_result_id     = fields.Integer(allow_none=True, dump_only=True)
     qty_from_failed                  = fields.Integer(allow_none=True, dump_only=True)
     created_date                     = fields.DateTime()
@@ -421,10 +423,11 @@ class PickingRequestSchema(Schema):
 class PickingRequestDetailSchema(PickingRequestSchema):
     items              = fields.List(fields.Nested(PickingRequestItemSchema()))
 
-class WorkRunDisplaySchema(WorkRunSchema): #DISPLAY PHASES
-    current_phase       = fields.Nested(WorkPhaseSchemaDetailed(), allow_none=True)
-    work_phases         = fields.List(fields.Nested(WorkPhaseSchemaDetailed()))
-    picking_requests    = fields.List(fields.Nested(PickingRequestSchema))
+class WorkRunDisplaySchema(WorkRunSchema):
+    assignments      = fields.List(fields.Nested(WorkRunAssignmentSchema()))
+    machines         = fields.List(fields.Nested(WorkRunMachineSchema()))
+    breaks           = fields.List(fields.Nested(WorkRunBreakSchema()))
+    picking_requests = fields.List(fields.Nested(PickingRequestSchema))
 
 class WorkRunDetailSchema(WorkRunSchema):
     test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
@@ -518,13 +521,6 @@ class OperationCostMonthlySchema(Schema):
     updated_by = fields.String()
 class QCCertificateSchemaDetail(QCCertificateSchema):
     check_items = fields.Nested(QCCheckItemSchema, many=True, dump_only=True)
-
-class WorkPhaseSimpleSchema(Schema):
-    work_phase_id = fields.Integer()
-    phase_name = fields.String()
-    phase_status = fields.Enum(PhaseStatus)
-    start_date = fields.DateTime()
-    end_date = fields.DateTime()
 
 
 class TestResultSimpleSchema(Schema):

@@ -78,7 +78,6 @@ from .controllers import work_order_controller
 from .controllers import employee_controller
 from .controllers import sales_item_controller
 from .controllers import material_list_controller
-from .controllers import work_phase_controller
 from .controllers import sales_order_controller
 from .controllers import employee_salary
 from .controllers import qc_work_order_controller

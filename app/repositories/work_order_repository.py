@@ -1,6 +1,5 @@
 from app.con_sqlalchemy import (
     WorkOrder, WorkOrderStatus, WorkRun, SalesOrder, SalesItem,
-    WorkPhase, WorkPhaseBreak, WorkAssignment, Employee,
     ItemComponent, ComponentMaterialUsage, MaterialList,
     TestResult,
 )
