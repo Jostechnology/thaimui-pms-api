@@ -2,6 +2,7 @@ from datetime import datetime, time, date
 
 from app.app import db
 from app.con_sqlalchemy import Machine, MachineStatus
+from app.exception import NotFoundError, MissingFieldsError
 from app.ma_sqlalchemy import MachineSchema
 from app.repositories import machine_repository
 
@@ -94,9 +95,9 @@ def get_machine_list(data):
 
 def get_machine_by_id(machine_id):
     try:
-        machine = Machine.query.get(machine_id)
+        machine = machine_repository.get_machine_by_id(machine_id)
         if not machine:
-            raise Exception(f"Machine id {machine_id} not found")
+            raise NotFoundError(f"Machine id {machine_id} not found")
         return MachineSchema().dump(machine)
     except Exception:
         raise
@@ -111,13 +112,14 @@ def create_machine(data):
             purchase_date=_to_purchase_date(data.get("purchase_date")),
             status=_to_machine_status(data.get("status")),
             is_active=_to_bool(data.get("is_active"), True),
+            machine_type_id=data.get("machine_type_id") or None,
         )
 
         if not machine.machine_code:
-            raise Exception("machine_code is required")
+            raise MissingFieldsError("machine_code is required")
 
         if not machine.machine_name:
-            raise Exception("machine_name is required")
+            raise MissingFieldsError("machine_name is required")
 
         machine = machine_repository.create_machine(machine)
         db.session.commit()
@@ -130,7 +132,7 @@ def update_machine(machine_id, data):
     try:
         machine = machine_repository.get_machine_by_id(machine_id)
         if not machine:
-            raise Exception(f"Machine id {machine_id} not found")
+            raise NotFoundError(f"Machine id {machine_id} not found")
 
         machine.machine_code = data.get("machine_code", machine.machine_code)
         machine.machine_name = data.get("machine_name", machine.machine_name)
@@ -146,6 +148,9 @@ def update_machine(machine_id, data):
         if "is_active" in data:
             machine.is_active = _to_bool(data.get("is_active"), machine.is_active)
 
+        if "machine_type_id" in data:
+            machine.machine_type_id = data.get("machine_type_id") or None
+
         machine = machine_repository.update_machine(machine)
         db.session.commit()
         return MachineSchema().dump(machine)
@@ -158,7 +163,7 @@ def delete_machine(machine_id):
     try:
         machine = machine_repository.get_machine_by_id(machine_id)
         if not machine:
-            raise Exception(f"Machine id {machine_id} not found")
+            raise NotFoundError(f"Machine id {machine_id} not found")
 
         machine_repository.soft_delete_machine(machine)
         db.session.commit()
