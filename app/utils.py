@@ -66,34 +66,22 @@ def convert_end_date(end_date):
     )
 
 
-def check_true_permissions(authorizes, permission_tree):
+def check_true_permissions(authorizes, permission_list):
     """
-    ตรวจสอบว่า permission_tree มี permission ที่ต้องการทั้งหมดหรือไม่
+    ตรวจสอบว่า permission_list มี permission ที่ต้องการทั้งหมดหรือไม่
     authorizes: list of dict เช่น [{"module_code": "USER", "method": "read"}]
-    permission_tree: list of module dict ที่มี permission และ sub_modules
+    permission_list: flat list of granted permissions เช่น ["USER.read", "SALES_ORDER.create"]
     raises ValueError ถ้าไม่มีสิทธิ์
     """
     if not authorizes:
+        print(f"No authorize list sent")
         return
 
-    def find_module_permissions(modules, module_code):
-        for m in modules:
-            if m.get("module_code") == module_code:
-                return m.get("permission", [])
-            for sm in m.get("sub_modules", []):
-                if sm.get("module_code") == module_code:
-                    return sm.get("permission", [])
-        return []
+    permission_set = set(permission_list)
 
     for auth in authorizes:
         module_code = auth.get("module_code")
         method = auth.get("method")
-        permissions = find_module_permissions(permission_tree, module_code)
 
-        granted = any(
-            isinstance(p, dict) and p.get("method") == method and p.get("check") is True
-            for p in permissions
-        )
-
-        if not granted:
+        if f"{module_code}.{method}" not in permission_set:
             raise ValueError(f"ไม่มีสิทธิ์ '{method}' สำหรับ module '{module_code}'")

@@ -1,7 +1,7 @@
 from app.con_sqlalchemy import Employee
 from app.app import db
 
-def get_all_employees(search, status=""):
+def get_all_employees(search, status="", page=1, per_page=10):
     try:
         query = Employee.query
         if search:
@@ -18,8 +18,8 @@ def get_all_employees(search, status=""):
                 query = query.filter(Employee.status == enum_status)
             except Exception:
                 pass
-        items = query.all()
-        return items
+        result = query.paginate(page=page, per_page=per_page, error_out=False)
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
     except Exception:
         raise
 

@@ -1,9 +1,39 @@
-from app.api_auth import verify_required, verify_required_center
+from app.api_auth import decode_and_verify_permission_jwt, get_requests_permission, verify_required, verify_required_center, verify_required_center_only
 from app.app import app
-from flask import request, jsonify
+from flask import request, jsonify, g
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
-from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine
+from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order
+from app.utils import decode_token, check_true_permissions
+import base64, json
 
+
+def _has_unassigned_sales_order_view_permission(permission_token: str) -> bool:
+    decoded = decode_token(permission_token)
+    if not decoded:
+        return False
+    try:
+        signed = decoded.get("signed_permission_tree")
+        if not signed:
+            return False
+        permission_list = json.loads(base64.b64decode(signed).decode("utf-8"))
+        check_true_permissions([{"module_code": "UNASSIGNED_SO", "method": "create"}], permission_list)
+        return True
+    except Exception:
+        return False
+
+def _has_unassigned_sales_order_create_permission(permission_token: str) -> bool:
+    decoded = decode_token(permission_token)
+    if not decoded:
+        return False
+    try:
+        signed = decoded.get("signed_permission_tree")
+        if not signed:
+            return False
+        permission_list = json.loads(base64.b64decode(signed).decode("utf-8"))
+        check_true_permissions([{"module_code": "UNASSIGNED_SO", "method": "create"}], permission_list)
+        return True
+    except Exception:
+        return False
 
 @app.route("/api/sales_order/get_all", methods=["GET"])
 @verify_required
@@ -14,7 +44,14 @@ def api_get_all_sales_orders():
         search = request.args.get("search", "", type=str)
         data = {"page": page, "per_page": per_page, "search": search}
 
-        result = get_all_sales_orders(data)
+        permission_token = get_requests_permission(request)
+        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
+
+        result = get_all_sales_orders(
+            data,
+            show_unassigned=show_unassigned,
+            branch_id=None if show_unassigned else g.branch_id,
+        )
         return jsonify({
             "data": {"items": result["items"]},
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
@@ -23,6 +60,33 @@ def api_get_all_sales_orders():
     except Exception:
         raise
 
+
+@app.route("/api/sales_order/<int:doc_entry>/assign_branch", methods=["POST"])
+@verify_required_center_only
+def api_assign_branch_to_sales_order(doc_entry):
+    try:
+        data = request.get_json()
+        branch_id = data.get("branch_id")
+        if branch_id is None:
+            return jsonify({"message": "branch_id is required"}), 400
+        sales_order = assign_branch_to_sales_order(doc_entry, branch_id)
+        return jsonify({"data": SalesOrderSchema().dump(sales_order), "success": True}), 200
+    except Exception:
+        raise
+
+@app.route("/api/sales_order/<int:doc_entry>/pms_assign_branch", methods=["POST"])
+@verify_required_center
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "UNASSIGNED_SO", "method": "edit"}])
+def api_pms_assign_branch_to_sales_order(doc_entry):
+    try:
+        data = request.get_json()
+        branch_id = data.get("branch_id")
+        if branch_id is None:
+            return jsonify({"message": "branch_id is required"}), 400
+        sales_order = assign_branch_to_sales_order(doc_entry, branch_id)
+        return jsonify({"data": SalesOrderSchema().dump(sales_order), "success": True}), 200
+    except Exception:
+        raise
 
 @app.route("/api/search_sales_order", methods=["GET"])
 @verify_required
@@ -33,7 +97,14 @@ def api_search_sales_order():
         search = request.args.get("search", "", type=str)
         data = {"page": page, "per_page": per_page, "search": search}
 
-        result = search_sales_order(data)
+        permission_token = get_requests_permission(request)
+        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
+
+        result = search_sales_order(
+            data,
+            show_unassigned=show_unassigned,
+            branch_id=None if show_unassigned else g.branch_id,
+        )
         return jsonify({
             "data": {"items": SalesOrderSearchSchema(many=True).dump(result["items"])},
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
@@ -47,7 +118,14 @@ def api_search_sales_order():
 @verify_required
 def api_get_by_doc_entry(doc_entry):
     try:
-        sales_order, items, materials = get_sales_order_detail(doc_entry)
+        permission_token = get_requests_permission(request)
+        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
+
+        sales_order, items, materials, branch = get_sales_order_detail(
+            doc_entry,
+            show_unassigned=show_unassigned,
+            branch_id=None if show_unassigned else g.branch_id,
+        )
         so_schema = SalesOrderSchema()
         item_schema = SalesItemSchema(many=True)
         mat_schema = MaterialListSchema(many=True)
@@ -58,6 +136,8 @@ def api_get_by_doc_entry(doc_entry):
         data = sales_order_data
         data["items"] = sales_items_data
         data["material_list"] = material_list_data
+        data["branch_code"] = branch.branch_code if branch else None
+        data["branch_name"] = branch.branch_name if branch else None
         return jsonify({"data": data, "success": True}), 200
     except Exception:
         raise

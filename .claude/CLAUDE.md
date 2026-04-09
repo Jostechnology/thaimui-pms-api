@@ -152,29 +152,13 @@ All models default to **no automatic lazy loading**. This prevents N+1 queries a
 - Controllers call `SomeSchema().dump(result)` and then `jsonify()` — serialization is strictly a controller concern
 - Services must never call `.dump()`, `jsonify()`, or return a `flask.Response`
 
-```python
-# service
-def get_sales_item_detail(sales_item_id):
-    item = sales_item_repository.get_sales_item_detail_by_id(sales_item_id)
-    if not item:
-        raise NotFoundError(f"Sales item {sales_item_id} not found")
-    return item   # ← returns SQLAlchemy model
-
-# controller
-@bp.route("/<int:sales_item_id>", methods=["GET"])
-@verify_required
-def get_detail(sales_item_id):
-    item = sales_item_service.get_sales_item_detail(sales_item_id)
-    return jsonify(SalesItemDetailSchema().dump(item)), 200   # ← dump + jsonify here
-```
-
 > Note: some existing services currently return dumped dicts — these will be refactored to follow this convention.
 
 ---
 
 ## Audit Trail
 
-All transactional models inherit from `AuditMixin`, which adds `created_by`, `updated_by`, `created_date`, and `updated_date`. These are populated automatically via SQLAlchemy `before_insert`/`before_update` event listeners using `g.username` set by `@verify_required`.
+All transactional models inherit from `AuditMixin`, which adds `created_by`, `updated_by`, `created_date`, and `updated_date`. These are populated automatically via SQLAlchemy `before_insert`/`before_update` event listeners using `g.username` set by `@verify_required`
 
 ---
 

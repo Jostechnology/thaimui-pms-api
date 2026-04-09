@@ -33,8 +33,15 @@ def get_all_employees(data):
     try:
         search = data.get("search", "")
         status = data.get("status", "")
-        items = employee_repository.get_all_employees(search, status)
-        return {"items": EmployeeSchema(many=True).dump(items)}
+        page = data.get("page", 1)
+        per_page = data.get("per_page", 10)
+        result = employee_repository.get_all_employees(search, status, page, per_page)
+        return {
+            "items": EmployeeSchema(many=True).dump(result["items"]),
+            "total": result["total"],
+            "page": result["page"],
+            "pages": result["pages"],
+        }
     except Exception:
         raise
 

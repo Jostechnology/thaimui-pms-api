@@ -104,6 +104,7 @@ def create_qc_work_order(data):
             qc_by=data.get("qc_by"),
             quantity=qc_quantity,
             remark=data.get("remark"),
+            branch_id=sales_item.branch_id
         )
         qc = qc_work_order_repository.create_qc_work_order(qc)
         db.session.flush()

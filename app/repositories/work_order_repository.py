@@ -7,6 +7,7 @@ from app.con_sqlalchemy import (
 from app.app import db
 from sqlalchemy import desc, extract, or_
 from sqlalchemy.orm import selectinload
+from flask import g
 
 
 def _work_order_options():
@@ -23,6 +24,9 @@ def _work_order_options():
 def get_all_work_orders(page, limit, search, filter, month):
     try:
         query = db.session.query(WorkOrder).options(selectinload(WorkOrder.sales_item))
+        branch_id = g.get("branch_id")
+        if branch_id:
+            query = query.filter(WorkOrder.branch_id == branch_id)
         if search:
             query = query.filter(
                 db.or_(
@@ -50,6 +54,19 @@ def get_work_order_by_id(work_order_id):
             db.session.query(WorkOrder)
             .options(*_work_order_options())
             .filter(WorkOrder.work_order_id == work_order_id)
+            .first()
+        )
+        return work_order
+    except Exception:
+        raise
+
+def get_work_order_by_center_sales_item_id(center_sales_item_id):
+    try:
+        work_order = (
+            db.session.query(WorkOrder)
+            .join(WorkOrder.sales_item)
+            .options(*_work_order_options())
+            .filter(SalesItem.center_sales_item_id == center_sales_item_id)
             .first()
         )
         return work_order

@@ -12,10 +12,16 @@ from app.services.employee_salary_service import (
 @verify_required
 def api_get_employee_salary_list():
     try:
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 10, type=int)
         search = request.args.get("search", "", type=str)
-        data = {"search": search}
+        data = {"page": page, "per_page": per_page, "search": search}
         result = get_employee_salary_list(data)
-        return jsonify({"data": result, "success": True}), 200
+        return jsonify({
+            "data": {"items": result["items"]},
+            "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
+            "success": True,
+        }), 200
     except Exception:
         raise
 

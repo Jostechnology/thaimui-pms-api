@@ -1,7 +1,7 @@
 from app.con_sqlalchemy import Employee, EmployeeSalaryHistory
 from sqlalchemy import extract
 
-def get_employee_salary_list(search):
+def get_employee_salary_list(search, page=1, per_page=10):
     try:
         query = Employee.query
         if search:
@@ -10,7 +10,8 @@ def get_employee_salary_list(search):
                 (Employee.employee_last_name.ilike(f"%{search}%")) |
                 (Employee.citizen_id.ilike(f"%{search}%"))
             )
-        return query.all()
+        result = query.paginate(page=page, per_page=per_page, error_out=False)
+        return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
     except Exception:
         raise
 

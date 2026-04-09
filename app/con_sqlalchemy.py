@@ -190,6 +190,7 @@ class WorkOrder(AuditMixin):
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order')
     item_components = db.relationship('ItemComponent', back_populates='work_order')
     work_runs = db.relationship('WorkRun', back_populates='work_order', cascade='all, delete-orphan')
@@ -200,7 +201,7 @@ class PhaseStatus(enum.Enum):
     PAUSED = 'PAUSED'
     COMPLETED = 'COMPLETED'
 
-class WorkPhase(AuditMixin):
+class WorkPhase(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_work_phase"
     work_phase_id = db.Column(db.Integer, primary_key=True)
     work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
@@ -217,7 +218,7 @@ class BreakType(enum.Enum):
     RESTBREAK = "RESTBREAK"
     OTHER = "OTHER"
 
-class WorkPhaseBreak(AuditMixin):
+class WorkPhaseBreak(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_work_phase_break"
     break_id = db.Column(db.Integer, primary_key=True)
     work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
@@ -299,7 +300,7 @@ class EmployeeSalaryHistory(AuditMixin):
     remark= db.Column(db.String(255), nullable=True)
 
 
-class WorkAssignment(AuditMixin):
+class WorkAssignment(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_work_assignment"
     work_assignment_id = db.Column(db.Integer, primary_key=True)
     work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
@@ -315,7 +316,7 @@ class WorkRunTransactionType(enum.Enum):
     SENT_TO_TESTING = 'SENT_TO_TESTING'
     DEFECT_CONSUMED = 'DEFECT_CONSUMED'
 
-class WorkRun(AuditMixin):
+class WorkRun(AuditMixin, BranchScopedMixin):
     """One production attempt within a WorkOrder. Rework = new WorkRun on the same WorkOrder."""
     __tablename__ = "t_work_run"
     work_run_id = db.Column(db.Integer, primary_key=True)
@@ -373,6 +374,7 @@ class SalesItemStatus(enum.Enum):
 class SalesItem(AuditMixin):
     __tablename__ = "t_sales_items"
     sales_item_id = db.Column(db.Integer, primary_key=True)
+    center_sales_item_id = db.Column(db.Integer, nullable=True)
     status = db.Column(db.Enum(SalesItemStatus), nullable=False , default=SalesItemStatus.PENDING)
     item_code = db.Column(db.String(50), nullable=False)
     item_num = db.Column(db.Integer, nullable=False)
@@ -382,9 +384,18 @@ class SalesItem(AuditMixin):
     unit_price = db.Column(db.Float, nullable=False)
     doc_num = db.Column(db.Integer, nullable=False)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
+    produce = db.Column(db.Boolean, nullable=False)
+    test = db.Column(db.Boolean, nullable=False)
+    item_group = db.Column(db.String(64), nullable=False, default="Z-BOM")
     sales_order = db.relationship('SalesOrder', foreign_keys=[doc_entry], back_populates='sales_items', lazy='noload')
+
+    __table_args__ = (
+        db.Index('ix_sales_items_doc_entry_produce', 'doc_entry', 'produce'),
+        db.Index('ix_sales_items_doc_entry_test', 'doc_entry', 'test'),
+    )
     material_list = db.relationship('MaterialList', back_populates='sales_item')
-    work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False)
+    work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False, lazy="noload")
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
 
     # Production
@@ -427,12 +438,22 @@ class SalesItem(AuditMixin):
     @property
     def is_completable(self):
         if self.status == SalesItemStatus.COMPLETED:
-            return False
-        if self.produced_qty < self.item_num:
-            return False
+            return (False, "งานถูกปิดไปแล้ว")
+        
+        # produced means usable items by default itself.
+        if (self.produced_qty < self.item_num) and self.produce:
+            return (False, "ยังผลิตไม่ครบ")
+        
+        if self.produce and self.producing_qty > 0:               
+            return (False, "ยังมีรายการผลิตค้างอยู่")
+        
+        # Produced or not produced / Produced is done or not. If it has test and test is not done, False
+        if (self.num_qc_successed_work_order == self.num_qc_work_order) and self.num_qc_work_order != 0:
+            return (True, "สำเร็จ ทำการเทสผ่าน")
         if self.num_qc_work_order == 0:
-            return True
-        return self.num_qc_successed_work_order == self.num_qc_work_order
+            return (True, "สำเร็จ ไม่มีรายการเทส")
+        
+        return (False, "มีรายการเทสยังไม่เสร็จ (รายการนี้เป็นรายการ Fallback ด้วย หากเกิดข้อผิดพลาด หากตรวจสอบครบถ้วนว่าเทสผ่านหมดแล้ว อาจเกิดปัญหาที่โปรแกรม)")
 
 class MachineStatus(enum.Enum):
     RUNNING = "RUNNING"
@@ -470,13 +491,16 @@ class MachineMaintenance(AuditMixin,BranchScopedMixin):
 class MaterialList(AuditMixin):
     __tablename__ = "t_material_list"
     material_list_id = db.Column(db.Integer, primary_key=True)
+    center_material_id = db.Column(db.Integer, nullable=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     item_code = db.Column(db.String(50), nullable=False)
     item_name = db.Column(db.String(255), nullable=False)
     item_description = db.Column(db.String(500))
     original_num = db.Column(db.Integer, nullable=False)
     cost_price = db.Column(db.Float, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
+    item_group = db.Column(db.String(64), nullable=False, default="OTHER")
     sales_item = db.relationship('SalesItem', back_populates='material_list', lazy='noload')
     component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='noload')
     # Forward: used by remaining_num property and transaction_service
@@ -495,6 +519,7 @@ class QCWorkOrder(AuditMixin):
     qc_work_order_id = db.Column(db.Integer, primary_key=True)
     qc_work_order_code = db.Column(db.String(50), nullable=True)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
     qc_date = db.Column(db.DateTime, nullable=True)
     qc_by = db.Column(db.String(100), nullable=True)
@@ -584,7 +609,7 @@ class TestSessionStatus(enum.Enum):
     COMPLETED  = 'COMPLETED'
 
 
-class TestResult(AuditMixin):
+class TestResult(AuditMixin, BranchScopedMixin):
     """
     One test session covering claimed_qty items from a SalesItem.
     Phase 1 (INPROGRESS): created with claimed_qty — fires IN_TESTING transaction.
@@ -621,7 +646,7 @@ class TestResult(AuditMixin):
         return self.failed_item_qty - self.reworked_qty
 
 
-class TestResultItem(AuditMixin):
+class TestResultItem(AuditMixin, BranchScopedMixin):
     """ผลการทดสอบรายหน่วย — 1 row ต่อ 1 ชิ้นที่ทดสอบ (quantity ของ SalesItem)"""
     __tablename__ = "t_test_result_item"
     test_result_item_id = db.Column(db.Integer, primary_key=True)
@@ -659,7 +684,7 @@ class WorkRunReworkSource(BaseModel):
     source_work_run = db.relationship('WorkRun', foreign_keys=[source_work_run_id], back_populates='rework_destinations', lazy='noload')
 
 
-class WorkRunTransaction(AuditMixin):
+class WorkRunTransaction(AuditMixin, BranchScopedMixin):
     """Audit log of item movements on a WorkRun (sent to testing, defects consumed by rework)."""
     __tablename__ = "t_work_run_transaction"
     transaction_id        = db.Column(db.Integer, primary_key=True)
@@ -715,6 +740,7 @@ class SalesOrderStatus(enum.Enum):
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
     doc_entry = db.Column(db.Integer, primary_key=True)
+    center_sales_order_id = db.Column(db.Integer, nullable=True)
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
     status = db.Column(db.Enum(SalesOrderStatus), nullable=False, default=SalesOrderStatus.INPROGRESS)
     card_code = db.Column(db.String(20), nullable=False)
@@ -726,6 +752,7 @@ class SalesOrder(AuditMixin):
     bpl_name = db.Column(db.String(200), nullable=False)
     group_code = db.Column(db.String(20), nullable=False)
     group_name = db.Column(db.String(200), nullable=False)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
 
     sales_items = db.relationship(
         "SalesItem",
@@ -738,6 +765,7 @@ class ItemComponent(AuditMixin):
     __tablename__ = "t_item_component"
     item_component_id = db.Column(db.Integer, primary_key=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     work_order = db.relationship('WorkOrder', back_populates='item_components', lazy='noload')
     material_usages = db.relationship(
         "ComponentMaterialUsage",
@@ -757,6 +785,7 @@ class ComponentMaterialUsage(AuditMixin):
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
     material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='CASCADE'), nullable=False)
     quantity_used = db.Column(db.Integer, nullable=False)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     item_component = db.relationship("ItemComponent", back_populates="material_usages", lazy='noload')
     material_list = db.relationship("MaterialList", back_populates="component_usages")
 
@@ -794,7 +823,7 @@ class PickingRequestType(enum.Enum):
     WORK_RUN    = 'WORK_RUN'
     TEST_RESULT = 'TEST_RESULT'
 
-class PickingRequest(AuditMixin):
+class PickingRequest(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_picking_request"
     picking_request_id   = db.Column(db.Integer, primary_key=True)
     picking_request_code = db.Column(db.String(100), nullable=True)
@@ -810,7 +839,7 @@ class PickingRequest(AuditMixin):
     test_result  = db.relationship('TestResult', back_populates='picking_requests', lazy='noload')
 
 
-class PickingRequestItem(AuditMixin):
+class PickingRequestItem(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_picking_request_item"
     picking_request_item_id = db.Column(db.Integer, primary_key=True)
     picking_request_id      = db.Column(db.Integer, db.ForeignKey('t_picking_request.picking_request_id', ondelete='CASCADE'), nullable=False)

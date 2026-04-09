@@ -48,8 +48,9 @@ def complete_sales_item(sales_item_id):
             raise NotFoundError(f"Sales item {sales_item_id} not found")
         if sales_item.status == SalesItemStatus.COMPLETED:
             raise ValidationError("Sales item นี้เสร็จสิ้นแล้ว")
-        if not sales_item.is_completable:
-            raise ValidationError("Sales item ยังไม่ครบเงื่อนไขที่จะปิด — ตรวจสอบจำนวนที่ผลิตและ QC Work Order")
+        completable, reason = sales_item.is_completable
+        if not completable:
+            raise ValidationError(reason)
 
         sales_item.status = SalesItemStatus.COMPLETED
 

@@ -1,7 +1,14 @@
 version: "3.8"
 
 services:
-  thaimui-pms-api: 
+  pms-redis:
+    image: redis:7-alpine
+    container_name: pms-redis
+    restart: always
+    networks:
+      - thaimui
+
+  thaimui-pms-api:
     platform: linux/amd64
     image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:${TAG}
     container_name: thaimui-pms-api
@@ -16,6 +23,12 @@ services:
       - CENTER_ACCESS_KEY=${CENTER_ACCESS_KEY}
       - CENTER_URL=${CENTER_URL}
       - DOCUMENT_GENERATOR_URL=${DOCUMENT_GENERATOR_URL}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET}
+      - MINIO_SECURE=${MINIO_SECURE}
+      - REDIS_URL=${REDIS_URL}
     
     networks:
       - thaimui

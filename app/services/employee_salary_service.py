@@ -9,9 +9,15 @@ from datetime import datetime
 def get_employee_salary_list(data):
 	try:
 		search = data.get("search", "")
-		
-		items = employee_salary_repository.get_employee_salary_list(search)
-		return {"items": EmployeeSchema(many=True).dump(items)}
+		page = data.get("page", 1)
+		per_page = data.get("per_page", 10)
+		result = employee_salary_repository.get_employee_salary_list(search, page, per_page)
+		return {
+			"items": EmployeeSchema(many=True).dump(result["items"]),
+			"total": result["total"],
+			"page": result["page"],
+			"pages": result["pages"],
+		}
 	except Exception:
 		raise
 

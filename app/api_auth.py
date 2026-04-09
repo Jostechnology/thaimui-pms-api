@@ -124,6 +124,49 @@ def verify_required_center(f):
         return f(*args, **kwargs)
     return decorated
 
+def verify_required_center_only(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        _start = time.perf_counter()
+        if request.method == "OPTIONS":
+            return f(*args, **kwargs)
+
+        token = None
+        if "Authorization" in request.headers:
+            parts = request.headers["Authorization"].split(" ")
+            if len(parts) == 2 and parts[0] == "Bearer":
+                token = parts[1]
+        if not token:
+            try:
+                body = request.get_json(silent=True)
+                if body and "token" in body:
+                    token = body["token"]
+            except Exception:
+                pass
+        if not token:
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: missing token")
+            return jsonify({"message": "Missing token"}), 401
+
+        if token == CENTER_ACCESS_KEY:
+            g.username = "SYSTEM_CENTER"
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "SYSTEM_CENTER shortcut")
+            return f(*args, **kwargs)
+
+        else:
+            _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: invalid token")
+            return jsonify({"message": "Invalid or expired token"}), 401
+
+    return decorated
+
+def get_requests_permission(request):
+    data = request.get_json(silent=True) or {}
+    if "X-Permission-Token" in request.headers:
+        permission_token = request.headers["X-Permission-Token"]
+    else:
+        permission_token = data.get("permission_token") or request.args.get("permission_token")
+    
+    return permission_token
+
 
 def decode_and_verify_permission_jwt(authorizes=[]):
     def decorator(f):
@@ -132,8 +175,7 @@ def decode_and_verify_permission_jwt(authorizes=[]):
             _start = time.perf_counter()
             label = f"decode_and_verify_permission_jwt ({f.__name__})"
 
-            data = request.get_json(silent=True) or {}
-            permission_token = data.get("permission_token")
+            permission_token = get_requests_permission(request)
 
             if not permission_token:
                 if authorizes:

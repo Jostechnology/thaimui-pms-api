@@ -5,27 +5,38 @@ from app.services import work_order_service, transaction_service
 from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList
 
 
-def search_sales_order(data):
+def search_sales_order(data, show_unassigned=False, branch_id=None):
     try:
         page = data.get("page", 1)
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = sales_order_repository.search_sales_order(page, per_page, search)
+        result = sales_order_repository.search_sales_order(page, per_page, search, show_unassigned=show_unassigned, branch_id=branch_id)
         return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
 
 
-def get_all_sales_orders(data):
+def assign_branch_to_sales_order(doc_entry, branch_id):
+    try:
+        sales_order = sales_order_repository.assign_branch(doc_entry, branch_id)
+        db.session.commit()
+        return sales_order
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def get_all_sales_orders(data, show_unassigned=False, branch_id=None):
     try:
         page = data.get("page", 1)
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = sales_order_repository.get_all_sales_orders(page, per_page, search)
+        result = sales_order_repository.get_all_sales_orders(page, per_page, search, show_unassigned=show_unassigned, branch_id=branch_id)
 
         items_data = []
         for row in result.items:
             so = row.SalesOrder
+            branch = row.Branch if row.Branch else None
             items_data.append({
                 "doc_entry": so.doc_entry,
                 "doc_num": so.doc_num,
@@ -44,7 +55,11 @@ def get_all_sales_orders(data):
                 "qc_count": row.qc_count,
                 "qc_passed": row.qc_passed,
                 "qc_failed": row.qc_failed,
-                "status" : so.status.name
+                "produce_total": row.produce_total,
+                "produce_has_workorder": row.produce_has_workorder,
+                "status" : so.status.name,
+                "branch_code" : branch.branch_code if branch else None,
+                "branch_name" : branch.branch_name if branch else None
             })
 
         return {
@@ -69,15 +84,15 @@ def get_material_list_from_sales_order(doc_entry):
         raise
 
 
-def get_sales_order_detail(doc_entry):
+def get_sales_order_detail(doc_entry, show_unassigned=False, branch_id=None):
     try:
-        result = sales_order_repository.get_sales_order_detail(doc_entry)
+        result, branch = sales_order_repository.get_sales_order_detail(doc_entry, show_unassigned=show_unassigned, branch_id=branch_id)
         items = result.sales_items
         
         materials = []
         for i in items:
             materials.extend(i.material_list)
-        return result, items, materials
+        return result, items, materials, branch
     except Exception:
         db.session.rollback()
         raise
@@ -130,11 +145,16 @@ def create_sales_order(data):
                 unit_price=item.get("unit_price"),
                 cost_price=item.get("cost_price"),
                 doc_num=item.get("doc_num"),
-                doc_entry=item.get("doc_entry")
+                doc_entry=item.get("doc_entry"),
+                center_sales_item_id=item.get("sales_item_id"),
+                produce=item.get("produce"),
+                test=item.get("test"),
+                item_group=item.get("item_group")
             )
             sales_order.sales_items.append(sales_item)
 
             for mat in item.get("material_list", []):
+                print(f"Mat : {mat}")
                 material_list = MaterialList(
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
@@ -142,6 +162,7 @@ def create_sales_order(data):
                     original_num=mat.get("item_num"),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
+                    item_group=mat.get("item_group")
                 )
                 transaction_service.create_init_material_transaction(material_list, "INIT")
                 sales_item.material_list.append(material_list)

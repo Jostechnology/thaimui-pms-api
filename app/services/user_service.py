@@ -1,5 +1,4 @@
 import base64
-from copy import deepcopy
 import json
 from app.app import db
 from app.exception import AppException, MissingFieldsError, NotFoundError, UniqueError
@@ -101,62 +100,23 @@ def get_role_permission(username, role_id):
         schema = GetRolePremissionSchema(many=True)
         result = schema.dump(role_permission)
         module_tree = get_module_tree()
+
+        # Build a module_code lookup: module_id -> module_code
+        module_code_map = {}
         for m in module_tree:
-            if len(m.get("permission")) > 0:
-                rs = [
-                    item for item in result if item["module_id"] == m.get("module_id")
-                ]
-                if rs:
-                    md_dict = {}
-                    for r in rs:
-                        if r.get("method") in m.get("permission"):
-                            m["permission"].remove(r.get("method"))
-                            md_dict["method"] = r.get("method")
-                            md_dict["check"] = True
-                            m["permission"].append(md_dict)
-                        # else:
-                        #     m['permission'].remove(r.get('method'))
-                        #     md_dict['method'] = r.get('method')
-                        #     md_dict['check'] = False
-                        #     m['permission'].append(md_dict)
-                m_permission = deepcopy(m.get("permission"))
-                for mp in m_permission:
-                    md_dict = {}
-                    if isinstance(mp, str):
-                        m["permission"].remove(mp)
-                        md_dict["method"] = mp
-                        md_dict["check"] = False
-                        m["permission"].append(md_dict)
-            for sm in m.get("sub_modules"):
-                rs = [
-                    item for item in result if item["module_id"] == sm.get("module_id")
-                ]
-                if rs:
-                    for r in rs:
-                        md_dict = {}
-                        if r.get("method") in sm.get("permission"):
-                            sm["permission"].remove(r.get("method"))
-                            md_dict["method"] = r.get("method")
-                            md_dict["check"] = True
-                            sm["permission"].append(md_dict)
-                        # else:
-                        #     sm['permission'].remove(r.get('method'))
-                        #     md_dict['method'] = r.get('method')
-                        #     md_dict['check'] = False
-                        #     sm['permission'].append(md_dict)
-                sub_permission = deepcopy(sm.get("permission"))
-                for msp in sub_permission:
-                    md_dict = {}
-                    if isinstance(msp, str):
-                        sm["permission"].remove(msp)
-                        md_dict["method"] = msp
-                        md_dict["check"] = False
-                        sm["permission"].append(md_dict)
+            module_code_map[m["module_id"]] = m["module_code"]
+            for sm in m.get("sub_modules", []):
+                module_code_map[sm["module_id"]] = sm["module_code"]
 
-        # with open("private_key.pem", "rb") as key_file:
-        #     private_key = serialization.load_pem_private_key(key_file.read(), password=None)
+        # Flat list of granted permissions: ["MODULE_CODE.method", ...]
+        flat_permissions = [
+            f"{module_code_map[r['module_id']]}.{r['method']}"
+            for r in result
+            if r.get("module_id") in module_code_map and r.get("method")
+        ]
+        print(f"flat_permissions : {flat_permissions}")
 
-        data_bytes = json.dumps(module_tree).encode("utf-8")
+        data_bytes = json.dumps(flat_permissions).encode("utf-8")
         permission_tree_b64 = base64.b64encode(data_bytes).decode("utf-8")
 
         payload = {

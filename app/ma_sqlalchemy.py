@@ -77,6 +77,7 @@ class EmployeeSalaryHistorySchema(Schema):
 
 class MaterialListSchema(Schema):
     material_list_id = fields.Integer()
+    center_material_id = fields.Integer()
     sales_item_id = fields.Integer()
     item_code = fields.String()
     item_name = fields.String()
@@ -86,8 +87,12 @@ class MaterialListSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     created_date = fields.DateTime()
-class SalesItemSchema(Schema):
+    branch_id = fields.Integer(allow_none=True)
+    item_group = fields.String()
+    
+class SalesItemForWorkOrderSchema(Schema):
     sales_item_id = fields.Integer()
+    center_sales_item_id = fields.Integer()
     item_code = fields.String()
     item_num = fields.Integer()
     item_name = fields.String()
@@ -95,8 +100,10 @@ class SalesItemSchema(Schema):
     cost_price = fields.Float()
     unit_price = fields.Float()
     doc_num = fields.Int()
+    branch_id = fields.Integer(allow_none=True)
+    item_group                   = fields.String()
 
-class SalesItemSchemaDetail(SalesItemSchema):
+class SalesItemSchemaDetail(SalesItemForWorkOrderSchema):
     material_list = fields.List(fields.Nested(MaterialListSchema()))
 
     
@@ -142,11 +149,13 @@ class ComponentTemplateSectionDataSchema(Schema):
 class ItemComponentSchema(Schema):
     item_component_id = fields.Integer()
     work_order_id = fields.Integer()
+    branch_id = fields.Integer(allow_none=True)
     component_name = fields.String()
-    material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
     remark = fields.String(allow_none=True)
     img_url = fields.String(allow_none=True)
+    doc_version = fields.Integer()
     component_template_id = fields.Integer(allow_none=True)
+    material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
     component_template_sections = fields.List(fields.Nested(ComponentTemplateSectionDataSchema()), dump_default=[])
 
 class WorkRunReworkSourceSchema(Schema):
@@ -171,6 +180,7 @@ class WorkRunSchema(Schema):
     work_run_id                      = fields.Integer()
     lot_number                       = fields.String(allow_none=True)
     work_order_id                    = fields.Integer()
+    branch_id                        = fields.Integer()
     quantity                         = fields.Integer()
     usable_qty                       = fields.Integer(allow_none=True)
     defect_qty                       = fields.Integer(dump_only=True, allow_none=True)
@@ -186,6 +196,9 @@ class WorkRunSchema(Schema):
     qty_from_failed                  = fields.Integer(allow_none=True, dump_only=True)
     created_date                     = fields.DateTime()
 
+class WorkRunWithTestSchema(WorkRunSchema):
+    test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
+
 class WorkOrderSchema(Schema):
     work_order_id = fields.Integer()
     doc_num = fields.Int()
@@ -193,13 +206,8 @@ class WorkOrderSchema(Schema):
     quantity = fields.Integer()
     created_date = fields.DateTime()
     status = fields.Enum(WorkOrderStatus)
-    sales_item = fields.Nested(SalesItemSchema())
-    # work_runs = fields.List(fields.Nested(WorkRunSchema))
-
-
-class WorkRunWithTestSchema(WorkRunSchema):
-    test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
-
+    branch_id = fields.Integer(allow_none=True)
+    sales_item = fields.Nested(SalesItemForWorkOrderSchema())
 
 class WorkOrderSchemaDetail(WorkOrderSchema):
     item_components = fields.List(fields.Nested(ItemComponentSchema()))
@@ -212,6 +220,7 @@ class SalesOrderSearchSchema(Schema):
 class SalesOrderSchema(Schema):
     doc_num = fields.Int()
     doc_entry = fields.Int()
+    center_sales_order_id = fields.Integer()
     card_code = fields.String()
     card_name = fields.String()
     po_number = fields.String()
@@ -223,10 +232,12 @@ class SalesOrderSchema(Schema):
     group_name = fields.String()
     status = fields.Enum(SalesOrderStatus)
     created_date = fields.String()
+    branch_id = fields.Integer(allow_none=True)
 
 
 class SalesItemNoMaterialSchema(Schema):
     sales_item_id                = fields.Integer()
+    center_sales_item_id         = fields.Integer()
     item_code                    = fields.String()
     item_num                     = fields.Integer()
     item_name                    = fields.String()
@@ -235,15 +246,20 @@ class SalesItemNoMaterialSchema(Schema):
     unit_price                   = fields.Float()
     doc_num                      = fields.Integer()
     doc_entry                    = fields.Integer()
+    branch_id                    = fields.Integer(allow_none=True)
     producing_qty                = fields.Integer(dump_only=True)
     produced_qty                 = fields.Integer(dump_only=True)
     unavailable_for_test_qty     = fields.Integer(dump_only=True)
     available_for_test_qty       = fields.Integer(dump_only=True)
     passed_qty                   = fields.Integer(dump_only=True)
     failed_qty                   = fields.Integer(dump_only=True)
+    produce                      = fields.Boolean()
+    test                         = fields.Boolean()
+    item_group                   = fields.String()
 
 class SalesItemSchema(Schema):
     sales_item_id                = fields.Integer()
+    center_sales_item_id         = fields.Integer()
     item_code                    = fields.String()
     item_num                     = fields.Integer()
     item_name                    = fields.String()
@@ -252,6 +268,7 @@ class SalesItemSchema(Schema):
     unit_price                   = fields.Float()
     doc_num                      = fields.Integer()
     doc_entry                    = fields.Integer()
+    branch_id                    = fields.Integer(allow_none=True)
     material_list                = fields.List(fields.Nested(MaterialListSchema()))
     producing_qty                = fields.Integer(dump_only=True)
     produced_qty                 = fields.Integer(dump_only=True)
@@ -262,8 +279,18 @@ class SalesItemSchema(Schema):
     failed_qty                   = fields.Integer(dump_only=True)
     num_qc_work_order            = fields.Integer(dump_only=True)
     num_qc_successed_work_order  = fields.Integer(dump_only=True)
-    is_completable               = fields.Boolean(dump_only=True)
+    is_completable               = fields.Method("get_is_completable", dump_only=True)
+    completable_reason           = fields.Method("get_completable_reason", dump_only=True)
+    item_group                   = fields.String()
 
+    def get_is_completable(self, obj):
+        return obj.is_completable[0]
+
+    def get_completable_reason(self, obj):
+        return obj.is_completable[1]
+    produce                      = fields.Boolean()
+    test                         = fields.Boolean()
+    work_order                   = fields.Nested(WorkOrderSchema)
 
 class QCFormSchema(Schema):
     qc_form_id              = fields.Integer()
@@ -309,6 +336,7 @@ class QCWorkOrderSchema(Schema):
     qc_work_order_id = fields.Integer()
     qc_work_order_code = fields.String(allow_none=True)
     sales_item_id = fields.Integer()
+    branch_id = fields.Integer(allow_none=True)
     qc_date = fields.DateTime()
     qc_by = fields.String()
     quantity = fields.Integer()

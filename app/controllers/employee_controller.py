@@ -8,11 +8,17 @@ from app.services.employee_service import delete_employee, get_all_employees, cr
 @verify_required
 def api_get_employee_list():
     try:
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 10, type=int)
         search = request.args.get("search", "", type=str)
         status = request.args.get("status", "", type=str)
-        data = {"search": search, "status": status}
+        data = {"page": page, "per_page": per_page, "search": search, "status": status}
         result = get_all_employees(data)
-        return jsonify({"data": result, "success": True}), 200
+        return jsonify({
+            "data": {"items": result["items"]},
+            "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
+            "success": True,
+        }), 200
     except Exception:
         raise
 

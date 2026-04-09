@@ -1,8 +1,12 @@
 import traceback
 from app.exception import AppException
-from app.extensions import init_center_service, init_document_generator_service
+from app.extensions import init_center_service, init_document_generator_service, init_storage_service, init_cache_service
 from flask import Flask, jsonify
-from app.config import CENTER_ACCESS_KEY, CENTER_URL, DOCUMENT_GENERATOR_URL, connectdb
+from app.config import (
+    CENTER_ACCESS_KEY, CENTER_URL, DOCUMENT_GENERATOR_URL, connectdb,
+    MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_SECURE,
+    REDIS_URL,
+)
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
@@ -38,6 +42,10 @@ ma = Marshmallow(app)
 
 init_center_service(CENTER_ACCESS_KEY, CENTER_URL)
 init_document_generator_service(DOCUMENT_GENERATOR_URL)
+if MINIO_ENDPOINT:
+    init_storage_service(MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_SECURE)
+if REDIS_URL:
+    init_cache_service(REDIS_URL)
 
 
 @app.errorhandler(AppException)

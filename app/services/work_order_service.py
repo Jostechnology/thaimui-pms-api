@@ -3,7 +3,7 @@ from app.repositories import work_order_repository
 from app.app import db
 from app.repositories import sales_item_repository
 from app.services import sales_item_service, transaction_service
-from app.exception import NotFoundError, UniqueError
+from app.exception import AuthorizationError, NotFoundError, UniqueError
 
 def get_all_work_orders(data):
     try:
@@ -24,7 +24,16 @@ def get_work_order_by_id(work_order_id):
     except Exception:
         raise
 
-def create_work_order(data):
+def get_work_order_by_center_sales_item_id(center_sales_item_id):
+    try:
+        work_order = work_order_repository.get_work_order_by_center_sales_item_id(center_sales_item_id)
+        # if not work_order:
+        #     raise NotFoundError(f"Work order for center sales item {center_sales_item_id} not found")
+        return work_order
+    except Exception:
+        raise
+
+def create_work_order(data, unassigned_permission=False):
     try:
         sales_item_id = data.get("sales_item_id")
         item_components_data = data.get("item_components", [])
@@ -34,6 +43,9 @@ def create_work_order(data):
 
         if sales_item.work_order:
             raise UniqueError("มี Work Order สำหรับ Sales Item นี้อยู่แล้ว")
+        
+        if sales_item.branch_id is None and not unassigned_permission:
+            raise AuthorizationError("คุณไม่มีสิทธิ์จัดการใบสั่งขายที่ยังไม่มีสาขา")
 
         quantity = data.get("quantity") or sales_item.item_num
 
@@ -56,6 +68,7 @@ def create_work_order(data):
             doc_entry=sales_item.doc_entry,
             sales_item_id=sales_item_id,
             quantity=quantity,
+            branch_id=sales_item.branch_id
         )
 
         # Create ItemComponent + ComponentMaterialUsage
