@@ -195,79 +195,52 @@ class WorkOrder(AuditMixin):
     item_components = db.relationship('ItemComponent', back_populates='work_order')
     work_runs = db.relationship('WorkRun', back_populates='work_order', cascade='all, delete-orphan')
 
-class PhaseStatus(enum.Enum):
-    PENDING = 'PENDING'
-    INPROGRESS = 'INPROGRESS'
-    PAUSED = 'PAUSED'
-    COMPLETED = 'COMPLETED'
-
-class WorkPhase(AuditMixin, BranchScopedMixin):
-    __tablename__ = "t_work_phase"
-    work_phase_id = db.Column(db.Integer, primary_key=True)
-    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
-    phase_name = db.Column(db.String(100), nullable=False)
-    phase_status = db.Column(db.Enum(PhaseStatus), nullable=False , default=PhaseStatus.PENDING)
-    start_date = db.Column(db.DateTime)
-    end_date = db.Column(db.DateTime)
-    work_run = db.relationship('WorkRun', foreign_keys=[work_run_id], back_populates='work_phases', lazy='noload')
-    breaks = db.relationship('WorkPhaseBreak', back_populates='work_phase', order_by='WorkPhaseBreak.break_start')
-    assignments = db.relationship('WorkAssignment', back_populates='work_phase')
-
 class BreakType(enum.Enum):
     LUNCHBREAK = "LUNCHBREAK"
     RESTBREAK = "RESTBREAK"
     OTHER = "OTHER"
 
-class WorkPhaseBreak(AuditMixin, BranchScopedMixin):
-    __tablename__ = "t_work_phase_break"
+class WorkRunAssignment(AuditMixin, BranchScopedMixin):
+    __tablename__ = "t_work_run_assignment"
+    work_run_assignment_id = db.Column(db.Integer, primary_key=True)
+    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
+    employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
+    from_time = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    to_time = db.Column(db.DateTime, nullable=True)
+    work_run = db.relationship('WorkRun', back_populates='assignments', lazy='noload')
+    employee = db.relationship('Employee', back_populates='work_run_assignments', lazy='noload')
+
+class WorkRunMachine(AuditMixin, BranchScopedMixin):
+    __tablename__ = "t_work_run_machine"
+    work_run_machine_id = db.Column(db.Integer, primary_key=True)
+    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
+    machine_id = db.Column(db.Integer, db.ForeignKey('m_machine.machine_id'), nullable=False)
+    from_time = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    to_time = db.Column(db.DateTime, nullable=True)
+    work_run = db.relationship('WorkRun', back_populates='machines', lazy='noload')
+    machine = db.relationship('Machine', lazy='noload')
+
+class WorkRunBreak(AuditMixin, BranchScopedMixin):
+    __tablename__ = "t_work_run_break"
     break_id = db.Column(db.Integer, primary_key=True)
-    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
+    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
     break_start = db.Column(db.DateTime, nullable=False, default=bangkok_now)
     break_end = db.Column(db.DateTime, nullable=True)
     break_type = db.Column(db.Enum(BreakType), nullable=False, default=BreakType.OTHER)
-    Remark = db.Column(db.String(255), nullable=True)
-    work_phase = db.relationship('WorkPhase', back_populates='breaks', lazy='noload')
+    remark = db.Column(db.String(255), nullable=True)
+    work_run = db.relationship('WorkRun', back_populates='breaks', lazy='noload')
 
+@event.listens_for(WorkRunBreak, 'before_insert', propagate=True)
+def validate_run_break_remark_before_insert(mapper, connection, target):
+    if target.break_type == BreakType.OTHER:
+        if not target.remark or not str(target.remark).strip():
+            target.remark = ""
 
-@event.listens_for(WorkPhaseBreak, 'before_insert', propagate=True)
-def validate_break_remark_before_insert(mapper, connection, target):
-    """Require `Remark` when `break_type` is 'Other'."""
-    try:
-        is_other = target.break_type == BreakType.OTHER
-    except Exception:
-        is_other = False
-    if is_other:
-        remark = getattr(target, 'Remark', None) or getattr(target, 'remark', None)
-        if not remark or not str(remark).strip():
-            # Allow missing remark for OTHER; set empty remark instead of raising
-            try:
-                if hasattr(target, 'Remark'):
-                    target.Remark = ""
-                else:
-                    target.remark = ""
-            except Exception:
-                # Best effort: do not block insert if remark is missing
-                pass
-
-
-@event.listens_for(WorkPhaseBreak, 'before_update', propagate=True)
-def validate_break_remark_before_update(mapper, connection, target):
-    """Require `Remark` when `break_type` is 'OTHER' on updates."""
-    try:
-        is_other = target.break_type == BreakType.OTHER
-    except Exception:
-        is_other = False
-    if is_other:
-        remark = getattr(target, 'Remark', None) or getattr(target, 'remark', None)
-        if not remark or not str(remark).strip():
-            # Allow missing remark for OTHER on update; set empty remark instead of raising
-            try:
-                if hasattr(target, 'Remark'):
-                    target.Remark = ""
-                else:
-                    target.remark = ""
-            except Exception:
-                pass
+@event.listens_for(WorkRunBreak, 'before_update', propagate=True)
+def validate_run_break_remark_before_update(mapper, connection, target):
+    if target.break_type == BreakType.OTHER:
+        if not target.remark or not str(target.remark).strip():
+            target.remark = ""
 
 class EmployeeStatus(enum.Enum):
     UNEMPLOYED = 'UNEMPLOYED'
@@ -288,7 +261,7 @@ class Employee(AuditMixin):
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     salary_base = db.Column(db.Float, nullable=False, default=0.0)
-    assignments = db.relationship('WorkAssignment', back_populates='employee', lazy='noload')
+    work_run_assignments = db.relationship('WorkRunAssignment', back_populates='employee', lazy='noload')
 
 class EmployeeSalaryHistory(AuditMixin):
     __tablename__ = "t_employee_salary_history"
@@ -300,16 +273,10 @@ class EmployeeSalaryHistory(AuditMixin):
     remark= db.Column(db.String(255), nullable=True)
 
 
-class WorkAssignment(AuditMixin, BranchScopedMixin):
-    __tablename__ = "t_work_assignment"
-    work_assignment_id = db.Column(db.Integer, primary_key=True)
-    work_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id', ondelete='CASCADE'), nullable=False)
-    employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
-    work_phase = db.relationship('WorkPhase', foreign_keys=[work_phase_id], back_populates='assignments', lazy='noload')
-    employee = db.relationship('Employee', foreign_keys=[employee_id], back_populates='assignments')
-
 class WorkRunStatus(enum.Enum):
+    PENDING = 'PENDING'
     INPROGRESS = 'INPROGRESS'
+    PAUSED = 'PAUSED'
     COMPLETED = 'COMPLETED'
 
 class WorkRunTransactionType(enum.Enum):
@@ -326,13 +293,15 @@ class WorkRun(AuditMixin, BranchScopedMixin):
     usable_qty = db.Column(db.Integer, nullable=True)                     # set at completion — good items
     completion_remark = db.Column(db.String(500), nullable=True)          # required when usable_qty < quantity
     wms_pick_reference = db.Column(db.String(100), nullable=True)
-    status = db.Column(db.Enum(WorkRunStatus), nullable=False, default=WorkRunStatus.INPROGRESS)
-    current_phase_id = db.Column(db.Integer, db.ForeignKey('t_work_phase.work_phase_id'), nullable=True)
+    status = db.Column(db.Enum(WorkRunStatus), nullable=False, default=WorkRunStatus.PENDING)
+    start_date = db.Column(db.DateTime, nullable=True)
+    end_date = db.Column(db.DateTime, nullable=True)
     rework_source_test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='SET NULL'), nullable=True)
     qty_from_failed = db.Column(db.Integer, nullable=True)
-    current_phase = db.relationship('WorkPhase', foreign_keys=[current_phase_id], post_update=True)
     work_order = db.relationship('WorkOrder', back_populates='work_runs', lazy='noload')
-    work_phases = db.relationship('WorkPhase', foreign_keys='WorkPhase.work_run_id', back_populates='work_run')
+    assignments = db.relationship('WorkRunAssignment', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
+    machines = db.relationship('WorkRunMachine', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
+    breaks = db.relationship('WorkRunBreak', back_populates='work_run', cascade='all, delete-orphan', order_by='WorkRunBreak.break_start', lazy='noload')
     test_result_sources = db.relationship('TestResultWorkRun', back_populates='work_run', cascade='all, delete-orphan')
     rework_sources = db.relationship('WorkRunReworkSource', foreign_keys='WorkRunReworkSource.rework_work_run_id', back_populates='rework_work_run', cascade='all, delete-orphan')
     rework_destinations = db.relationship('WorkRunReworkSource', foreign_keys='WorkRunReworkSource.source_work_run_id', back_populates='source_work_run')
