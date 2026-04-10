@@ -6,7 +6,7 @@ from app.exception import ValidationError
 def create_init_material_transaction(material_list: MaterialList, document: str):
     """Create the first INIT transaction when a material first arrives (positive amount = original_num)."""
     material_list.transactions.append(MaterialTransaction(
-        amount=material_list.original_num,
+        amount=material_list.quantity,
         type=MaterialTransactionType.INIT,
         related_document_code=document,
     ))

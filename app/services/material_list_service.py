@@ -22,7 +22,9 @@ def create_material_list(data):
             item_code=data.get("item_code"),
             item_name=data.get("item_name"),
             item_description=data.get("item_description"),
-            original_num=data.get("original_num"),
+            quantity=data.get("quantity"),
+            unit_name=data.get("unit_name", "Piece"),
+            unit_id=data.get("unit_id", 0),
             cost_price=data.get("cost_price"),
             unit_price=data.get("unit_price"),
         )

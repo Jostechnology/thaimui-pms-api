@@ -80,7 +80,7 @@ def create_sales_item(data):
             quantity=data.get("quantity"),
             order_line_num=data.get("order_line_num"),
             unit_name=data.get("unit_name", "Piece"),
-            unit_code=data.get("unit_code"),
+            unit_id=data.get("unit_id"),
             item_name=data.get("item_name"),
             item_description=data.get("item_description"),
             cost_price=data.get("cost_price"),

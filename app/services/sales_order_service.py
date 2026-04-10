@@ -144,14 +144,14 @@ def create_sales_order(data):
                 quantity=item.get("quantity"),
                 order_line_num=item.get("order_line_num"),
                 unit_name=item.get("unit_name", "Piece"),
-                unit_code=item.get("unit_code"),
+                unit_id=item.get("unit_id"),
                 unit_price=item.get("unit_price"),
                 cost_price=item.get("cost_price"),
                 doc_num=item.get("doc_num"),
                 doc_entry=item.get("doc_entry"),
                 center_sales_item_id=item.get("sales_item_id"),
-                produce=item.get("produce"),
-                test=item.get("test"),
+                produce=item.get("produce", True),
+                test=item.get("test", True),
                 item_group=item.get("item_group")
             )
             sales_order.sales_items.append(sales_item)
@@ -162,7 +162,9 @@ def create_sales_order(data):
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
                     item_description=mat.get("item_description"),
-                    original_num=mat.get("item_num"),
+                    quantity=mat.get("quantity"),
+                    unit_name=mat.get("unit_name", "Piece"),
+                    unit_id=mat.get("unit_id", 0),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
                     item_group=mat.get("item_group")

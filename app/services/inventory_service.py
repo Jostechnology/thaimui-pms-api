@@ -118,7 +118,7 @@ def validate_material_stock_service(items):
                 all_valid = False
                 continue
 
-            total = mat.original_num or 0
+            total = mat.quantity or 0
             total_removed = sum(t.amount for t in mat.transactions if t.type == 'REMOVE')
             total_added = sum(t.amount for t in mat.transactions if t.type == 'ADD')
             available = total - (total_removed - total_added)

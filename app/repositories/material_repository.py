@@ -28,7 +28,7 @@ def get_tracking_summary_query(sales_item_id):
         MaterialList.material_list_id,
         MaterialList.item_code,
         MaterialList.item_name,
-        MaterialList.original_num.label('planned_qty'),
+        MaterialList.quantity.label('planned_qty'),
         sum_removed.label('total_removed'),
         sum_added.label('total_added')
     ).outerjoin(
@@ -58,7 +58,7 @@ def get_all_tracking(search=None, tracking_type=None):
         MaterialList.item_code,
         MaterialList.item_name,
         MaterialList.item_description,
-        MaterialList.original_num.label('total_quantity'),
+        MaterialList.quantity.label('total_quantity'),
         func.coalesce(usage_sub.c.total_used, 0).label('total_used'),
     ).outerjoin(
         usage_sub, MaterialList.material_list_id == usage_sub.c.material_list_id
@@ -96,7 +96,7 @@ def get_material_stock_summary(sales_item_id):
         MaterialList.item_code,
         MaterialList.item_name,
         MaterialList.item_description,
-        MaterialList.original_num.label('total_quantity'),
+        MaterialList.quantity.label('total_quantity'),
         func.coalesce(production_sub.c.used_in_production, 0).label('used_in_production'),
         func.coalesce(testing_sub.c.used_in_testing, 0).label('used_in_testing'),
     ).outerjoin(
