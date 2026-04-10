@@ -77,7 +77,10 @@ def create_sales_item(data):
     try:
         sales_item = SalesItem(
             item_code=data.get("item_code"),
-            item_num=data.get("item_num"),
+            quantity=data.get("quantity"),
+            order_line_num=data.get("order_line_num"),
+            unit_name=data.get("unit_name", "Piece"),
+            unit_code=data.get("unit_code"),
             item_name=data.get("item_name"),
             item_description=data.get("item_description"),
             cost_price=data.get("cost_price"),

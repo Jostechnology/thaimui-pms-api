@@ -141,7 +141,10 @@ def create_sales_order(data):
             sales_item = SalesItem(
                 item_code=item.get("item_code"),
                 item_name=item.get("item_name"),
-                item_num=item.get("item_num"),
+                quantity=item.get("quantity"),
+                order_line_num=item.get("order_line_num"),
+                unit_name=item.get("unit_name", "Piece"),
+                unit_code=item.get("unit_code"),
                 unit_price=item.get("unit_price"),
                 cost_price=item.get("cost_price"),
                 doc_num=item.get("doc_num"),

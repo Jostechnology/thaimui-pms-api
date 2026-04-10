@@ -63,6 +63,19 @@ def get_test_result_for_finalize(test_result_id):
         raise
 
 
+def get_sales_item_by_test_result(test_result_id):
+    try:
+        query = (
+            db.session.query(SalesItem)
+            .join(QCWorkOrder, QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
+            .join(TestResult, TestResult.qc_work_order_id == QCWorkOrder.qc_work_order_id)
+            .filter(TestResult.test_result_id == test_result_id)
+        )
+        return query.first()
+    except Exception:
+        raise
+
+
 def update_test_result(test_result):
     try:
         db.session.flush()

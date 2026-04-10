@@ -9,7 +9,7 @@ from app.app import db
 from app.exception import NotFoundError, ValidationError
 
 
-def _build_items(items_data):
+def _build_items(items_data, default_unit=None):
     """Validate and build PickingRequestItem objects from request payload."""
     if not items_data:
         raise ValidationError("ต้องระบุรายการสินค้า (items) อย่างน้อย 1 รายการ")
@@ -31,7 +31,7 @@ def _build_items(items_data):
             item_code=item_code,
             item_name=item_name,
             quantity=quantity,
-            unit=item.get("unit"),
+            unit=item.get("unit") or default_unit,
             remark=item.get("remark"),
         ))
     return result
@@ -47,7 +47,10 @@ def create_for_work_run(work_run_id, data):
         if not work_run:
             raise NotFoundError(f"Work Run {work_run_id} not found")
 
-        items = _build_items(data.get("items", []))
+        sales_item = work_run_repository.get_sales_item_by_work_run(work_run_id)
+        default_unit = sales_item.unit_name if sales_item else None
+
+        items = _build_items(data.get("items", []), default_unit=default_unit)
 
         pr = PickingRequest(
             request_type=PickingRequestType.WORK_RUN,
@@ -106,7 +109,10 @@ def create_for_test_result(test_result_id, data):
         if test_result.session_status != TestSessionStatus.INPROGRESS:
             raise ValidationError("สามารถส่ง picking request ได้เฉพาะเมื่อ test session อยู่ในสถานะ INPROGRESS เท่านั้น")
 
-        items = _build_items(data.get("items", []))
+        sales_item = test_result_repository.get_sales_item_by_test_result(test_result_id)
+        default_unit = sales_item.unit_name if sales_item else None
+
+        items = _build_items(data.get("items", []), default_unit=default_unit)
 
         pr = PickingRequest(
             request_type=PickingRequestType.TEST_RESULT,

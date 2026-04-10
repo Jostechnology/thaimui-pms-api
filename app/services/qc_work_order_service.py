@@ -89,7 +89,7 @@ def create_qc_work_order(data):
         material_usage_data = data.get("items", [])
         qc_quantity = data.get("salesItemQuantity", 1)
         
-        planned_qty = sales_item.item_num
+        planned_qty = sales_item.quantity
         existing_qc_qty = sum(qc.quantity for qc in sales_item.qc_work_orders)                                                                
         if existing_qc_qty + qc_quantity > planned_qty:              
             raise ValidationError(f"จำนวน QC รวม ({existing_qc_qty + qc_quantity}) เกินจำนวนที่วางแผนผลิต ({planned_qty})")      

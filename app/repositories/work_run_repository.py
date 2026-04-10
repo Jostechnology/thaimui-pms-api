@@ -14,6 +14,19 @@ def get_work_run_by_id(work_run_id):
         raise
 
 
+def get_sales_item_by_work_run(work_run_id):
+    try:
+        query = (
+            db.session.query(SalesItem)
+            .join(WorkOrder, WorkOrder.sales_item_id == SalesItem.sales_item_id)
+            .join(WorkRun, WorkRun.work_order_id == WorkOrder.work_order_id)
+            .filter(WorkRun.work_run_id == work_run_id)
+        )
+        return query.first()
+    except Exception:
+        raise
+
+
 def get_work_run_display(work_run_id):
     """Full fetch — loads assignments, machines, breaks, picking_requests."""
     try:

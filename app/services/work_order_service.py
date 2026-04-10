@@ -47,7 +47,7 @@ def create_work_order(data, unassigned_permission=False):
         if sales_item.branch_id is None and not unassigned_permission:
             raise AuthorizationError("คุณไม่มีสิทธิ์จัดการใบสั่งขายที่ยังไม่มีสาขา")
 
-        quantity = data.get("quantity") or sales_item.item_num
+        quantity = data.get("quantity") or sales_item.quantity
 
         item_order = sales_item_repository.get_sales_item_order_in_sales_order(
             sales_item_id, sales_item.doc_entry

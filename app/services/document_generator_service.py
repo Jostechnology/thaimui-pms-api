@@ -76,7 +76,7 @@ def generate_component_detail(item_component_id):
             "sales_item": {
                 "item_name": sales_item.item_name if sales_item else None,
                 "item_code": sales_item.item_code if sales_item else None,
-                "item_num": sales_item.item_num if sales_item else None,
+                "quantity": sales_item.quantity if sales_item else None,
             }
         }
 

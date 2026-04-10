@@ -135,7 +135,6 @@ def get_role_permission(username, role_id):
             token
         )
 
-            
     except Exception as e:
         raise e
     

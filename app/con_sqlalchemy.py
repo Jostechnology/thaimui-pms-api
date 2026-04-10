@@ -346,7 +346,11 @@ class SalesItem(AuditMixin):
     center_sales_item_id = db.Column(db.Integer, nullable=True)
     status = db.Column(db.Enum(SalesItemStatus), nullable=False , default=SalesItemStatus.PENDING)
     item_code = db.Column(db.String(50), nullable=False)
-    item_num = db.Column(db.Integer, nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    order_line_num = db.Column(db.Integer, nullable=True)
+    unit_name = db.Column(db.String(28), nullable=False, default="Piece")
+    unit_code = db.Column(db.String(28), nullable=True)
+    unit_id = db.Column(db.Integer, nullable=False, default=0)
     item_name = db.Column(db.String(255), nullable=False)
     item_description = db.Column(db.String(500))
     cost_price = db.Column(db.Float, nullable=False)
@@ -410,7 +414,7 @@ class SalesItem(AuditMixin):
             return (False, "งานถูกปิดไปแล้ว")
         
         # produced means usable items by default itself.
-        if (self.produced_qty < self.item_num) and self.produce:
+        if (self.produced_qty < self.quantity) and self.produce:
             return (False, "ยังผลิตไม่ครบ")
         
         if self.produce and self.producing_qty > 0:               
