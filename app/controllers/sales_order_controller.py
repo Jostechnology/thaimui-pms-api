@@ -1,6 +1,7 @@
 from app.api_auth import decode_and_verify_permission_jwt, get_requests_permission, verify_required, verify_required_center, verify_required_center_only
 from app.app import app
 from flask import request, jsonify, g
+from app.exception import DisabledAction
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
 from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order
 from app.utils import decode_token, check_true_permissions
@@ -79,6 +80,7 @@ def api_assign_branch_to_sales_order(doc_entry):
 @decode_and_verify_permission_jwt(authorizes=[{"module_code": "UNASSIGNED_SO", "method": "edit"}])
 def api_pms_assign_branch_to_sales_order(doc_entry):
     try:
+        raise DisabledAction("ขณะนี้ระบบปิดการใช้งานการกำหนดสาขาผ่านระบบ PMS อยู่ กรุณาจัดการจากระบบ Center")
         data = request.get_json()
         branch_id = data.get("branch_id")
         if branch_id is None:

@@ -32,6 +32,10 @@ class MissingFieldsError(AppException):
     status_code = 400
     message = "Missing Fields"
 
+class DisabledAction(AppException):
+    status_code = 403
+    message = "That action is currently disabled"
+
 class OuterServicesError(AppException):
     status_code = 500
     message = "OUTER SERVICES ERROR"

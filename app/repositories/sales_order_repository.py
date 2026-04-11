@@ -187,6 +187,27 @@ def get_all_sales_orders(page, limit, search, show_unassigned=False, branch_id=N
             .correlate(SalesOrder)
             .scalar_subquery()
         )
+        
+        test_total_subq = (
+            db.session.query(func.count(SalesItem.sales_item_id))
+            .filter(SalesItem.doc_entry == SalesOrder.doc_entry, SalesItem.test == True)
+            .correlate(SalesOrder)
+            .scalar_subquery()
+        )
+
+        test_has_qcworkorder_subq = (
+            db.session.query(func.count(SalesItem.sales_item_id))
+            .filter(
+                SalesItem.doc_entry == SalesOrder.doc_entry,
+                SalesItem.test == True,
+                db.session.query(QCWorkOrder)
+                    .filter(QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
+                    .correlate(SalesItem)
+                    .exists()
+            )
+            .correlate(SalesOrder)
+            .scalar_subquery()
+        )
 
         query = db.session.query(
             SalesOrder,
@@ -198,6 +219,8 @@ def get_all_sales_orders(page, limit, search, show_unassigned=False, branch_id=N
             qc_failed_subq.label("qc_failed"),
             produce_total_subq.label("produce_total"),
             produce_has_workorder_subq.label("produce_has_workorder"),
+            test_total_subq.label("test_total"),
+            test_has_qcworkorder_subq.label("test_has_qcworkorder"),
             Branch
         ).outerjoin(Branch, Branch.branch_id == SalesOrder.branch_id)
 

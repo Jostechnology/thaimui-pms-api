@@ -57,6 +57,8 @@ def get_all_sales_orders(data, show_unassigned=False, branch_id=None):
                 "qc_failed": row.qc_failed,
                 "produce_total": row.produce_total,
                 "produce_has_workorder": row.produce_has_workorder,
+                "test_total": row.test_total,
+                "test_has_qcworkorder": row.test_has_qcworkorder,
                 "status" : so.status.name,
                 "branch_code" : branch.branch_code if branch else None,
                 "branch_name" : branch.branch_name if branch else None
@@ -150,8 +152,8 @@ def create_sales_order(data):
                 doc_num=item.get("doc_num"),
                 doc_entry=item.get("doc_entry"),
                 center_sales_item_id=item.get("sales_item_id"),
-                produce=item.get("produce", True),
-                test=item.get("test", True),
+                produce=item.get("produce", False),
+                test=item.get("test", False),
                 item_group=item.get("item_group")
             )
             sales_order.sales_items.append(sales_item)
