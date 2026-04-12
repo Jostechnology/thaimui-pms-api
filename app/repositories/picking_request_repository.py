@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus, PickingRequestType, WorkRun, TestResult
+from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -23,46 +23,36 @@ def get_picking_request_detail_by_id(picking_request_id):
     return query.first()
 
 
-def get_picking_requests_by_work_run(work_run_id):
+def get_picking_requests_by_doc_entry(doc_entry):
     query = db.session.query(PickingRequest).options(
         selectinload(PickingRequest.items)
-    ).filter(PickingRequest.work_run_id == work_run_id)
+    ).filter(PickingRequest.doc_entry == doc_entry)
     return query.all()
 
 
-def get_picking_requests_by_test_result(test_result_id):
-    query = db.session.query(PickingRequest).options(
-        selectinload(PickingRequest.items)
-    ).filter(PickingRequest.test_result_id == test_result_id)
+def get_available_picking_items_for_sales_item(sales_item_id):
+    """PickingRequestItems where sales_item_id matches and parent PR is SUCCESS, ordered FIFO."""
+    query = (
+        db.session.query(PickingRequestItem)
+        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
+        .filter(
+            PickingRequestItem.sales_item_id == sales_item_id,
+            PickingRequest.status == PickingRequestStatus.SUCCESS,
+        )
+        .order_by(PickingRequestItem.picking_request_item_id.asc())
+    )
     return query.all()
 
 
-def has_unsolved_picking_requests_for_work_run(work_run_id):
-    query = db.session.query(PickingRequest).filter(
-        PickingRequest.work_run_id == work_run_id,
-        PickingRequest.status.in_([PickingRequestStatus.PENDING, PickingRequestStatus.SENT])
-    )
-    return query.first() is not None
-
-
-def has_unsolved_picking_requests_for_test_result(test_result_id):
-    query = db.session.query(PickingRequest).filter(
-        PickingRequest.test_result_id == test_result_id,
-        PickingRequest.status.in_([PickingRequestStatus.PENDING, PickingRequestStatus.SENT])
-    )
-    return query.first() is not None
-
-
-def get_picking_request_list(page, per_page, search="", status=None, request_type=None):
+def get_picking_request_list(page, per_page, search="", status=None, doc_entry=None):
     query = db.session.query(PickingRequest).options(
         selectinload(PickingRequest.items),
-        selectinload(PickingRequest.work_run),
-        selectinload(PickingRequest.test_result),
     )
 
     if search:
         query = query.filter(
             or_(
+                PickingRequest.picking_request_code.ilike(f"%{search}%"),
                 PickingRequest.wms_reference.ilike(f"%{search}%"),
                 PickingRequest.created_by.ilike(f"%{search}%"),
             )
@@ -71,8 +61,8 @@ def get_picking_request_list(page, per_page, search="", status=None, request_typ
     if status:
         query = query.filter(PickingRequest.status == status)
 
-    if request_type:
-        query = query.filter(PickingRequest.request_type == request_type)
+    if doc_entry:
+        query = query.filter(PickingRequest.doc_entry == doc_entry)
 
     result = query.order_by(PickingRequest.picking_request_id.desc()).paginate(
         page=page, per_page=per_page, error_out=False

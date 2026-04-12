@@ -13,7 +13,7 @@ def api_get_picking_request_list():
         "per_page": request.args.get("per_page", 10, type=int),
         "search": request.args.get("search", "", type=str),
         "status": request.args.get("status", "", type=str),
-        "request_type": request.args.get("request_type", "", type=str),
+        "doc_entry": request.args.get("doc_entry", None, type=int),
     }
     result = picking_request_service.get_list(data)
     return jsonify({
@@ -23,33 +23,18 @@ def api_get_picking_request_list():
     }), 200
 
 
-@app.route("/api/work_run/<int:work_run_id>/picking_request", methods=["POST"])
+@app.route("/api/sales_order/<int:doc_entry>/picking_request", methods=["POST"])
 @verify_required
-def api_create_picking_request_for_work_run(work_run_id):
+def api_create_picking_request_for_sales_order(doc_entry):
     data = request.get_json()
-    result = picking_request_service.create_for_work_run(work_run_id, data)
-    return jsonify({"data": PickingRequestSchema().dump(result), "success": True}), 201
+    result = picking_request_service.create_for_sales_order(doc_entry, data)
+    return jsonify({"data": PickingRequestDetailSchema().dump(result), "success": True}), 201
 
 
-@app.route("/api/work_run/<int:work_run_id>/picking_request", methods=["GET"])
+@app.route("/api/sales_order/<int:doc_entry>/picking_request", methods=["GET"])
 @verify_required
-def api_get_picking_requests_for_work_run(work_run_id):
-    result = picking_request_service.get_by_work_run(work_run_id)
-    return jsonify({"data": PickingRequestDetailSchema(many=True).dump(result), "success": True}), 200
-
-
-@app.route("/api/test_result/<int:test_result_id>/picking_request", methods=["POST"])
-@verify_required
-def api_create_picking_request_for_test_result(test_result_id):
-    data = request.get_json()
-    result = picking_request_service.create_for_test_result(test_result_id, data)
-    return jsonify({"data": PickingRequestSchema().dump(result), "success": True}), 201
-
-
-@app.route("/api/test_result/<int:test_result_id>/picking_request", methods=["GET"])
-@verify_required
-def api_get_picking_requests_for_test_result(test_result_id):
-    result = picking_request_service.get_by_test_result(test_result_id)
+def api_get_picking_requests_for_sales_order(doc_entry):
+    result = picking_request_service.get_by_sales_order(doc_entry)
     return jsonify({"data": PickingRequestDetailSchema(many=True).dump(result), "success": True}), 200
 
 

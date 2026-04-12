@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder
+from app.con_sqlalchemy import QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -67,6 +67,9 @@ def get_qc_work_order_for_availability_check(qc_work_order_id):
                 selectinload(QCWorkOrder.sales_item)
                     .selectinload(SalesItem.qc_work_orders)
                     .selectinload(QCWorkOrder.test_results),
+                selectinload(QCWorkOrder.sales_item)
+                    .selectinload(SalesItem.picking_request_items)
+                    .selectinload(PickingRequestItem.picking_request),
             )
             .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
             .first()
