@@ -6,7 +6,7 @@ from app.con_sqlalchemy import (
 from app.repositories import picking_request_repository, work_run_repository, test_result_repository
 from app.services import document_code_service
 from app.app import db
-from app.exception import NotFoundError, ValidationError
+from app.exception import NotFoundError, ValidationError, OuterServicesError
 
 
 def _build_items(items_data, default_unit=None):
@@ -35,6 +35,41 @@ def _build_items(items_data, default_unit=None):
             remark=item.get("remark"),
         ))
     return result
+
+
+def _call_wms_create_pickup(pr, sales_item, items, purpose: str):
+    """
+    Call WMS create_pickup_from_pms if the service is configured.
+    On success: set pr.status = SENT, pr.wms_reference = pickup_id.
+    On failure (success=False or exception): raise OuterServicesError.
+    """
+    from app.extensions import wms_service
+    if wms_service is None or sales_item is None:
+        return
+
+    order_items = [
+        {
+            "order_line_num": sales_item.order_line_num,
+            "quantity": item.quantity,
+            "purpose": purpose,
+        }
+        for item in items
+    ]
+
+    try:
+        resp = wms_service.create_pickup_from_pms(
+            doc_entry=sales_item.doc_entry,
+            order_items=order_items,
+        )
+    except Exception as e:
+        raise OuterServicesError(f"WMS request failed: {e}")
+
+    if not resp.get("success"):
+        raise OuterServicesError(f"WMS rejected pickup: {resp.get('message', 'unknown error')}")
+
+    pickup_id = (resp.get("data") or {}).get("pickup_id")
+    pr.wms_reference = str(pickup_id) if pickup_id is not None else None
+    pr.status = PickingRequestStatus.SENT
 
 
 def create_for_work_run(work_run_id, data):
@@ -66,28 +101,7 @@ def create_for_work_run(work_run_id, data):
             item.picking_request_id = pr.picking_request_id
             db.session.add(item)
 
-        # --- WMS integration (not yet supported) ---
-        # from app.extensions import center_service
-        # try:
-        #     payload = {
-        #         "source_type": "WORK_RUN",
-        #         "source_id": work_run_id,
-        #         "internal_reference": f"PR-{pr.picking_request_id}",
-        #         "remark": pr.remark,
-        #         "items": [
-        #             {"item_code": i.item_code, "item_name": i.item_name,
-        #              "quantity": i.quantity, "unit": i.unit}
-        #             for i in items
-        #         ],
-        #     }
-        #     resp = center_service.request("POST", "/wms/picking", data=payload)
-        #     if 200 <= resp["status_code"] < 300:
-        #         pr.status = PickingRequestStatus.SENT
-        #         pr.wms_reference = (resp.get("json") or {}).get("reference")
-        #     else:
-        #         pr.status = PickingRequestStatus.FAILED
-        # except Exception:
-        #     pr.status = PickingRequestStatus.FAILED
+        _call_wms_create_pickup(pr, sales_item, items, purpose="PROD")
 
         db.session.commit()
 
@@ -128,28 +142,7 @@ def create_for_test_result(test_result_id, data):
             item.picking_request_id = pr.picking_request_id
             db.session.add(item)
 
-        # --- WMS integration (not yet supported) ---
-        # from app.extensions import center_service
-        # try:
-        #     payload = {
-        #         "source_type": "TEST_RESULT",
-        #         "source_id": test_result_id,
-        #         "internal_reference": f"PR-{pr.picking_request_id}",
-        #         "remark": pr.remark,
-        #         "items": [
-        #             {"item_code": i.item_code, "item_name": i.item_name,
-        #              "quantity": i.quantity, "unit": i.unit}
-        #             for i in items
-        #         ],
-        #     }
-        #     resp = center_service.request("POST", "/wms/picking", data=payload)
-        #     if 200 <= resp["status_code"] < 300:
-        #         pr.status = PickingRequestStatus.SENT
-        #         pr.wms_reference = (resp.get("json") or {}).get("reference")
-        #     else:
-        #         pr.status = PickingRequestStatus.FAILED
-        # except Exception:
-        #     pr.status = PickingRequestStatus.FAILED
+        _call_wms_create_pickup(pr, sales_item, items, purpose="TEST")
 
         db.session.commit()
 

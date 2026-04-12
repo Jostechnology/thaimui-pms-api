@@ -17,3 +17,4 @@ MINIO_BUCKET = os.getenv("MINIO_BUCKET")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 REDIS_URL = os.getenv("REDIS_URL")
+WMS_URL = os.getenv("WMS_URL")

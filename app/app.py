@@ -1,11 +1,11 @@
 import traceback
 from app.exception import AppException
-from app.extensions import init_center_service, init_document_generator_service, init_storage_service, init_cache_service
+from app.extensions import init_center_service, init_document_generator_service, init_storage_service, init_cache_service, init_wms_service
 from flask import Flask, jsonify
 from app.config import (
     CENTER_ACCESS_KEY, CENTER_URL, DOCUMENT_GENERATOR_URL, connectdb,
     MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_SECURE,
-    REDIS_URL,
+    REDIS_URL, WMS_URL,
 )
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
@@ -46,6 +46,7 @@ if MINIO_ENDPOINT:
     init_storage_service(MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_SECURE)
 if REDIS_URL:
     init_cache_service(REDIS_URL)
+init_wms_service(WMS_URL)
 
 
 @app.errorhandler(AppException)

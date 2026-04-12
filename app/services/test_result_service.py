@@ -107,9 +107,9 @@ def create_test_result(qc_work_order_id, data):
         db.session.commit()
         db.session.refresh(test_result)
         return TestResultSchema().dump(test_result)
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        raise Exception(str(e))
+        raise
 
 
 def finalize_test_result(test_result_id, data):

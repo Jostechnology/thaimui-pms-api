@@ -118,7 +118,10 @@ def create_qc_work_order(data):
         # Create MaterialTransaction(REMOVE) for each material consumed
         if material_usage_data:
             for usage in material_usage_data:
-                material = material_map[usage.get("material_list_id")]
+                material_list_id = usage.get("material_list_id", None)
+                if material_list_id is None:
+                    raise ValidationError("ไม่พบรายการวัตถุดิบเทส")
+                material = material_map[material_list_id]
                 transaction_service.create_material_transaction(
                     material, qc.qc_work_order_id, "REMOVE", int(usage.get("quantity"))
                 )
@@ -126,9 +129,9 @@ def create_qc_work_order(data):
         db.session.commit()
         db.session.refresh(qc)
         return qc
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        raise Exception(str(e))
+        raise
 
 
 def update_qc_work_order(qc_work_order_id, data):

@@ -419,6 +419,9 @@ class SalesItem(AuditMixin):
         if self.produce and self.producing_qty > 0:               
             return (False, "ยังมีรายการผลิตค้างอยู่")
         
+        if self.test and self.num_qc_work_order == 0:
+            return (False, "ไม่สำเร็จ ยังไม่ได้ทำใบสั่งเทส")
+                
         # Produced or not produced / Produced is done or not. If it has test and test is not done, False
         if (self.num_qc_successed_work_order == self.num_qc_work_order) and self.num_qc_work_order != 0:
             return (True, "สำเร็จ ทำการเทสผ่าน")
@@ -426,6 +429,7 @@ class SalesItem(AuditMixin):
             return (True, "สำเร็จ ไม่มีรายการเทส")
         
         return (False, "มีรายการเทสยังไม่เสร็จ (รายการนี้เป็นรายการ Fallback ด้วย หากเกิดข้อผิดพลาด หากตรวจสอบครบถ้วนว่าเทสผ่านหมดแล้ว อาจเกิดปัญหาที่โปรแกรม)")
+    
 class MachineType(AuditMixin):
     __tablename__ = "m_machine_type"
     machine_type_id = db.Column(db.Integer, primary_key=True)

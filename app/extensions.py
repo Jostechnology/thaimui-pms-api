@@ -1,9 +1,11 @@
 
 from app.transport.send_request import CenterService
 from app.transport.document_generator import DocumentGeneratorService
+from app.transport.wms_service import WMSService
 
 center_service = None
 document_generator_service = None
+wms_service = None
 
 
 def init_center_service(CENTER_ACCESS_KEY, CENTER_URL):
@@ -22,6 +24,13 @@ def init_document_generator_service(DOCUMENT_GENERATOR_URL):
         document_generator_service = DocumentGeneratorService(
             base_url=DOCUMENT_GENERATOR_URL,
         )
+
+
+def init_wms_service(WMS_URL):
+    global wms_service
+
+    if WMS_URL:
+        wms_service = WMSService(base_url=WMS_URL)
 
 
 def init_storage_service(endpoint, access_key, secret_key, bucket, secure=False):
