@@ -1,7 +1,7 @@
 from app.repositories import material_repository, sales_item_repository, sales_order_repository
 from app.extensions import center_service
 from app.app import db
-from app.services import work_order_service, transaction_service
+from app.services import branch_service, work_order_service, transaction_service
 from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList
 
 
@@ -125,7 +125,7 @@ def create_sales_order_routine(data):
 
 def create_sales_order(data):
     try:
-
+        branch = branch_service.get_branch_by_code(data.get("pms_branch_code", None))
         sales_order = SalesOrder(
             doc_entry = data.get("doc_entry"),
             doc_num = data.get("doc_num"),
@@ -137,6 +137,7 @@ def create_sales_order(data):
             bpl_name = data.get("bpl_name"),
             group_code = data.get("group_code"),
             group_name = data.get("group_name"),
+            branch_id = branch.branch_id
         )
 
         for item in data.get("sales_item_list", []):
@@ -154,12 +155,12 @@ def create_sales_order(data):
                 center_sales_item_id=item.get("sales_item_id"),
                 produce=item.get("produce", False),
                 test=item.get("test", False),
-                item_group=item.get("item_group")
+                item_group=item.get("item_group"),
+                branch_id = branch.branch_id
             )
             sales_order.sales_items.append(sales_item)
 
             for mat in item.get("material_list", []):
-                print(f"Mat : {mat}")
                 material_list = MaterialList(
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
@@ -169,7 +170,8 @@ def create_sales_order(data):
                     unit_id=mat.get("unit_id", 0),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
-                    item_group=mat.get("item_group")
+                    item_group=mat.get("item_group"),
+                    branch_id = branch.branch_id
                 )
                 transaction_service.create_init_material_transaction(material_list, "INIT")
                 sales_item.material_list.append(material_list)

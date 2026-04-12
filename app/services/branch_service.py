@@ -28,6 +28,11 @@ def get_branch_by_id(branch_id):
         raise NotFoundError(f"Branch id {branch_id} not found")
     return branch
 
+def get_branch_by_code(branch_code):
+    branch = db.session.query(Branch).filter(Branch.branch_code == branch_code).first()
+    if not branch:
+        raise NotFoundError(f"Branch code {branch_code} not found")
+    return branch
 
 def update_branch(branch_id, data):
     try:
