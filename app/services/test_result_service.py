@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, TestResultWorkRun, WorkRunStatus, WorkRunTransactionType, QCWorkOrderStatus
+from app.con_sqlalchemy import TestResult, TestResultItem, TestResultStatus, TestSessionStatus, TestResultWorkRun, TestResultPickingItem, WorkRunStatus, WorkRunTransactionType, QCWorkOrderStatus
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import test_result_repository, qc_work_order_repository, work_run_repository, picking_request_repository
 from app.services import transaction_service, document_code_service
@@ -17,14 +17,84 @@ def _resolve_status(val):
         return TestResultStatus.PASSED
 
 
+def _create_test_result_from_work_runs(qc, sales_item, qc_work_order_id, claimed_qty, data):
+    """Phase 1 for produced items — validate work_run_sources and create TestResultWorkRun rows."""
+    work_run_sources_data = data.get("work_run_sources", [])
+    if not work_run_sources_data:
+        raise ValidationError("ต้องระบุ work_run_sources อย่างน้อย 1 รายการ")
+
+    total_from_runs = 0
+    validated_sources = []
+    work_order_id = sales_item.work_order.work_order_id if sales_item.work_order else None
+
+    for src in work_run_sources_data:
+        wr_id = src.get("work_run_id")
+        qty = src.get("qty_from_run")
+
+        if not wr_id:
+            raise ValidationError("work_run_id ไม่ถูกต้อง")
+        if not qty or qty <= 0:
+            raise ValidationError(f"qty_from_run ของ work_run {wr_id} ต้องมากกว่า 0")
+
+        work_run = work_run_repository.get_work_run_by_id(wr_id)
+        if not work_run:
+            raise NotFoundError(f"ไม่พบ WorkRun ID {wr_id}")
+        if work_run.status != WorkRunStatus.COMPLETED:
+            raise ValidationError(f"WorkRun {wr_id} ยังไม่เสร็จสิ้น (ต้องเป็น COMPLETED)")
+        if work_order_id and work_run.work_order_id != work_order_id:
+            raise ValidationError(f"WorkRun {wr_id} ไม่ได้อยู่ใน WorkOrder ของสินค้านี้")
+
+        committed = test_result_repository.get_committed_qty_for_work_run(wr_id)
+        remaining = (work_run.usable_qty or 0) - committed
+        if qty > remaining:
+            raise ValidationError(
+                f"WorkRun {wr_id} มีจำนวนที่เทสได้เหลือ {remaining} แต่ขอ {qty}"
+            )
+
+        total_from_runs += qty
+        validated_sources.append((wr_id, qty))
+
+    if total_from_runs != claimed_qty:
+        raise ValidationError(
+            f"ผลรวม qty_from_run ({total_from_runs}) ต้องเท่ากับ claimed_qty ({claimed_qty})"
+        )
+
+    return validated_sources
+
+
+def _auto_allocate_from_picking_items(sales_item, claimed_qty):
+    """Auto-allocate claimed_qty from SUCCESS PickingRequestItems linked to this sales_item (FIFO)."""
+    available_items = picking_request_repository.get_available_picking_items_for_sales_item(
+        sales_item.sales_item_id
+    )
+
+    allocations = []
+    remaining = claimed_qty
+
+    for pri in available_items:
+        if remaining <= 0:
+            break
+        committed = test_result_repository.get_committed_qty_for_picking_item(pri.picking_request_item_id)
+        available = pri.quantity - committed
+        if available <= 0:
+            continue
+        take = min(available, remaining)
+        allocations.append((pri.picking_request_item_id, take))
+        remaining -= take
+
+    if remaining > 0:
+        raise ValidationError(
+            f"สินค้าในคลังไม่พอ: ต้องการ {claimed_qty} แต่มีเหลือเพียง {claimed_qty - remaining}"
+        )
+
+    return allocations
+
+
 def create_test_result(qc_work_order_id, data):
     """
     Phase 1 — claim items for a test session.
-    Validates:
-      - claimed_qty <= sales_item.available_for_test_qty
-      - each work_run is COMPLETED and belongs to this sales_item's work_order
-      - sum of qty_from_run == claimed_qty
-      - qty_from_run for each run <= that run's remaining testable qty
+    For produced items (sales_item.produce=True): validates work_run_sources.
+    For non-produced items (sales_item.produce=False): auto-allocates from SUCCESS PickingRequestItems.
     """
     try:
         qc = qc_work_order_repository.get_qc_work_order_for_availability_check(qc_work_order_id)
@@ -40,46 +110,6 @@ def create_test_result(qc_work_order_id, data):
                 f"จำนวนที่ขอเทส ({claimed_qty}) มีมากกว่าจำนวนสินค้าที่สามารถเทสได้ ({available})"
             )
 
-        work_run_sources_data = data.get("work_run_sources", [])
-        if not work_run_sources_data:
-            raise ValidationError("ต้องระบุ work_run_sources อย่างน้อย 1 รายการ")
-
-        total_from_runs = 0
-        validated_sources = []
-        work_order_id = sales_item.work_order.work_order_id if sales_item.work_order else None
-
-        for src in work_run_sources_data:
-            wr_id = src.get("work_run_id")
-            qty = src.get("qty_from_run")
-
-            if not wr_id:
-                raise ValidationError("work_run_id ไม่ถูกต้อง")
-            if not qty or qty <= 0:
-                raise ValidationError(f"qty_from_run ของ work_run {wr_id} ต้องมากกว่า 0")
-
-            work_run = work_run_repository.get_work_run_by_id(wr_id)
-            if not work_run:
-                raise NotFoundError(f"ไม่พบ WorkRun ID {wr_id}")
-            if work_run.status != WorkRunStatus.COMPLETED:
-                raise ValidationError(f"WorkRun {wr_id} ยังไม่เสร็จสิ้น (ต้องเป็น COMPLETED)")
-            if work_order_id and work_run.work_order_id != work_order_id:
-                raise ValidationError(f"WorkRun {wr_id} ไม่ได้อยู่ใน WorkOrder ของสินค้านี้")
-
-            committed = test_result_repository.get_committed_qty_for_work_run(wr_id)
-            remaining = (work_run.usable_qty or 0) - committed
-            if qty > remaining:
-                raise ValidationError(
-                    f"WorkRun {wr_id} มีจำนวนที่เทสได้เหลือ {remaining} แต่ขอ {qty}"
-                )
-
-            total_from_runs += qty
-            validated_sources.append((wr_id, qty))
-
-        if total_from_runs != claimed_qty:
-            raise ValidationError(
-                f"ผลรวม qty_from_run ({total_from_runs}) ต้องเท่ากับ claimed_qty ({claimed_qty})"
-            )
-
         test_result = TestResult(
             qc_work_order_id=qc_work_order_id,
             test_result_code=document_code_service.generate_number("TR"),
@@ -90,19 +120,29 @@ def create_test_result(qc_work_order_id, data):
         test_result_repository.create_test_result(test_result)
         db.session.flush()
 
-        for wr_id, qty in validated_sources:
-            db.session.add(TestResultWorkRun(
-                test_result_id=test_result.test_result_id,
-                work_run_id=wr_id,
-                qty_from_run=qty,
-            ))
-            source_run = work_run_repository.get_work_run_by_id(wr_id)
-            transaction_service.create_work_run_transaction(
-                source_run,
-                WorkRunTransactionType.SENT_TO_TESTING,
-                qty,
-                f"TEST-{test_result.test_result_id}",
-            )
+        if sales_item.produce:
+            validated_sources = _create_test_result_from_work_runs(qc, sales_item, qc_work_order_id, claimed_qty, data)
+            for wr_id, qty in validated_sources:
+                db.session.add(TestResultWorkRun(
+                    test_result_id=test_result.test_result_id,
+                    work_run_id=wr_id,
+                    qty_from_run=qty,
+                ))
+                source_run = work_run_repository.get_work_run_by_id(wr_id)
+                transaction_service.create_work_run_transaction(
+                    source_run,
+                    WorkRunTransactionType.SENT_TO_TESTING,
+                    qty,
+                    f"TEST-{test_result.test_result_id}",
+                )
+        else:
+            allocations = _auto_allocate_from_picking_items(sales_item, claimed_qty)
+            for pri_id, qty in allocations:
+                db.session.add(TestResultPickingItem(
+                    test_result_id=test_result.test_result_id,
+                    picking_request_item_id=pri_id,
+                    qty_consumed=qty,
+                ))
 
         db.session.commit()
         db.session.refresh(test_result)
@@ -123,9 +163,6 @@ def finalize_test_result(test_result_id, data):
             raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
         if test_result.session_status == TestSessionStatus.COMPLETED:
             raise ValidationError("เทสนี้จบไปแล้ว กรุณาตรวจสอบอีกครั้ง")
-
-        if picking_request_repository.has_unsolved_picking_requests_for_test_result(test_result_id):
-            raise ValidationError("ไม่สามารถปิด Test Result ได้ เนื่องจากยังมี Picking Request ที่ยังไม่เสร็จสิ้น (PENDING/SENT)")
 
         items_data = data.get("items", [])
         if not items_data:

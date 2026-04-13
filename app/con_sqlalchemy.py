@@ -307,7 +307,7 @@ class WorkRun(AuditMixin, BranchScopedMixin):
     rework_destinations = db.relationship('WorkRunReworkSource', foreign_keys='WorkRunReworkSource.source_work_run_id', back_populates='source_work_run')
     rework_source_test_result = db.relationship('TestResult', foreign_keys=[rework_source_test_result_id], back_populates='rework_work_runs', lazy='noload')
     transactions     = db.relationship('WorkRunTransaction', back_populates='work_run', cascade='all, delete-orphan')
-    picking_requests = db.relationship('PickingRequest', back_populates='work_run', lazy='noload')
+
 
     @property
     def defect_qty(self):
@@ -369,6 +369,7 @@ class SalesItem(AuditMixin):
     material_list = db.relationship('MaterialList', back_populates='sales_item')
     work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False, lazy="noload")
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
+    picking_request_items = db.relationship('PickingRequestItem', back_populates='sales_item', lazy='noload')
 
     # Production
     @property
@@ -389,7 +390,18 @@ class SalesItem(AuditMixin):
         return sum(tr.claimed_qty for qc in self.qc_work_orders for tr in qc.test_results)
 
     @property
+    def picked_qty(self):
+        """Sum of all PickingRequestItem quantities where the parent PR is SUCCESS."""
+        return sum(
+            item.quantity
+            for item in self.picking_request_items
+            if item.picking_request and item.picking_request.status == PickingRequestStatus.SUCCESS
+        )
+
+    @property
     def available_for_test_qty(self):
+        if not self.produce:
+            return self.picked_qty - self.unavailable_for_test_qty
         return self.produced_qty - self.unavailable_for_test_qty
     
     # Cert & Test Results
@@ -492,6 +504,7 @@ class MaterialList(AuditMixin):
     component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='noload')
     # Forward: used by remaining_num property and transaction_service
     transactions = db.relationship('MaterialTransaction', back_populates='material_list')
+    order_line_num = db.Column(db.Integer)
 
     @property
     def remaining_num(self):
@@ -614,11 +627,11 @@ class TestResult(AuditMixin, BranchScopedMixin):
     standard_reference = db.Column(db.String(255), nullable=True)
     overall_status     = db.Column(db.Enum(TestResultStatus), nullable=True)
     remark             = db.Column(db.String(500), nullable=True)
-    test_result_items  = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
-    work_run_sources   = db.relationship('TestResultWorkRun', back_populates='test_result', cascade='all, delete-orphan')
-    qc_work_order      = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
-    rework_work_runs   = db.relationship('WorkRun', foreign_keys='WorkRun.rework_source_test_result_id', back_populates='rework_source_test_result', lazy='noload')
-    picking_requests   = db.relationship('PickingRequest', back_populates='test_result', lazy='noload')
+    test_result_items       = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
+    work_run_sources        = db.relationship('TestResultWorkRun', back_populates='test_result', cascade='all, delete-orphan')
+    picking_item_sources    = db.relationship('TestResultPickingItem', back_populates='test_result', cascade='all, delete-orphan')
+    qc_work_order           = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
+    rework_work_runs        = db.relationship('WorkRun', foreign_keys='WorkRun.rework_source_test_result_id', back_populates='rework_source_test_result', lazy='noload')
 
     @property
     def failed_item_qty(self):
@@ -658,6 +671,18 @@ class TestResultWorkRun(BaseModel):
 
     test_result = db.relationship('TestResult', back_populates='work_run_sources', lazy='noload')
     work_run    = db.relationship('WorkRun',    back_populates='test_result_sources', lazy='noload')
+
+
+class TestResultPickingItem(BaseModel):
+    """Association: which PickingRequestItem(s) supplied items to a TestResult (for non-produced items), and how many."""
+    __tablename__ = "t_test_result_picking_item"
+    id                       = db.Column(db.Integer, primary_key=True)
+    test_result_id           = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    picking_request_item_id  = db.Column(db.Integer, db.ForeignKey('t_picking_request_item.picking_request_item_id', ondelete='CASCADE'), nullable=False)
+    qty_consumed             = db.Column(db.Integer, nullable=False)
+
+    test_result          = db.relationship('TestResult', back_populates='picking_item_sources', lazy='noload')
+    picking_request_item = db.relationship('PickingRequestItem', back_populates='test_result_consumptions', lazy='noload')
 
 
 class WorkRunReworkSource(BaseModel):
@@ -747,6 +772,7 @@ class SalesOrder(AuditMixin):
         lazy='noload',
     )
     certifications = db.relationship('QCCertification', back_populates='sales_order')
+    picking_requests = db.relationship('PickingRequest', back_populates='sales_order', lazy='noload')
 
 class ItemComponent(AuditMixin):
     __tablename__ = "t_item_component"
@@ -806,37 +832,36 @@ class PickingRequestStatus(enum.Enum):
     SUCCESS = 'SUCCESS'   # WMS confirmed receipt
     FAILED  = 'FAILED'    # failed / cancelled
 
-class PickingRequestType(enum.Enum):
-    WORK_RUN    = 'WORK_RUN'
-    TEST_RESULT = 'TEST_RESULT'
-
 class PickingRequest(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_picking_request"
     picking_request_id   = db.Column(db.Integer, primary_key=True)
     picking_request_code = db.Column(db.String(100), nullable=True)
-    request_type         = db.Column(db.Enum(PickingRequestType), nullable=False)
-    work_run_id        = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='SET NULL'), nullable=True)
-    test_result_id     = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='SET NULL'), nullable=True)
-    status             = db.Column(db.Enum(PickingRequestStatus), nullable=False, default=PickingRequestStatus.PENDING)
-    wms_reference      = db.Column(db.String(100), nullable=True)
-    remark             = db.Column(db.String(500), nullable=True)
+    doc_entry            = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry', ondelete='SET NULL'), nullable=True)
+    status               = db.Column(db.Enum(PickingRequestStatus), nullable=False, default=PickingRequestStatus.PENDING)
+    wms_reference        = db.Column(db.String(100), nullable=True)
+    remark               = db.Column(db.String(500), nullable=True)
 
-    items        = db.relationship('PickingRequestItem', back_populates='picking_request', cascade='all, delete-orphan')
-    work_run     = db.relationship('WorkRun', back_populates='picking_requests', lazy='noload')
-    test_result  = db.relationship('TestResult', back_populates='picking_requests', lazy='noload')
+    items       = db.relationship('PickingRequestItem', back_populates='picking_request', cascade='all, delete-orphan')
+    sales_order = db.relationship('SalesOrder', back_populates='picking_requests', lazy='noload')
 
 
 class PickingRequestItem(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_picking_request_item"
     picking_request_item_id = db.Column(db.Integer, primary_key=True)
     picking_request_id      = db.Column(db.Integer, db.ForeignKey('t_picking_request.picking_request_id', ondelete='CASCADE'), nullable=False)
+    sales_item_id           = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='SET NULL'), nullable=True)
+    material_list_id        = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='SET NULL'), nullable=True)
+    order_line_num          = db.Column(db.Integer)
     item_code               = db.Column(db.String(100), nullable=False)
     item_name               = db.Column(db.String(255), nullable=False)
     quantity                = db.Column(db.Integer, nullable=False)
     unit                    = db.Column(db.String(50), nullable=True)
     remark                  = db.Column(db.String(500), nullable=True)
 
-    picking_request = db.relationship('PickingRequest', back_populates='items', lazy='noload')
+    picking_request          = db.relationship('PickingRequest', back_populates='items', lazy='noload')
+    sales_item               = db.relationship('SalesItem', back_populates='picking_request_items', lazy='noload')
+    material_list            = db.relationship('MaterialList', lazy='noload')
+    test_result_consumptions = db.relationship('TestResultPickingItem', back_populates='picking_request_item', cascade='all, delete-orphan')
 class DocumentCodeList(BaseModel):
     __tablename__ = "m_document_code_list"
     document_code_id = db.Column(db.Integer, primary_key=True, autoincrement=True)

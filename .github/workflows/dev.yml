@@ -101,6 +101,7 @@ jobs:
           echo 'MINIO_BUCKET=${{ secrets.MINIO_BUCKET }}' >> .env
           echo 'REDIS_URL=${{ vars.REDIS_URL }}' >> .env
           echo 'MINIO_SECURE=${{ vars.MINIO_SECURE }}' >> .env
+          echo 'WMS_URL=${{ vars.WMS_URL }}' >> .env
 
 
           echo "Logging in to GitLab Container Registry"

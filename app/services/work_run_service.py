@@ -1,5 +1,5 @@
 from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now
-from app.repositories import work_run_repository, work_order_repository, test_result_repository, picking_request_repository
+from app.repositories import work_run_repository, work_order_repository, test_result_repository
 from app.services import transaction_service, document_code_service
 from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
@@ -244,9 +244,6 @@ def complete_work_run(work_run_id, data):
         raise ValidationError("Work Run is already completed")
     if work_run.status == WorkRunStatus.PENDING:
         raise ValidationError("Work Run has not been started yet")
-
-    if picking_request_repository.has_unsolved_picking_requests_for_work_run(work_run_id):
-        raise ValidationError("ไม่สามารถปิด Work Run ได้ เนื่องจากยังมี Picking Request ที่ยังไม่เสร็จสิ้น (PENDING/SENT)")
 
     usable_qty = data.get("usable_qty")
     if usable_qty is None:

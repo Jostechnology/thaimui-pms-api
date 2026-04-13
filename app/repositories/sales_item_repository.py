@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, WorkRun, QCWorkOrder, TestResult, SalesItemStatus
+from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, WorkRun, QCWorkOrder, TestResult, SalesItemStatus, PickingRequestItem, PickingRequest
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -9,6 +9,7 @@ def get_all_sales_items(page, limit, search):
             .options(
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
             )
         )
         if search:
@@ -54,6 +55,7 @@ def get_sales_item_detail_by_id(sales_item_id):
                 selectinload(SalesItem.material_list),
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
             .first()
@@ -69,6 +71,7 @@ def get_sales_item_tracking_by_id(sales_item_id):
             .options(
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
         )

@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun
+from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem
 from app.app import db
 from sqlalchemy.orm import selectinload
 
@@ -8,7 +8,7 @@ def _test_result_options():
     return [
         selectinload(TestResult.test_result_items),
         selectinload(TestResult.work_run_sources).selectinload(TestResultWorkRun.work_run),
-        selectinload(TestResult.picking_requests)
+        selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item),
     ]
 
 
@@ -140,6 +140,19 @@ def get_committed_qty_for_work_run(work_run_id, exclude_test_result_id=None):
         ).filter(TestResultWorkRun.work_run_id == work_run_id)
         if exclude_test_result_id:
             query = query.filter(TestResultWorkRun.test_result_id != exclude_test_result_id)
+        return query.scalar()
+    except Exception:
+        raise
+
+
+def get_committed_qty_for_picking_item(picking_request_item_id, exclude_test_result_id=None):
+    """Sum of qty_consumed already committed for a picking_request_item across all test results."""
+    try:
+        query = db.session.query(
+            db.func.coalesce(db.func.sum(TestResultPickingItem.qty_consumed), 0)
+        ).filter(TestResultPickingItem.picking_request_item_id == picking_request_item_id)
+        if exclude_test_result_id:
+            query = query.filter(TestResultPickingItem.test_result_id != exclude_test_result_id)
         return query.scalar()
     except Exception:
         raise

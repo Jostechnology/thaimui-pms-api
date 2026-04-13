@@ -28,7 +28,7 @@ def get_sales_item_by_work_run(work_run_id):
 
 
 def get_work_run_display(work_run_id):
-    """Full fetch — loads assignments, machines, breaks, picking_requests."""
+    """Full fetch — loads assignments, machines, breaks."""
     try:
         query = (
             db.session.query(WorkRun)
@@ -37,7 +37,6 @@ def get_work_run_display(work_run_id):
                 selectinload(WorkRun.assignments).selectinload(WorkRunAssignment.employee),
                 selectinload(WorkRun.machines).selectinload(WorkRunMachine.machine),
                 selectinload(WorkRun.breaks),
-                selectinload(WorkRun.picking_requests),
             )
             .filter(WorkRun.work_run_id == work_run_id)
         )

@@ -29,6 +29,7 @@ services:
       - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_SECURE=${MINIO_SECURE}
       - REDIS_URL=${REDIS_URL}
+      - WMS_URL=${WMS_URL}
     
     networks:
       - thaimui

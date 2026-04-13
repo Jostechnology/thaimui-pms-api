@@ -1,3 +1,4 @@
+from app.exception import MissingFieldsError
 from app.repositories import material_repository, sales_item_repository, sales_order_repository
 from app.extensions import center_service
 from app.app import db
@@ -161,6 +162,8 @@ def create_sales_order(data):
             sales_order.sales_items.append(sales_item)
 
             for mat in item.get("material_list", []):
+                if mat.get("order_line_num") is None:
+                    raise MissingFieldsError("ไม่พบ order_line_num")
                 material_list = MaterialList(
                     item_code=mat.get("item_code"),
                     item_name=mat.get("item_name"),
@@ -171,7 +174,8 @@ def create_sales_order(data):
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
                     item_group=mat.get("item_group"),
-                    branch_id = branch.branch_id
+                    branch_id = branch.branch_id,
+                    order_line_num = mat.get("order_line_num")
                 )
                 transaction_service.create_init_material_transaction(material_list, "INIT")
                 sales_item.material_list.append(material_list)
