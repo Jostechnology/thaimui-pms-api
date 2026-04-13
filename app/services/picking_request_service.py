@@ -69,6 +69,7 @@ def _call_wms_create_pickup(pr, items):
     except Exception as e:
         raise OuterServicesError(f"WMS request failed: {e}")
 
+    print(resp)
     if not resp.get("success"):
         raise OuterServicesError(f"WMS rejected pickup: {resp.get('message', 'unknown error')}")
 
