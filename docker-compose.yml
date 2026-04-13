@@ -9,14 +9,13 @@ services:
       - thaimui
 
   thaimui-pms-api:
-    build : .
     platform: linux/amd64
-    image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:test
+    image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:${TAG}
     container_name: thaimui-pms-api
     restart: always
 
     ports:
-      - "5000:5000"
+      - "8002:5000"
 
     environment:
       - connection_string=${connection_string}
