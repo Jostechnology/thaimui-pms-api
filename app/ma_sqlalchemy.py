@@ -91,6 +91,7 @@ class MaterialListSchema(Schema):
     created_date = fields.DateTime()
     branch_id = fields.Integer(allow_none=True)
     item_group = fields.String()
+    order_line_num = fields.Integer()
     
 class SalesItemForWorkOrderSchema(Schema):
     sales_item_id = fields.Integer()

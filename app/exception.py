@@ -20,6 +20,10 @@ class ValidationError(AppException):
     status_code = 400
     message = "Validation failed"
 
+class ManualRaiseToTest(AppException):
+    status_code = 400
+    message = "Nothing actually goes wrong. We just want it to"
+
 class AuthenticationError(AppException):
     status_code = 401
     message = "Authentication failed"

@@ -5,7 +5,8 @@ from app.con_sqlalchemy import (
 from app.repositories import picking_request_repository, sales_order_repository
 from app.services import document_code_service
 from app.app import db
-from app.exception import NotFoundError, ValidationError, OuterServicesError
+from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, OuterServicesError
+from app.extensions import wms_service
 
 
 def _build_items(items_data):
@@ -45,8 +46,9 @@ def _call_wms_create_pickup(pr, items):
     On success: set pr.status = SENT, pr.wms_reference = pickup_id.
     On failure (success=False or exception): raise OuterServicesError.
     """
-    from app.extensions import wms_service
+
     if wms_service is None:
+        print("1")
         return
 
     order_items = [
@@ -59,6 +61,7 @@ def _call_wms_create_pickup(pr, items):
     ]
 
     if not order_items:
+        print("2")
         return
 
     try:
@@ -69,9 +72,9 @@ def _call_wms_create_pickup(pr, items):
     except Exception as e:
         raise OuterServicesError(f"WMS request failed: {e}")
 
-    print(resp)
+    print(f"Response : {resp}")
     if not resp.get("success"):
-        raise OuterServicesError(f"WMS rejected pickup: {resp.get('message', 'unknown error')}")
+        raise OuterServicesError(f"WMS rejected pickup: | {resp.get('error', 'unknown error')} | {resp.get('message', 'unknown message')}")
 
     pickup_id = (resp.get("data") or {}).get("pickup_id")
     pr.wms_reference = str(pickup_id) if pickup_id is not None else None
@@ -104,7 +107,7 @@ def create_for_sales_order(doc_entry, data):
             db.session.add(item)
 
         _call_wms_create_pickup(pr, items)
-
+        # raise ManualRaiseToTest("Let's see what it does...")
         db.session.commit()
 
         return picking_request_repository.get_picking_request_detail_by_id(pr.picking_request_id)

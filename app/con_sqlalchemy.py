@@ -504,6 +504,7 @@ class MaterialList(AuditMixin):
     component_usages = db.relationship('ComponentMaterialUsage', back_populates='material_list', lazy='noload')
     # Forward: used by remaining_num property and transaction_service
     transactions = db.relationship('MaterialTransaction', back_populates='material_list')
+    order_line_num = db.Column(db.Integer)
 
     @property
     def remaining_num(self):
