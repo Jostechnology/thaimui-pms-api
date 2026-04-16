@@ -1,10 +1,31 @@
-from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now
-from app.repositories import work_run_repository, work_order_repository, test_result_repository
-from app.services import transaction_service, document_code_service
+from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem, WorkRunPickingItem
+from app.repositories import work_run_repository, work_order_repository, test_result_repository, picking_request_repository, material_list_repository
+from app.services import transaction_service, document_code_service, picking_allocation_service, work_order_service
 from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
-from app.exception import NotFoundError, ValidationError, MissingFieldsError
+from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, MissingFieldsError
 from app.repositories import employee_salary_repository
+
+
+def _apply_actuals_reverse_fifo(allocation_rows, qty_used_actual):
+    """
+    Distribute qty_used_actual across FIFO-ordered allocation rows.
+    Releases leftover from the LAST rows first (reverse FIFO).
+    Sets qty_consumed on each row.
+    """
+    total_allocated = sum(r.qty_allocated for r in allocation_rows)
+    if qty_used_actual > total_allocated:
+        for r in allocation_rows:
+            r.qty_consumed = r.qty_allocated
+        return
+    to_release = total_allocated - qty_used_actual
+    for r in reversed(allocation_rows):
+        if to_release <= 0:
+            r.qty_consumed = r.qty_allocated
+        else:
+            release_this = min(r.qty_allocated, to_release)
+            r.qty_consumed = r.qty_allocated - release_this
+            to_release -= release_this
 
 
 def get_work_run_by_id(work_run_id):
@@ -160,19 +181,79 @@ def create_work_run(work_order_id, data):
         )
         work_run_repository.create_work_run(work_run)
 
+    db.session.flush()
+    # _seed_required_items(work_run, work_order, rework_is_from_test=(rework_source_test_result_id is not None), rework_is_from_defect=bool(rework_sources_data))
+
     db.session.commit()
     return work_run
+
+
+def _seed_required_items(work_run, work_order, rework_is_from_test=False, rework_is_from_defect=False):
+    """
+    Populate WorkRunRequiredItem from BOM (MaterialList) for regular runs.
+    Rework runs start with an empty list — user adds extras via dedicated endpoint.
+    """
+    is_rework = rework_is_from_test or rework_is_from_defect
+    if is_rework:
+        return
+
+    materials = material_list_repository.get_material_list_of_items([work_order.sales_item_id])
+    for mat in materials:
+        db.session.add(WorkRunRequiredItem(
+            work_run_id=work_run.work_run_id,
+            material_list_id=mat.material_list_id,
+            item_code=mat.item_code,
+            item_name=mat.item_name,
+            quantity=mat.quantity,
+            unit=mat.unit_name,
+        ))
 
 
 # --- Lifecycle ---
 
 def start_work_run(work_run_id):
-    """PENDING → INPROGRESS. Stamps start_date. Updates parent WorkOrder to INPROGRESS."""
+    """
+    PENDING → INPROGRESS.
+    Gates on material availability: for each WorkRunRequiredItem, FIFO-allocates from SUCCESS PRs.
+    If any material is short, raises ValidationError listing which items are missing.
+    """
     work_run = work_run_repository.get_work_run_by_id(work_run_id)
     if not work_run:
         raise NotFoundError(f"Work Run {work_run_id} not found")
     if work_run.status != WorkRunStatus.PENDING:
         raise ValidationError(f"Work Run must be PENDING to start (current: {work_run.status.value})")
+
+    required = work_run_repository.get_required_items(work_run_id)
+
+    shortages = []
+    all_allocations = []  # [(req, pri_id, qty)]
+
+    for req in required:
+        if not req.material_list_id:
+            continue
+        candidates = picking_request_repository.get_available_picking_items_for_material(req.material_list_id)
+        try:
+            allocs = picking_allocation_service.allocate_fifo(candidates, req.quantity)
+            all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
+        except ValidationError:
+            available_qty = sum(
+                max(0, pri.quantity - picking_request_repository.get_total_committed_qty(pri.picking_request_item_id))
+                for pri in candidates
+            )
+            shortages.append(f"\n{req.item_name} ({req.item_code}) ต้องการ {req.quantity} มีในคลัง {available_qty} \n")
+
+    if shortages:
+        raise ValidationError(
+            f"วัตถุดิบในคลังไม่พอสำหรับการเริ่มผลิต: \n {', '.join(shortages)}"
+        )
+
+    for req, pri_id, qty in all_allocations:
+        work_run_repository.create_picking_consumption(WorkRunPickingItem(
+            work_run_id=work_run_id,
+            picking_request_item_id=pri_id,
+            work_run_required_item_id=req.id,
+            qty_allocated=qty,
+        ))
 
     now = bangkok_now()
     work_run.status = WorkRunStatus.INPROGRESS
@@ -276,6 +357,34 @@ def complete_work_run(work_run_id, data):
     work_run.completion_remark = data.get("completion_remark")
     work_run.status = WorkRunStatus.COMPLETED
     work_run.end_date = now
+
+    # Apply material actuals — release leftover back to pool via reverse-FIFO
+    material_actuals = data.get("material_actuals", [])
+    reported_req_ids = set()
+    for actual in material_actuals:
+        req_id = actual.get("work_run_required_item_id")
+        qty_used = actual.get("qty_used")
+        if req_id is None or qty_used is None:
+            continue
+        if qty_used < 0:
+            raise ValidationError(f"qty_used ต้องไม่ติดลบ (required_item {req_id})")
+
+        req = work_run_repository.get_required_item_by_id(req_id)
+        if not req or req.work_run_id != work_run_id:
+            raise ValidationError(f"required_item {req_id} ไม่ได้อยู่ใน WorkRun นี้")
+
+        req.qty_consumed_actual = qty_used
+        allocation_rows = work_run_repository.get_wrpi_rows_for_required_item(req_id)
+        _apply_actuals_reverse_fifo(allocation_rows, qty_used)
+        reported_req_ids.add(req_id)
+
+    # Rows not reported → default full consumption
+    all_required = work_run_repository.get_required_items(work_run_id)
+    for req in all_required:
+        if req.id not in reported_req_ids:
+            allocation_rows = work_run_repository.get_wrpi_rows_for_required_item(req.id)
+            for r in allocation_rows:
+                r.qty_consumed = r.qty_allocated
 
     db.session.commit()
     return work_run
@@ -455,3 +564,65 @@ def get_work_run_detail(work_run_id):
         "machine_breakdown": machine_breakdown,
         "breaks": breaks_data,
     }
+
+
+# --- Required items (rework extras) ---
+
+def add_required_item(work_run_id, items):
+    """
+    Add extra material requirements to a PENDING rework WorkRun.
+    Accepts a list of items. Regular runs are seeded from BOM at creation.
+    """
+    work_run = work_run_repository.get_work_run_by_id(work_run_id)
+    if not work_run:
+        raise NotFoundError(f"Work Run {work_run_id} not found")
+    if work_run.status != WorkRunStatus.PENDING:
+        raise ValidationError("วัตถุดิบเพิ่มเติมเพิ่มได้เฉพาะตอน PENDING")
+
+    for i, data in enumerate(items):
+        item_code = (data.get("item_code") or "").strip()
+        item_name = (data.get("item_name") or "").strip()
+        quantity = data.get("quantity")
+
+        if not item_code:
+            raise ValidationError(f"item[{i}]: item_code ต้องระบุ")
+        if not item_name:
+            raise ValidationError(f"item[{i}]: item_name ต้องระบุ")
+        if not quantity or quantity <= 0:
+            raise ValidationError(f"item[{i}]: quantity ต้องมากกว่า 0")
+
+        req = WorkRunRequiredItem(
+            work_run_id=work_run_id,
+            material_list_id=data.get("material_list_id"),
+            item_code=item_code,
+            item_name=item_name,
+            quantity=quantity,
+            unit=data.get("unit"),
+        )
+        work_run_repository.create_required_item(req)
+
+    db.session.commit()
+    return work_run_repository.get_required_items(work_run_id)
+
+
+def get_required_items(work_run_id):
+    work_run = work_run_repository.get_work_run_by_id(work_run_id)
+    if not work_run:
+        raise NotFoundError(f"Work Run {work_run_id} not found")
+    return work_run_repository.get_required_items(work_run_id)
+
+def get_material_using_in_work_order_of_work_run(work_run_id):
+    try:
+        work_run = work_run_repository.get_work_run_by_id(work_run_id)
+        if not work_run:
+            raise NotFoundError(f"Work Run {work_run_id} not found")
+        
+        work_order_id = work_run.work_order_id
+        work_order = work_order_service.get_work_order_by_id(work_order_id)
+        if not work_order:
+            raise NotFoundError(f"Work Order {work_order_id} not found")
+        
+        materials = material_list_repository.get_material_list_of_items([work_order.sales_item_id])
+        return materials
+    except Exception:
+        raise

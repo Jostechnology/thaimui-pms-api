@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 ENABLE_TIMING = False
 
-def _log_timer(label: str, elapsed_ms: float, note: str = ""):
+def _log_timer(label: str, elapsed_ms: float, note: str = "", timing=ENABLE_TIMING):
     """Logs timing info only when ENABLE_TIMING is True."""
-    if ENABLE_TIMING:
+    if timing:
         suffix = f" ({note})" if note else ""
         log = (f"[timer] {label} → {elapsed_ms:.2f}ms{suffix}")
         logger.info(log)

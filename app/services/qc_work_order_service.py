@@ -53,6 +53,9 @@ def _build_qc_form(qc_work_order_id, data):
 def _build_qc_items(qc_work_order_id, items_data):
     items = []
     for idx, item in enumerate(items_data or []):
+        material_list_id = item.get("material_list_id", None)
+        if material_list_id is None:
+            raise ValidationError(f"ไม่พบ material_list_id สำหรับ {item.get('code', '-')}")
         items.append(QCItem(
             qc_work_order_id=qc_work_order_id,
             item_order=idx + 1,
@@ -62,6 +65,7 @@ def _build_qc_items(qc_work_order_id, items_data):
             quantity=str(item.get("quantity", "")),
             serial_no=item.get("serialNo"),
             item_remark=item.get("remark"),
+            material_list_id=item.get("material_list_id")
         ))
     return items
 
@@ -181,7 +185,7 @@ def update_qc_work_order(qc_work_order_id, data):
                 db.session.add(item)
 
         db.session.commit()
-        db.session.refresh(qc)
+        # db.session.refresh(qc)
         return qc
     except Exception:
         db.session.rollback()

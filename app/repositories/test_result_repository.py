@@ -1,14 +1,15 @@
-from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem
+from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem
 from app.app import db
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 
 def _test_result_options():
     """Eager-load what TestResultSchema needs."""
     return [
         selectinload(TestResult.test_result_items),
-        selectinload(TestResult.work_run_sources).selectinload(TestResultWorkRun.work_run),
-        selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item),
+        joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
+        selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
+        selectinload(TestResult.required_items),
     ]
 
 
@@ -145,14 +146,29 @@ def get_committed_qty_for_work_run(work_run_id, exclude_test_result_id=None):
         raise
 
 
-def get_committed_qty_for_picking_item(picking_request_item_id, exclude_test_result_id=None):
-    """Sum of qty_consumed already committed for a picking_request_item across all test results."""
-    try:
-        query = db.session.query(
-            db.func.coalesce(db.func.sum(TestResultPickingItem.qty_consumed), 0)
-        ).filter(TestResultPickingItem.picking_request_item_id == picking_request_item_id)
-        if exclude_test_result_id:
-            query = query.filter(TestResultPickingItem.test_result_id != exclude_test_result_id)
-        return query.scalar()
-    except Exception:
-        raise
+def get_required_items(test_result_id):
+    """All TestResultRequiredItem rows for a TestResult, ordered by id."""
+    query = (
+        db.session.query(TestResultRequiredItem)
+        .filter(TestResultRequiredItem.test_result_id == test_result_id)
+        .order_by(TestResultRequiredItem.id.asc())
+    )
+    return query.all()
+
+
+def get_required_item_by_id(required_item_id):
+    query = (
+        db.session.query(TestResultRequiredItem)
+        .filter(TestResultRequiredItem.id == required_item_id)
+    )
+    return query.first()
+
+
+def get_trpi_rows_for_required_item(test_result_required_item_id):
+    """TRPI rows allocated for a specific required item, ordered FIFO ascending."""
+    query = (
+        db.session.query(TestResultPickingItem)
+        .filter(TestResultPickingItem.test_result_required_item_id == test_result_required_item_id)
+        .order_by(TestResultPickingItem.picking_request_item_id.asc())
+    )
+    return query.all()
