@@ -57,7 +57,7 @@ def api_update_qc_work_order(qc_work_order_id):
     try:
         data = request.get_json() or {}
         result = update_qc_work_order(qc_work_order_id, data)
-        return jsonify({"data": QCWorkOrderSchema().dump(result), "success": True}), 200
+        return jsonify({"data": "good", "success": True}), 200
     except Exception:
         raise
 

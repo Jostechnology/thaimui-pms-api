@@ -1,7 +1,7 @@
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest
+from app.con_sqlalchemy import QCItem, QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest
 from app.app import db
 from sqlalchemy import or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.exception import NotFoundError
 
@@ -9,9 +9,9 @@ from app.exception import NotFoundError
 def _qc_work_order_options():
     """Eager-load exactly what QCWorkOrderSchema needs — no deep SalesItem nesting."""
     return [
-        selectinload(QCWorkOrder.sales_item),
-        selectinload(QCWorkOrder.qc_form),
-        selectinload(QCWorkOrder.qc_items),
+        joinedload(QCWorkOrder.sales_item),
+        joinedload(QCWorkOrder.qc_form),
+        joinedload(QCWorkOrder.qc_items).joinedload(QCItem.material_list)
     ]
 
 
@@ -70,6 +70,7 @@ def get_qc_work_order_for_availability_check(qc_work_order_id):
                 selectinload(QCWorkOrder.sales_item)
                     .selectinload(SalesItem.picking_request_items)
                     .selectinload(PickingRequestItem.picking_request),
+                selectinload(QCWorkOrder.qc_items),
             )
             .filter(QCWorkOrder.qc_work_order_id == qc_work_order_id)
             .first()

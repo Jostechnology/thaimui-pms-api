@@ -1,6 +1,9 @@
-from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction
+import time
+
+from app.api_auth import _log_timer
+from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem, WorkRunPickingItem
 from app.app import db
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 
 def get_work_run_by_id(work_run_id):
@@ -28,19 +31,22 @@ def get_sales_item_by_work_run(work_run_id):
 
 
 def get_work_run_display(work_run_id):
-    """Full fetch — loads assignments, machines, breaks."""
+    """Full fetch — loads assignments, machines, breaks, required_items in 1 query."""
     try:
+        _start = time.perf_counter()
         query = (
             db.session.query(WorkRun)
             .options(
-                selectinload(WorkRun.work_order).selectinload(WorkOrder.sales_item),
-                selectinload(WorkRun.assignments).selectinload(WorkRunAssignment.employee),
-                selectinload(WorkRun.machines).selectinload(WorkRunMachine.machine),
-                selectinload(WorkRun.breaks),
+                joinedload(WorkRun.assignments).joinedload(WorkRunAssignment.employee),
+                joinedload(WorkRun.machines).joinedload(WorkRunMachine.machine),
+                joinedload(WorkRun.breaks),
+                joinedload(WorkRun.required_items),
             )
             .filter(WorkRun.work_run_id == work_run_id)
         )
-        return query.first()
+        work_run = query.first()
+        _log_timer("work_run_get", (time.perf_counter() - _start) * 1000, "", True)
+        return work_run
     except Exception:
         raise
 
@@ -100,6 +106,43 @@ def create_work_run(work_run):
         return work_run
     except Exception:
         raise
+
+
+def create_required_item(required_item):
+    db.session.add(required_item)
+    return required_item
+
+
+def get_required_items(work_run_id):
+    query = (
+        db.session.query(WorkRunRequiredItem)
+        .filter(WorkRunRequiredItem.work_run_id == work_run_id)
+        .order_by(WorkRunRequiredItem.id.asc())
+    )
+    return query.all()
+
+
+def get_required_item_by_id(required_item_id):
+    query = (
+        db.session.query(WorkRunRequiredItem)
+        .filter(WorkRunRequiredItem.id == required_item_id)
+    )
+    return query.first()
+
+
+def create_picking_consumption(work_run_picking_item):
+    db.session.add(work_run_picking_item)
+    return work_run_picking_item
+
+
+def get_wrpi_rows_for_required_item(work_run_required_item_id):
+    """WRPI rows allocated for a specific required item, ordered FIFO ascending."""
+    query = (
+        db.session.query(WorkRunPickingItem)
+        .filter(WorkRunPickingItem.work_run_required_item_id == work_run_required_item_id)
+        .order_by(WorkRunPickingItem.picking_request_item_id.asc())
+    )
+    return query.all()
 
 
 # --- Assignment management ---

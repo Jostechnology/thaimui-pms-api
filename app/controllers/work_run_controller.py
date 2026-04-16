@@ -1,7 +1,9 @@
-from app.api_auth import verify_required
+import time
+
+from app.api_auth import _log_timer, verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import WorkRunDisplaySchema, WorkRunSchema
+from app.ma_sqlalchemy import MaterialListSchema, WorkRunDisplaySchema, WorkRunSchema, WorkRunRequiredItemSchema
 from app.services.work_run_service import (
     create_work_run,
     complete_work_run,
@@ -15,6 +17,9 @@ from app.services.work_run_service import (
     unassign_employee,
     assign_machine,
     unassign_machine,
+    add_required_item,
+    get_required_items,
+    get_material_using_in_work_order_of_work_run
 )
 
 
@@ -22,7 +27,10 @@ from app.services.work_run_service import (
 @verify_required
 def api_get_work_run(work_run_id):
     result = get_work_run_by_id(work_run_id)
-    return jsonify({"data": WorkRunDisplaySchema().dump(result), "success": True}), 200
+    _start = time.perf_counter()
+    data = WorkRunDisplaySchema().dump(result)
+    _log_timer("work_run_dto_time", (time.perf_counter() - _start) * 1000, f"Rows : ", True)
+    return jsonify({"data": data, "success": True}), 200
 
 
 @app.route("/api/work_run/<int:work_run_id>/detail", methods=["GET"])
@@ -123,3 +131,26 @@ def api_unassign_machine(work_run_id):
         raise MissingFieldsError("machine_id is required")
     result = unassign_machine(work_run_id, machine_id)
     return jsonify({"data": WorkRunDisplaySchema().dump(result), "success": True}), 200
+
+@app.route("/api/work_run/<int:work_run_id>/required_items", methods=["GET"])
+@verify_required
+def api_work_run_get_required_items(work_run_id):
+    result = get_required_items(work_run_id)
+    return jsonify({"data": WorkRunRequiredItemSchema(many=True).dump(result), "success": True}), 200
+
+
+@app.route("/api/work_run/<int:work_run_id>/required_items", methods=["POST"])
+@verify_required
+def api_work_run_add_required_item(work_run_id):
+    body = request.get_json() or []
+    data = body.get("data", [])
+    if not isinstance(data, list):
+        data = [data]
+    result = add_required_item(work_run_id, data)
+    return jsonify({"data": WorkRunRequiredItemSchema(many=True).dump(result), "success": True}), 201
+
+@app.route("/api/work_run/<int:work_run_id>/get_material_list", methods=["GET"])
+@verify_required
+def api_work_run_material_of_sales_item(work_run_id):
+    materials = get_material_using_in_work_order_of_work_run(work_run_id)
+    return jsonify({"data": MaterialListSchema(many=True).dump(materials), "success": True}), 200

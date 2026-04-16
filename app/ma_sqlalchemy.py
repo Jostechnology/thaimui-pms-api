@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -341,6 +341,9 @@ class QCItemSchema(Schema):
     quantity         = fields.String()
     serial_no        = fields.String()
     item_remark      = fields.String()
+    material_list_id = fields.Integer(allow_none=True)
+    required_qty     = fields.Integer(allow_none=True)
+    material_list         = fields.Nested(MaterialListSchema)
 
 class search_qc_work_order_schema(Schema):
     qc_work_order_id = fields.Integer()
@@ -424,22 +427,149 @@ class PickingRequestSchema(Schema):
     created_date         = fields.DateTime()
     updated_by           = fields.String(allow_none=True)
     updated_date         = fields.DateTime(allow_none=True)
-
+    
+    
+class PickingRequestItemDetailedSchema(PickingRequestItemSchema):
+    picking_request = fields.Nested(PickingRequestSchema)
 
 class TestResultPickingItemSchema(Schema):
-    """From TestResult POV — nested inside TestResultSchema for non-produced items."""
-    id                      = fields.Integer(dump_only=True)
-    picking_request_item_id = fields.Integer(dump_only=True)
-    qty_consumed            = fields.Integer()
-    picking_request_item    = fields.Nested(PickingRequestItemSchema(), dump_only=True)
+    """From TestResult POV — nested inside TestResultSchema."""
+    id                           = fields.Integer(dump_only=True)
+    picking_request_item_id      = fields.Integer(dump_only=True)
+    test_result_required_item_id = fields.Integer(dump_only=True, allow_none=True)
+    qty_allocated                = fields.Integer(dump_only=True)
+    qty_consumed                 = fields.Integer(allow_none=True)
+    picking_request_item         = fields.Nested(PickingRequestItemDetailedSchema(), dump_only=True)
+
+
+class WorkRunRequiredItemSchema(Schema):
+    """BOM requirement for a WorkRun."""
+    id                  = fields.Integer(dump_only=True)
+    work_run_id         = fields.Integer(dump_only=True)
+    material_list_id    = fields.Integer(allow_none=True)
+    item_code           = fields.String()
+    item_name           = fields.String()
+    quantity            = fields.Integer()
+    unit                = fields.String(allow_none=True)
+    qty_consumed_actual = fields.Integer(allow_none=True)
+    created_by          = fields.String(dump_only=True)
+    created_date        = fields.DateTime(dump_only=True)
+
+
+class WorkRunPickingItemSchema(Schema):
+    """FIFO allocation from PickingRequestItem to a WorkRun."""
+    id                        = fields.Integer(dump_only=True)
+    work_run_id               = fields.Integer(dump_only=True)
+    picking_request_item_id   = fields.Integer(dump_only=True)
+    work_run_required_item_id = fields.Integer(dump_only=True, allow_none=True)
+    qty_allocated             = fields.Integer(dump_only=True)
+    qty_consumed              = fields.Integer(allow_none=True)
+    picking_request_item      = fields.Nested(PickingRequestItemSchema(), dump_only=True)
+
+
+class TestResultRequiredItemSchema(Schema):
+    """Material requirement for a TestResult, seeded from QCItem."""
+    id                  = fields.Integer(dump_only=True)
+    test_result_id      = fields.Integer(dump_only=True)
+    qc_item_id          = fields.Integer(allow_none=True, dump_only=True)
+    material_list_id    = fields.Integer(allow_none=True)
+    item_code           = fields.String()
+    item_name           = fields.String()
+    required_qty        = fields.Integer()
+    unit                = fields.String(allow_none=True)
+    qty_consumed_actual = fields.Integer(allow_none=True)
+    created_by          = fields.String(dump_only=True)
+    created_date        = fields.DateTime(dump_only=True)
 
 class PickingRequestDetailSchema(PickingRequestSchema):
     items              = fields.List(fields.Nested(PickingRequestItemSchema()))
+    sales_order        = fields.Nested(SalesOrderSearchSchema)
+
+class PickingItemAdjustmentSchema(Schema):
+    id                      = fields.Integer(dump_only=True)
+    picking_request_item_id = fields.Integer(dump_only=True)
+    delta_qty               = fields.Integer()
+    reason                  = fields.Enum(PickingItemAdjustmentReason)
+    remark                  = fields.String(allow_none=True)
+    created_by              = fields.String(dump_only=True)
+    created_date            = fields.DateTime(dump_only=True)
+
+
+class TestResultSummarySchema(Schema):
+    test_result_id   = fields.Integer(dump_only=True)
+    test_result_code = fields.String(allow_none=True, dump_only=True)
+    session_status   = fields.Enum(TestSessionStatus, dump_only=True)
+    overall_status   = fields.Enum(TestResultStatus, allow_none=True, dump_only=True)
+    tested_by        = fields.String(allow_none=True, dump_only=True)
+    test_date        = fields.DateTime(allow_none=True, dump_only=True)
+
+
+class WorkRunSummarySchema(Schema):
+    work_run_id   = fields.Integer(dump_only=True)
+    lot_number    = fields.String(allow_none=True, dump_only=True)
+    work_order_id = fields.Integer(dump_only=True)
+    status        = fields.Enum(WorkRunStatus, dump_only=True)
+
+
+class TestResultConsumptionFromPickingItemSchema(Schema):
+    """TRPI from PickingRequestItem POV — who consumed this item in a TestResult."""
+    id                           = fields.Integer(dump_only=True)
+    test_result_id               = fields.Integer(dump_only=True)
+    test_result_required_item_id = fields.Integer(allow_none=True, dump_only=True)
+    qty_allocated                = fields.Integer(dump_only=True)
+    qty_consumed                 = fields.Integer(allow_none=True, dump_only=True)
+    test_result                  = fields.Nested(TestResultSummarySchema(), dump_only=True)
+
+
+class WorkRunConsumptionFromPickingItemSchema(Schema):
+    """WRPI from PickingRequestItem POV — who consumed this item in a WorkRun."""
+    id                        = fields.Integer(dump_only=True)
+    work_run_id               = fields.Integer(dump_only=True)
+    work_run_required_item_id = fields.Integer(allow_none=True, dump_only=True)
+    qty_allocated             = fields.Integer(dump_only=True)
+    qty_consumed              = fields.Integer(allow_none=True, dump_only=True)
+    work_run                  = fields.Nested(WorkRunSummarySchema(), dump_only=True)
+
+
+class PickingRequestItemFullSchema(PickingRequestItemSchema):
+    """PickingRequestItem with consumption detail and computed availability."""
+    test_result_consumptions = fields.List(fields.Nested(TestResultConsumptionFromPickingItemSchema()), dump_only=True)
+    work_run_consumptions    = fields.List(fields.Nested(WorkRunConsumptionFromPickingItemSchema()), dump_only=True)
+    adjustments              = fields.List(fields.Nested(PickingItemAdjustmentSchema()), dump_only=True)
+    qty_committed            = fields.Method("get_qty_committed", dump_only=True)
+    adj_total                = fields.Method("get_adj_total", dump_only=True)
+    qty_available            = fields.Method("get_qty_available", dump_only=True)
+
+    def get_qty_committed(self, obj):
+        trpi_sum = sum(
+            (c.qty_consumed if c.qty_consumed is not None else c.qty_allocated)
+            for c in (obj.test_result_consumptions or [])
+        )
+        wrpi_sum = sum(
+            (c.qty_consumed if c.qty_consumed is not None else c.qty_allocated)
+            for c in (obj.work_run_consumptions or [])
+        )
+        return trpi_sum + wrpi_sum
+
+    def get_adj_total(self, obj):
+        return sum(a.delta_qty for a in (obj.adjustments or []))
+
+    def get_qty_available(self, obj):
+        committed = self.get_qty_committed(obj)
+        adj = self.get_adj_total(obj)
+        return obj.quantity + adj - committed
+
+
+class PickingRequestFullDetailSchema(PickingRequestSchema):
+    """PickingRequest with full item consumption breakdown."""
+    items       = fields.List(fields.Nested(PickingRequestItemFullSchema()), dump_only=True)
+    sales_order = fields.Nested(SalesOrderSearchSchema, dump_only=True)
 
 class WorkRunDisplaySchema(WorkRunSchema):
     assignments      = fields.List(fields.Nested(WorkRunAssignmentSchema()))
     machines         = fields.List(fields.Nested(WorkRunMachineSchema()))
     breaks           = fields.List(fields.Nested(WorkRunBreakSchema()))
+    required_items   = fields.List(fields.Nested(WorkRunRequiredItemSchema()), dump_only=True)
 
 class WorkRunDetailSchema(WorkRunSchema):
     test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
@@ -471,6 +601,7 @@ class TestResultSchema(Schema):
     test_result_items       = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
     work_run_sources        = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
     picking_item_sources    = fields.List(fields.Nested(TestResultPickingItemSchema()), dump_only=True)
+    required_items          = fields.List(fields.Nested(TestResultRequiredItemSchema()), dump_only=True)
     created_date            = fields.DateTime(dump_only=True)
     updated_date            = fields.DateTime(dump_only=True)
     created_by              = fields.String(dump_only=True)

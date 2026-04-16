@@ -2,7 +2,7 @@ from app.con_sqlalchemy import (
     PickingRequest, PickingRequestItem,
     PickingRequestStatus,
 )
-from app.repositories import picking_request_repository, sales_order_repository
+from app.repositories import picking_request_repository, sales_order_repository, sales_item_repository
 from app.services import document_code_service
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, OuterServicesError
@@ -38,6 +38,26 @@ def _build_items(items_data):
             material_list_id=item.get("material_list_id"),
         ))
     return result
+
+
+def _check_sales_item_over_allocation(items):
+    """
+    For items tied to a non-produced SalesItem (sales_item_id set), block if
+    total picked qty across existing non-FAILED PRs + new qty exceeds SalesItem.quantity.
+    Skips items with only material_list_id (material over-allocation is handled by FIFO gate at WorkRun start).
+    """
+    for item in items:
+        if not item.sales_item_id:
+            continue
+        sales_item = sales_item_repository.get_sales_item_by_id(item.sales_item_id)
+        if not sales_item:
+            raise NotFoundError(f"SalesItem {item.sales_item_id} not found")
+        existing_picked = picking_request_repository.get_non_failed_picked_qty_for_sales_item(item.sales_item_id)
+        if existing_picked + item.quantity > sales_item.quantity:
+            raise ValidationError(
+                f"{sales_item.item_code} ({sales_item.item_name}): "
+                f"ขอ Pick รวม {existing_picked + item.quantity} ชิ้น แต่สั่งซื้อเพียง {sales_item.quantity} ชิ้น"
+            )
 
 
 def _call_wms_create_pickup(pr, items):
@@ -92,6 +112,7 @@ def create_for_sales_order(doc_entry, data):
             raise NotFoundError(f"Sales Order {doc_entry} not found")
 
         items = _build_items(data.get("items", []))
+        _check_sales_item_over_allocation(items)
 
         pr = PickingRequest(
             picking_request_code=document_code_service.generate_number("PR"),
@@ -180,6 +201,13 @@ def get_list(data):
         status=status,
         doc_entry=doc_entry,
     )
+
+
+def get_detail(picking_request_id):
+    pr = picking_request_repository.get_picking_request_full_detail_by_id(picking_request_id)
+    if not pr:
+        raise NotFoundError(f"Picking Request {picking_request_id} not found")
+    return pr
 
 
 def get_by_sales_order(doc_entry):
