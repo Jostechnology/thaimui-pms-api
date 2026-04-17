@@ -63,8 +63,13 @@ def verify_required(f):
             _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: missing branch_id in token")
             return jsonify({"message": "Token ไม่มีข้อมูลสาขา กรุณาเลือกสาขาใหม่"}), 401
 
+        role_id = decoded.get("role_id")
+        if role_id is None:
+            return jsonify({"message": "ไม่พบ Role ของผู้ใช้"}), 401
+        
         g.username = decoded.get("username")
         g.branch_id = branch_id
+        g.role_id = role_id
         _log_timer("verify_required", (time.perf_counter() - _start) * 1000, f"user: {g.username}, branch: {g.branch_id}")
         return f(*args, **kwargs)
     return decorated

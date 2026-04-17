@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -363,6 +363,7 @@ class QCWorkOrderSchema(Schema):
     created_by = fields.String()
     updated_by = fields.String()
     sales_item = fields.Nested(SalesItemNoMaterialSchema)
+    status = fields.Enum(QCWorkOrderStatus)
 
 class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
     qc_form = fields.Nested(QCFormSchema, allow_none=True)

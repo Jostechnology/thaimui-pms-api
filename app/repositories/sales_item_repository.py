@@ -1,15 +1,15 @@
 from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, WorkRun, QCWorkOrder, TestResult, SalesItemStatus, PickingRequestItem, PickingRequest
 from app.app import db
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 def get_all_sales_items(page, limit, search):
     try:
         query = (
             db.session.query(SalesItem)
             .options(
-                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
-                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
-                selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
+                joinedload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
+                joinedload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.picking_request_items).joinedload(PickingRequestItem.picking_request),
             )
         )
         if search:
@@ -87,7 +87,7 @@ def get_sales_item_for_complete(sales_item_id):
             db.session.query(SalesItem)
             .options(
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
-                selectinload(SalesItem.qc_work_orders),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
         )

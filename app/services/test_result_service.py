@@ -1,7 +1,7 @@
 from app.con_sqlalchemy import (
     TestResult, TestResultItem, TestResultStatus, TestSessionStatus,
     TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem,
-    WorkRunStatus, WorkRunTransactionType, QCWorkOrderStatus,
+    WorkRunStatus, WorkRunTransactionType, QCWorkOrder, QCWorkOrderStatus,
 )
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import (
@@ -123,6 +123,9 @@ def create_test_result(qc_work_order_id, data):
         )
         test_result_repository.create_test_result(test_result)
         db.session.flush()
+
+        if qc.status == QCWorkOrderStatus.PENDING:
+            qc.status = QCWorkOrderStatus.INPROGRESS
 
         # For produced items: validate + record work_run_sources immediately
         if sales_item.produce:

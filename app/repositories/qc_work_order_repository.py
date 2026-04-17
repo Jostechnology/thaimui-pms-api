@@ -9,7 +9,7 @@ from app.exception import NotFoundError
 def _qc_work_order_options():
     """Eager-load exactly what QCWorkOrderSchema needs — no deep SalesItem nesting."""
     return [
-        joinedload(QCWorkOrder.sales_item),
+        selectinload(QCWorkOrder.sales_item),
         joinedload(QCWorkOrder.qc_form),
         joinedload(QCWorkOrder.qc_items).joinedload(QCItem.material_list)
     ]
@@ -26,10 +26,7 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
                 )
             )
         query = query.options(
-            selectinload(QCWorkOrder.sales_item).options(
-                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
-                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
-            )
+            selectinload(QCWorkOrder.sales_item)
         )
         result = query.order_by(QCWorkOrder.created_date.desc()).paginate(
             page=page, per_page=limit, error_out=False

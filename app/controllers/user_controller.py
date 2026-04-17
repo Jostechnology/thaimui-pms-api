@@ -30,10 +30,11 @@ def api_get_module_tree():
     return jsonify({"data" : module_tree, "success" : True}), 200
 
 @app.route("/api/get_role_permission", methods=["POST"])
+@verify_required
 def api_get_role_permission():
     data = request.get_json()
-    username = data.get("username")
-    role_id = data.get("role_id")
+    username = g.username
+    role_id = g.role_id
     module_tree, signature = user_service.get_role_permission(username, role_id)
     return jsonify({"data" : {"module_tree" : module_tree, "signature" : signature, "success" : True}}), 200
 

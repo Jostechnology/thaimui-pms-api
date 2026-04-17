@@ -514,6 +514,7 @@ class MaterialList(AuditMixin):
 
 class QCWorkOrderStatus(enum.Enum):
     PENDING = 'PENDING'
+    INPROGRESS = 'INPROGRESS'
     PASSED = 'PASSED'
 
 class QCWorkOrder(AuditMixin):

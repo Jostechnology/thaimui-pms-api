@@ -29,7 +29,6 @@ def create_token(data, token_type="access", expires_in=None):
 
 def encode_jwt(data):
     try:
-        print(data)
         return jwt.encode(data, JWT_SECRET_KEY, algorithm="HS256")
     except Exception:
         raise

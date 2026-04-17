@@ -83,15 +83,6 @@ def get_module_tree():
 
 def get_role_permission(username, role_id):
     try:
-        if (not role_id) and username:
-            user = user_repository.get_user_by_username(username)
-            if not user:
-                raise NotFoundError("ไม่พบผู้ใข้งาน")
-
-            role_id = user.role_id
-            role = role_repository.get_role_by_id(role_id)
-            if not role:
-                raise NotFoundError("ไม่พบ Role")
 
         role_permission = role_repository.get_active_permissions_by_role(role_id)
         if not role_permission:
