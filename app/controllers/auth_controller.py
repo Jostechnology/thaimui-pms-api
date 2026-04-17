@@ -8,11 +8,11 @@ from app.app import limiter
 @limiter.limit("5 per minute", error_message="คุณล็อกอินเกินกำหนด กรุณาลองใหม่ในอีก 1 นาที")
 def login_controller():
     data = request.get_json()
-    branch_select_token, user_branches = auth_service.login_service(data)
-    print(branch_select_token, user_branches)
+    branch_select_token, user_branches, has_all_branch_access = auth_service.login_service(data)
     return jsonify({
         "branch_select_token": branch_select_token,
         "user_branches": user_branches,
+        "has_all_branch_access": has_all_branch_access,
         "success": True
     }), 200
 
@@ -21,6 +21,17 @@ def login_controller():
 def select_branch_controller():
     data = request.get_json()
     access_token, refresh_token = auth_service.select_branch_service(data)
+    return jsonify({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "success": True
+    }), 200
+
+
+@app.route('/api/select-all-branch', methods=['POST'])
+def select_all_branch_controller():
+    data = request.get_json()
+    access_token, refresh_token = auth_service.select_all_branch_service(data)
     return jsonify({
         "access_token": access_token,
         "refresh_token": refresh_token,

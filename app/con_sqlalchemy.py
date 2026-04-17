@@ -46,6 +46,12 @@ def _add_branch_filter(execute_state):
 @event.listens_for(db.session, "before_flush")
 def manage_branch_data(session, flush_context, instances):
     """ถ้า API รอบนี้ไม่มีข้อมูลสาขา จะปล่อยผ่านไป"""
+    if g.get("all_branch_mode"):
+        for obj in list(session.new) + list(session.dirty) + list(session.deleted):
+            if isinstance(obj, BranchScopedMixin):
+                raise AuthorizationError("โหมด All Branch ไม่อนุญาตให้แก้ไขข้อมูล")
+        return
+
     if not g.get("branch_id"):
         return
         
@@ -173,6 +179,7 @@ class RolePermission(BaseModel):
     role_id = db.Column(db.Integer, db.ForeignKey('m_role.role_id'), nullable=False)
     permission_id = db.Column(db.Integer, db.ForeignKey('m_permission.permission_id'), nullable=False)
     active_flag = db.Column(db.Boolean, nullable=False)
+    __table_args__ = (db.UniqueConstraint('role_id', 'permission_id', name='uq_role_permission'),)
 
 class WorkOrderStatus(enum.Enum):
     READY = 'READY'

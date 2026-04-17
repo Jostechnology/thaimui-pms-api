@@ -3,10 +3,21 @@ from app.app import app
 from flask import request, jsonify, g
 from app.exception import DisabledAction
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
+from app.services import cache_service
 from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order
+from app.services.storage_service import PRESIGNED_CACHE_TTL
 from app.utils import decode_token, check_true_permissions
 import base64, json
+from datetime import datetime, timedelta
 
+def _sales_order_page_cache(page, per_page, branch_code):
+    return f"sales_order_{page}_{per_page}_{branch_code}"
+
+def _sales_order_detail_cache(doc_entry, branch_id):
+    return f"sales_order_detail_{doc_entry}_{branch_id}"
+
+PAGE_CACHE_TTL = 3600
+SALES_ORDER_CACHE_TTL = 4800
 
 def _has_unassigned_sales_order_view_permission(permission_token: str) -> bool:
     decoded = decode_token(permission_token)
@@ -40,24 +51,35 @@ def _has_unassigned_sales_order_create_permission(permission_token: str) -> bool
 @verify_required
 def api_get_all_sales_orders():
     try:
+
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 10, type=int)
         search = request.args.get("search", "", type=str)
         data = {"page": page, "per_page": per_page, "search": search}
+        
+        key = _sales_order_page_cache(page, per_page, g.branch_id)
+        cached = cache_service.get(key)
+        if cached and not search:
+            return jsonify(cached), 200
 
-        permission_token = get_requests_permission(request)
-        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
+        # permission_token = get_requests_permission(request)
+        # show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
 
         result = get_all_sales_orders(
             data,
-            show_unassigned=show_unassigned,
-            branch_id=None if show_unassigned else g.branch_id,
+            # show_unassigned=show_unassigned,
+            branch_id=g.branch_id,
         )
-        return jsonify({
+
+        response_dict = {
             "data": {"items": result["items"]},
             "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
             "success": True,
-        }), 200
+        }
+
+        if page <= 3 and per_page == 10 and g.branch_id and not search:
+            cache_service.set(key, response_dict, ttl=PAGE_CACHE_TTL)
+        return jsonify(response_dict), 200
     except Exception:
         raise
 
@@ -71,6 +93,9 @@ def api_assign_branch_to_sales_order(doc_entry):
         if branch_id is None:
             return jsonify({"message": "branch_id is required"}), 400
         sales_order = assign_branch_to_sales_order(doc_entry, branch_id)
+        for p in range(1, 4):
+            cache_service.delete(_sales_order_page_cache(p, 10, branch_id))
+        cache_service.delete(_sales_order_detail_cache(doc_entry, branch_id))
         return jsonify({"data": SalesOrderSchema().dump(sales_order), "success": True}), 200
     except Exception:
         raise
@@ -99,13 +124,13 @@ def api_search_sales_order():
         search = request.args.get("search", "", type=str)
         data = {"page": page, "per_page": per_page, "search": search}
 
-        permission_token = get_requests_permission(request)
-        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
+        # permission_token = get_requests_permission(request)
+        # show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
 
         result = search_sales_order(
             data,
-            show_unassigned=show_unassigned,
-            branch_id=None if show_unassigned else g.branch_id,
+            # show_unassigned=show_unassigned,
+            branch_id=g.branch_id,
         )
         return jsonify({
             "data": {"items": SalesOrderSearchSchema(many=True).dump(result["items"])},
@@ -120,13 +145,18 @@ def api_search_sales_order():
 @verify_required
 def api_get_by_doc_entry(doc_entry):
     try:
-        permission_token = get_requests_permission(request)
-        show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
+        key = _sales_order_detail_cache(doc_entry, g.branch_id)
+        cached = cache_service.get(key)
+        if cached:
+            return jsonify(cached), 200
+
+        # permission_token = get_requests_permission(request)
+        # show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
 
         sales_order, items, materials, branch = get_sales_order_detail(
             doc_entry,
-            show_unassigned=show_unassigned,
-            branch_id=None if show_unassigned else g.branch_id,
+            # show_unassigned=show_unassigned,
+            branch_id=g.branch_id,
         )
         so_schema = SalesOrderSchema()
         item_schema = SalesItemSchema(many=True)
@@ -140,7 +170,15 @@ def api_get_by_doc_entry(doc_entry):
         data["material_list"] = material_list_data
         data["branch_code"] = branch.branch_code if branch else None
         data["branch_name"] = branch.branch_name if branch else None
-        return jsonify({"data": data, "success": True}), 200
+
+        response_dict = {"data": data, "success": True}
+
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        created = sales_order.created_date
+        if created and (created.replace(tzinfo=None) >= cutoff):
+            cache_service.set(key, response_dict, ttl=SALES_ORDER_CACHE_TTL)
+
+        return jsonify(response_dict), 200
     except Exception:
         raise
 

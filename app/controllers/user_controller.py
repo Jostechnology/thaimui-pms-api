@@ -1,9 +1,13 @@
 from app.api_auth import verify_required, decode_and_verify_permission_jwt
 from app.app import app, db
 from flask import request, jsonify, g
-from app.services import user_service
+from app.services import user_service, cache_service
+from app.services.storage_service import PRESIGNED_CACHE_TTL
 from app.repositories import role_repository, user_repository
 from sqlalchemy.exc import IntegrityError
+
+def _role_permission_cache(role_id):
+    return f"role_permission_{role_id}"
 
 @app.route("/api/get_all_roles", methods=["GET", "POST"])
 def api_get_all_roles():
@@ -32,11 +36,32 @@ def api_get_module_tree():
 @app.route("/api/get_role_permission", methods=["POST"])
 @verify_required
 def api_get_role_permission():
-    data = request.get_json()
     username = g.username
     role_id = g.role_id
+    key = _role_permission_cache(role_id)
+    cached = cache_service.get(key)
+    if cached:
+        return jsonify(cached), 200
     module_tree, signature = user_service.get_role_permission(username, role_id)
-    return jsonify({"data" : {"module_tree" : module_tree, "signature" : signature, "success" : True}}), 200
+    response_dict = {"data": {"module_tree": module_tree, "signature": signature, "success": True}}
+    cache_service.set(key, response_dict, ttl=PRESIGNED_CACHE_TTL)
+    return jsonify(response_dict), 200
+
+@app.route("/api/get_other_role_permission", methods=["POST"]) # Add decode authorization later.
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "ROLE_MANAGEMENT", "method": "edit"}])
+@verify_required
+def api_get_other_role_permission():
+    data = request.get_json()
+    username = g.username
+    role_id = int(data.get("role_id", None))
+    key = _role_permission_cache(role_id)
+    cached = cache_service.get(key)
+    if cached:
+        return jsonify(cached), 200
+    module_tree, signature = user_service.get_role_permission(username, role_id)
+    response_dict = {"data": {"module_tree": module_tree, "signature": signature, "success": True}}
+    cache_service.set(key, response_dict, ttl=PRESIGNED_CACHE_TTL)
+    return jsonify(response_dict), 200
 
 @app.route("/api/create_module", methods=["POST"])
 @verify_required
@@ -68,6 +93,7 @@ def api_get_module_sorted():
 def upsert_role_permission():
     data = request.get_json()
     res = user_service.upsert_role_permission(data)
+    cache_service.delete(_role_permission_cache(data.get("role_id")))
     return jsonify({"data" : res, "success" : True}), 200
 
 

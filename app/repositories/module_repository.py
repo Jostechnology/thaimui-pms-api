@@ -1,11 +1,19 @@
 from app.con_sqlalchemy import Module, Permission, RolePermission
 from app.app import db
-from sqlalchemy import desc
+from sqlalchemy import desc, tuple_
 
 def get_all_modules():
     try:
         modules = db.session.query(Module).order_by(Module.level, Module.sort_order).all()
         return modules
+    except Exception:
+        raise
+
+def get_module_id_code_map():
+    """Returns dict {module_id: module_code} for all modules."""
+    try:
+        query = db.session.query(Module.module_id, Module.module_code)
+        return {row.module_id: row.module_code for row in query.all()}
     except Exception:
         raise
 
@@ -161,6 +169,26 @@ def get_permission_by_module(module_id, method):
         return permission
     except Exception as e:
         raise e
+
+def get_permissions_by_module_method_pairs(pairs):
+    """Batch fetch permissions for a list of (module_id, method) pairs. Returns list of Permission."""
+    try:
+        if not pairs:
+            return []
+        query = db.session.query(Permission).filter(
+            tuple_(Permission.module_id, Permission.method).in_(pairs)
+        )
+        return query.all()
+    except Exception:
+        raise
+
+def get_role_permissions_by_role(role_id):
+    """Fetch all RolePermission rows for a role. Returns list."""
+    try:
+        query = db.session.query(RolePermission).filter(RolePermission.role_id == role_id)
+        return query.all()
+    except Exception:
+        raise
 
 def get_all_role_permission():
     try:

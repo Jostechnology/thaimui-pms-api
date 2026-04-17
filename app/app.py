@@ -97,6 +97,7 @@ from .controllers import branch_controller
 from .controllers import component_template_controller
 from .controllers import machine_type_controller
 from .controllers import phase_template_controller
+from .controllers import all_branch_controller
 
 # with app.app_context():
 #     db.create_all()

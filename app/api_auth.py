@@ -54,12 +54,12 @@ def verify_required(f):
             _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: token not in DB")
             return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
 
-        if decoded.get("type") == "branch_select":
-            _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: branch_select token rejected")
+        if decoded.get("type") in ("branch_select"):
+            _log_timer("verify_required", (time.perf_counter() - _start) * 1000, f"early exit: {decoded.get('type')} token rejected")
             return jsonify({"message": "Token ประเภทไม่ถูกต้อง"}), 401
 
         branch_id = decoded.get("branch_id")
-        if branch_id is None:
+        if (branch_id is None) and decoded.get("type") != "all_branch":
             _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: missing branch_id in token")
             return jsonify({"message": "Token ไม่มีข้อมูลสาขา กรุณาเลือกสาขาใหม่"}), 401
 
@@ -71,6 +71,61 @@ def verify_required(f):
         g.branch_id = branch_id
         g.role_id = role_id
         _log_timer("verify_required", (time.perf_counter() - _start) * 1000, f"user: {g.username}, branch: {g.branch_id}")
+        return f(*args, **kwargs)
+    return decorated
+
+
+def verify_required_all_branch(f):
+    """Like verify_required, but only accepts all_branch tokens. Read-only cross-branch access."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        _start = time.perf_counter()
+        if request.method == "OPTIONS":
+            return f(*args, **kwargs)
+
+        token = None
+        if "Authorization" in request.headers:
+            parts = request.headers["Authorization"].split(" ")
+            if len(parts) == 2 and parts[0] == "Bearer":
+                token = parts[1]
+        if not token:
+            try:
+                body = request.get_json(silent=True)
+                if body and "token" in body:
+                    token = body["token"]
+            except Exception:
+                pass
+        if not token:
+            _log_timer("verify_required_all_branch", (time.perf_counter() - _start) * 1000, "early exit: missing token")
+            return jsonify({"message": "Missing token"}), 401
+
+        decoded = decode_token(token)
+        if not decoded:
+            _log_timer("verify_required_all_branch", (time.perf_counter() - _start) * 1000, "early exit: invalid token")
+            return jsonify({"message": "Invalid or expired token"}), 401
+
+        jti = decoded.get("jti")
+        if not Tokenlist.query.filter_by(jwt_id=jti).first():
+            _log_timer("verify_required_all_branch", (time.perf_counter() - _start) * 1000, "early exit: token not in DB")
+            return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
+
+        if decoded.get("type") != "all_branch":
+            _log_timer("verify_required_all_branch", (time.perf_counter() - _start) * 1000, "early exit: wrong token type")
+            return jsonify({"message": "ต้องใช้ Token แบบ All Branch เท่านั้น"}), 401
+
+        if not decoded.get("all_branch_mode"):
+            _log_timer("verify_required_all_branch", (time.perf_counter() - _start) * 1000, "early exit: missing all_branch_mode")
+            return jsonify({"message": "Token ไม่มีสิทธิ์ All Branch"}), 401
+
+        role_id = decoded.get("role_id")
+        if role_id is None:
+            return jsonify({"message": "ไม่พบ Role ของผู้ใช้"}), 401
+
+        g.username = decoded.get("username")
+        g.branch_id = None
+        g.role_id = role_id
+        g.all_branch_mode = True
+        _log_timer("verify_required_all_branch", (time.perf_counter() - _start) * 1000, f"user: {g.username}, all_branch_mode")
         return f(*args, **kwargs)
     return decorated
 
@@ -119,7 +174,7 @@ def verify_required_center(f):
             return jsonify({"message": "Token ประเภทไม่ถูกต้อง"}), 401
 
         branch_id = decoded.get("branch_id")
-        if branch_id is None:
+        if (branch_id is None) and decoded.get("type") != "all_branch":
             _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: missing branch_id in token")
             return jsonify({"message": "Token ไม่มีข้อมูลสาขา กรุณาเลือกสาขาใหม่"}), 401
 

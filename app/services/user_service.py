@@ -2,10 +2,21 @@ import base64
 import json
 from app.app import db
 from app.exception import AppException, MissingFieldsError, NotFoundError, UniqueError
-from app.con_sqlalchemy import Role,Branch
+from app.con_sqlalchemy import Role
 from app.repositories import module_repository, role_repository, user_repository, branch_repository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
 from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
+
+
+def check_user_permission(user_id: int, module_code: str, action: str) -> bool:
+    try:
+        if not user_id or not module_code or not action:
+            raise MissingFieldsError("Missing user_id, module_code, or action")
+        return role_repository.check_user_has_permission(user_id, module_code, action)
+    except AppException:
+        raise
+    except Exception as e:
+        raise AppException(str(e))
 
 
 def create_role(role_data: dict):
@@ -90,14 +101,7 @@ def get_role_permission(username, role_id):
 
         schema = GetRolePremissionSchema(many=True)
         result = schema.dump(role_permission)
-        module_tree = get_module_tree()
-
-        # Build a module_code lookup: module_id -> module_code
-        module_code_map = {}
-        for m in module_tree:
-            module_code_map[m["module_id"]] = m["module_code"]
-            for sm in m.get("sub_modules", []):
-                module_code_map[sm["module_id"]] = sm["module_code"]
+        module_code_map = module_repository.get_module_id_code_map()
 
         # Flat list of granted permissions: ["MODULE_CODE.method", ...]
         flat_permissions = [
@@ -105,8 +109,7 @@ def get_role_permission(username, role_id):
             for r in result
             if r.get("module_id") in module_code_map and r.get("method")
         ]
-        print(f"flat_permissions : {flat_permissions}")
-
+        
         data_bytes = json.dumps(flat_permissions).encode("utf-8")
         permission_tree_b64 = base64.b64encode(data_bytes).decode("utf-8")
 
@@ -370,29 +373,26 @@ def upsert_role_permission(data):
         if not role_id or not isinstance(module_list, list):
             raise MissingFieldsError("Missing role_id or module_list")
 
-        permission_id_list = []
-        for module in module_list:
-            module_id = module.get("module_id")
-            method = module.get("method")
-            if not module_id or not method:
-                continue
-            mr = module_repository.get_permission_by_module(module_id, method)
-            if mr and mr.permission_id is not None:
-                permission_id_list.append(mr.permission_id)
+        # Batch fetch all permissions in one query instead of N queries
+        pairs = [
+            (m.get("module_id"), m.get("method"))
+            for m in module_list
+            if m.get("module_id") and m.get("method")
+        ]
+        permissions = module_repository.get_permissions_by_module_method_pairs(pairs)
+        permission_id_set = {p.permission_id for p in permissions if p.permission_id is not None}
 
         module_repository.deactivate_role_permission_of_role(role_id)
 
+        # Batch fetch existing RolePermission rows in one query
+        existing_rps = module_repository.get_role_permissions_by_role(role_id)
+        existing_map = {rp.permission_id: rp for rp in existing_rps}
 
-        for pid in permission_id_list:
-            existing = module_repository.get_role_permission_of_role_and_permission(role_id, pid)
-            if existing:
-                existing.active_flag = True
+        for pid in permission_id_set:
+            if pid in existing_map:
+                existing_map[pid].active_flag = True
             else:
-                create_obj = {
-                    "role_id" : role_id,
-                    "permission_id" : pid
-                }
-                new_rp = module_repository.create_role_permission(create_obj)
+                new_rp = module_repository.create_role_permission({"role_id": role_id, "permission_id": pid})
                 db.session.add(new_rp)
 
         db.session.commit()
@@ -587,6 +587,7 @@ def assign_branches_to_user(data):
                 return NotFoundError("ข้อมูลสาขาบางส่วนไม่ถูกต้องหรือไม่พบในระบบ")
         try:
             user_repository.update_user_branches(user, branches)
+            db.session.commit()
             return {
                 "success": True, 
                 "message": f"อัปเดตสิทธิ์สาขาให้ {username} สำเร็จ",

@@ -1,6 +1,7 @@
 from app.exception import AppException, UniqueError, ValidationError, NotFoundError, AuthenticationError
 from app.ma_sqlalchemy import UserSchema
 from app.repositories import user_login_repository, user_repository
+from app.services.user_service import check_user_permission
 from app.utils import create_token, hash_bcrypt, verify_bcrypt, decode_token
 from app.app import db
 from app.con_sqlalchemy import Tokenlist
@@ -32,7 +33,8 @@ def login_service(data):
                     "branch_name": branch.branch_name
                 })
 
-        if not user_branch_ids:
+        has_all_branch_access = check_user_permission(user.user_id, "ALL_BRANCH", "view")
+        if (not user_branch_ids) and not has_all_branch_access:
             raise NotFoundError("คุณไม่มีสิทธิ์เข้าถึงสาขาใดเลย หรือสาขาของคุณถูกระงับการใช้งาน")
 
         branch_select_token = create_token(
@@ -43,7 +45,7 @@ def login_service(data):
             },
             "branch_select"
         )
-        return branch_select_token, user_branches
+        return branch_select_token, user_branches, has_all_branch_access
 
     except Exception:
         raise
@@ -89,6 +91,58 @@ def select_branch_service(data):
         refresh_jti = decode_token(refresh_token).get("jti")
 
         db.session.add(Tokenlist(jwt_id=access_jti, user_id=user.user_id, token_type="access"))
+        db.session.add(Tokenlist(jwt_id=refresh_jti, user_id=user.user_id, token_type="refresh"))
+        db.session.commit()
+
+        return access_token, refresh_token
+
+    except AppException:
+        db.session.rollback()
+        raise
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def select_all_branch_service(data):
+    try:
+        branch_select_token = data.get("branch_select_token")
+
+        if not branch_select_token:
+            raise ValidationError("branch_select_token จำเป็นต้องมี")
+
+        decoded = decode_token(branch_select_token)
+        if not decoded:
+            raise AuthenticationError("branch_select_token ไม่ถูกต้องหรือหมดอายุ")
+
+        if decoded.get("type") != "branch_select":
+            raise AuthenticationError("Token ประเภทไม่ถูกต้อง")
+
+        user = user_repository.get_user_for_login(decoded.get("username"))
+        if not user or not user.is_active:
+            raise NotFoundError("ไม่พบผู้ใช้งานหรือถูกระงับการใช้งาน")
+
+        permissions = user.role.get_permissions()
+        if not check_user_permission(user.user_id, "ALL_BRANCH", "view"):
+            raise AuthenticationError("คุณไม่มีสิทธิ์เข้าถึงโหมด All Branch")
+
+        token_data = {
+            "user_id": user.user_id,
+            "username": user.username,
+            "role_name": user.role.role_name,
+            "role_id": user.role.role_id,
+            "role_code": user.role.role_code,
+            "permissions": permissions,
+            "all_branch_mode": True,
+        }
+
+        access_token = create_token(token_data, "all_branch")
+        refresh_token = create_token(token_data, "refresh")
+
+        access_jti = decode_token(access_token).get("jti")
+        refresh_jti = decode_token(refresh_token).get("jti")
+
+        db.session.add(Tokenlist(jwt_id=access_jti, user_id=user.user_id, token_type="all_branch"))
         db.session.add(Tokenlist(jwt_id=refresh_jti, user_id=user.user_id, token_type="refresh"))
         db.session.commit()
 

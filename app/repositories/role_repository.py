@@ -1,5 +1,5 @@
 from app.app import db
-from app.con_sqlalchemy import Permission, Role, RolePermission
+from app.con_sqlalchemy import Module, Permission, Role, RolePermission, User
 
 def get_all_roles():
     try:
@@ -24,6 +24,24 @@ def get_role_by_id(id : int):
     try:
         role = db.session.query(Role).filter(Role.role_id == id).first()
         return role
+    except Exception:
+        raise
+
+def check_user_has_permission(user_id: int, module_code: str, method: str) -> bool:
+    try:
+        query = (
+            db.session.query(RolePermission)
+            .join(User, User.role_id == RolePermission.role_id)
+            .join(Permission, Permission.permission_id == RolePermission.permission_id)
+            .join(Module, Module.module_id == Permission.module_id)
+            .filter(
+                User.user_id == user_id,
+                Module.module_code == module_code,
+                Permission.method == method,
+                RolePermission.active_flag.is_(True)
+            )
+        )
+        return query.first() is not None
     except Exception:
         raise
 

@@ -2,16 +2,16 @@ from app.exception import MissingFieldsError
 from app.repositories import material_repository, sales_item_repository, sales_order_repository
 from app.extensions import center_service
 from app.app import db
-from app.services import branch_service, work_order_service, transaction_service
+from app.services import branch_service, cache_service, work_order_service, transaction_service
 from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList
 
-
-def search_sales_order(data, show_unassigned=False, branch_id=None):
+def search_sales_order(data, branch_id=None):
     try:
         page = data.get("page", 1)
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = sales_order_repository.search_sales_order(page, per_page, search, show_unassigned=show_unassigned, branch_id=branch_id)
+        result = sales_order_repository.search_sales_order(page, per_page, search, branch_id=branch_id)
+        cache_service()
         return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
@@ -27,13 +27,12 @@ def assign_branch_to_sales_order(doc_entry, branch_id):
         raise
 
 
-def get_all_sales_orders(data, show_unassigned=False, branch_id=None):
+def get_all_sales_orders(data, branch_id=None):
     try:
         page = data.get("page", 1)
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = sales_order_repository.get_all_sales_orders(page, per_page, search, show_unassigned=show_unassigned, branch_id=branch_id)
-
+        result = sales_order_repository.get_all_sales_orders(page, per_page, search, branch_id=branch_id)
         items_data = []
         for row in result.items:
             so = row.SalesOrder
@@ -87,9 +86,9 @@ def get_material_list_from_sales_order(doc_entry):
         raise
 
 
-def get_sales_order_detail(doc_entry, show_unassigned=False, branch_id=None):
+def get_sales_order_detail(doc_entry, branch_id=None):
     try:
-        result, branch = sales_order_repository.get_sales_order_detail(doc_entry, show_unassigned=show_unassigned, branch_id=branch_id)
+        result, branch = sales_order_repository.get_sales_order_detail(doc_entry, branch_id=branch_id)
         items = result.sales_items
         
         materials = []
