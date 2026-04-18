@@ -201,3 +201,11 @@ def get_by_wms_reference_repo(wms_reference):
         raise NotFoundError(f"ไม่พบ Picking Request WMS_Reference : {wms_reference}")
     
     return pr
+
+
+def get_by_code_repo(picking_request_code):
+    pr = db.session.query(PickingRequest).filter(PickingRequest.picking_request_code == picking_request_code).first()
+    if pr is None:
+        raise NotFoundError(f"ไม่พบ Picking Request Code : {picking_request_code}")
+    
+    return pr

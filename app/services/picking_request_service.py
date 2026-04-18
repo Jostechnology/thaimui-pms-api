@@ -136,7 +136,6 @@ def _call_wms_create_pickup(pr, items):
 
     pickup_id = (resp.get("data") or {}).get("pickup_id")
     pr.wms_reference = str(pickup_id) if pickup_id is not None else None
-    pr.status = PickingRequestStatus.SENT
 
 
 def create_for_sales_order(doc_entry, data):
@@ -257,6 +256,13 @@ def get_by_sales_order(doc_entry):
 def get_by_wms_reference(wms_reference):
     try:
         pr = picking_request_repository.get_by_wms_reference_repo(wms_reference)
+        return pr
+    except Exception:
+        raise
+
+def get_by_code(picking_request_code):
+    try:
+        pr = picking_request_repository.get_by_code_repo(picking_request_code)
         return pr
     except Exception:
         raise
