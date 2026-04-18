@@ -51,3 +51,11 @@ def api_update_picking_request_status(picking_request_id):
     data = request.get_json()
     result = picking_request_service.update_status(picking_request_id, data)
     return jsonify({"data": PickingRequestSchema().dump(result), "success": True}), 200
+
+@app.route("/api/WMS/picking_request/<int:wms_reference>/status", methods=["PATCH"])
+@verify_required
+def api_update_picking_request_status_from_wms(wms_reference):
+    data = request.get_json()
+    pr = picking_request_service.get_by_wms_reference(wms_reference)
+    result = picking_request_service.update_status(pr.picking_request_id, data)
+    return jsonify({"data": PickingRequestSchema().dump(result), "success": True}), 200

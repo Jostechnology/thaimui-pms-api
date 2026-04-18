@@ -58,7 +58,8 @@ def api_get_work_runs(work_order_id):
 @app.route("/api/work_run/<int:work_run_id>/start", methods=["POST"])
 @verify_required
 def api_start_work_run(work_run_id):
-    result = start_work_run(work_run_id)
+    data = request.get_json() or {}
+    result = start_work_run(work_run_id, data)
     return jsonify({"data": WorkRunDisplaySchema().dump(result), "success": True}), 200
 
 

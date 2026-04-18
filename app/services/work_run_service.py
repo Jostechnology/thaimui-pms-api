@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem, WorkRunPickingItem
+from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem, WorkRunPickingItem, AllocationMode
 from app.repositories import work_run_repository, work_order_repository, test_result_repository, picking_request_repository, material_list_repository
 from app.services import transaction_service, document_code_service, picking_allocation_service, work_order_service
 from app.con_sqlalchemy import WorkRunTransactionType
@@ -211,12 +211,24 @@ def _seed_required_items(work_run, work_order, rework_is_from_test=False, rework
 
 # --- Lifecycle ---
 
-def start_work_run(work_run_id):
+def start_work_run(work_run_id, data=None):
     """
     PENDING → INPROGRESS.
-    Gates on material availability: for each WorkRunRequiredItem, FIFO-allocates from SUCCESS PRs.
-    If any material is short, raises ValidationError listing which items are missing.
+    Allocates picking items either by FIFO (auto) or operator-chosen (manual).
+
+    data (optional):
+        allocation_mode: "auto" (default) or "manual"
+        material_sources: [{required_item_id, sources: [{picking_request_item_id, qty}]}]  — manual only
     """
+    if data is None:
+        data = {}
+
+    allocation_mode_str = data.get("allocation_mode", "auto").upper()
+    if allocation_mode_str not in ("AUTO", "MANUAL"):
+        raise ValidationError(f"allocation_mode ไม่ถูกต้อง: {allocation_mode_str}")
+    is_manual = allocation_mode_str == "MANUAL"
+    mode_enum = AllocationMode.MANUAL if is_manual else AllocationMode.AUTO
+
     work_run = work_run_repository.get_work_run_by_id(work_run_id)
     if not work_run:
         raise NotFoundError(f"Work Run {work_run_id} not found")
@@ -228,19 +240,30 @@ def start_work_run(work_run_id):
     shortages = []
     all_allocations = []  # [(req, pri_id, qty)]
 
+    if is_manual:
+        manual_mat_sources = data.get("material_sources", [])
+        mat_source_map = {ms["required_item_id"]: ms["sources"] for ms in manual_mat_sources}
+
     for req in required:
         if not req.material_list_id:
             continue
-        candidates = picking_request_repository.get_available_picking_items_for_material(req.material_list_id)
-        try:
-            allocs = picking_allocation_service.allocate_fifo(candidates, req.quantity)
+        if is_manual:
+            sources = mat_source_map.get(req.id, [])
+            if not sources:
+                raise ValidationError(f"manual mode ต้องระบุ sources สำหรับ required item {req.id} ({req.item_code})")
+            allocs = picking_allocation_service.allocate_manual(sources, req.quantity)
             all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
-        except ValidationError:
-            available_qty = sum(
-                max(0, pri.quantity - picking_request_repository.get_total_committed_qty(pri.picking_request_item_id))
-                for pri in candidates
-            )
-            shortages.append(f"\n{req.item_name} ({req.item_code}) ต้องการ {req.quantity} มีในคลัง {available_qty} \n")
+        else:
+            candidates = picking_request_repository.get_available_picking_items_for_material(req.material_list_id)
+            try:
+                allocs = picking_allocation_service.allocate_fifo(candidates, req.quantity)
+                all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
+            except ValidationError:
+                available_qty = sum(
+                    max(0, pri.quantity - picking_request_repository.get_total_committed_qty(pri.picking_request_item_id))
+                    for pri in candidates
+                )
+                shortages.append(f"\n{req.item_name} ({req.item_code}) ต้องการ {req.quantity} มีในคลัง {available_qty} \n")
 
     if shortages:
         raise ValidationError(
@@ -253,6 +276,7 @@ def start_work_run(work_run_id):
             picking_request_item_id=pri_id,
             work_run_required_item_id=req.id,
             qty_allocated=qty,
+            allocation_mode=mode_enum,
         ))
 
     now = bangkok_now()

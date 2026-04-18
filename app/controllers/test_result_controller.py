@@ -31,11 +31,9 @@ def api_create_test_result(qc_work_order_id):
 @app.route("/api/test_result/<int:test_result_id>/start", methods=["POST"])
 @verify_required
 def api_start_test_result(test_result_id):
-    try:
-        result = start_test_result(test_result_id)
-        return jsonify({"data": "Cool !!", "success": True}), 200
-    except Exception:
-        raise
+    data = request.get_json() or {}
+    result = start_test_result(test_result_id, data)
+    return jsonify({"data": "Cool !!", "success": True}), 200
 
 
 @app.route("/api/test_result/<int:test_result_id>/finalize", methods=["PUT"])

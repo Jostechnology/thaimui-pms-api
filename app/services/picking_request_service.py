@@ -1,3 +1,5 @@
+import logging
+
 from app.con_sqlalchemy import (
     PickingRequest, PickingRequestItem,
     PickingRequestStatus,
@@ -7,6 +9,8 @@ from app.services import document_code_service
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, OuterServicesError
 from app.extensions import wms_service
+
+logger = logging.getLogger(__name__)
 
 
 def _build_items(items_data):
@@ -60,39 +64,73 @@ def _check_sales_item_over_allocation(items):
             )
 
 
+def _build_wms_order_items(items):
+    """
+    Consolidate PickingRequestItems into WMS lines, merging by item_code + unit.
+
+    Same item_code can appear from multiple sources:
+    - Same material in different SalesItems' MaterialLists
+    - A non-produced SalesItem with the same item_code as another SalesItem's material
+
+    WMS only needs one line per item_code with total quantity.
+    order_line_num sent is the lowest one in the group (first in BOM order).
+    """
+    consolidated = {}
+    for item in items:
+        key = (item.item_code, item.unit or "")
+        if key not in consolidated:
+            consolidated[key] = {
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "unit": item.unit,
+                "quantity": 0,
+                "order_line_num": item.order_line_num,  # first seen = lowest
+            }
+        consolidated[key]["quantity"] += item.quantity
+        # keep smallest order_line_num (None is treated as largest)
+        existing_ln = consolidated[key]["order_line_num"]
+        if item.order_line_num is not None:
+            if existing_ln is None or item.order_line_num < existing_ln:
+                consolidated[key]["order_line_num"] = item.order_line_num
+
+    return [
+        {
+            "order_line_num": v["order_line_num"],
+            "item_code": v["item_code"],
+            "item_name": v["item_name"],
+            "unit": v["unit"],
+            "quantity": v["quantity"],
+        }
+        for v in consolidated.values()
+        if v["order_line_num"] is not None
+    ]
+
+
 def _call_wms_create_pickup(pr, items):
     """
     Call WMS create_pickup_from_pms if the service is configured.
+    Consolidates items by item_code before sending (same material across multiple lines → 1 WMS line).
     On success: set pr.status = SENT, pr.wms_reference = pickup_id.
     On failure (success=False or exception): raise OuterServicesError.
     """
-
     if wms_service is None:
-        print("1")
         return
 
-    order_items = [
-        {
-            "order_line_num": item.order_line_num,
-            "quantity": item.quantity,
-        }
-        for item in items
-        if item.order_line_num is not None
-    ]
+    order_items = _build_wms_order_items(items)
 
     if not order_items:
-        print("2")
         return
 
     try:
         resp = wms_service.create_pickup_from_pms(
+            picking_request_code=pr.picking_request_code,
             doc_entry=pr.doc_entry,
             order_items=order_items,
         )
     except Exception as e:
         raise OuterServicesError(f"WMS request failed: {e}")
 
-    print(f"Response : {resp}")
+    logger.info(f"WMS response: {resp}")
     if not resp.get("success"):
         raise OuterServicesError(f"WMS rejected pickup: | {resp.get('error', 'unknown error')} | {resp.get('message', 'unknown message')}")
 
@@ -215,3 +253,10 @@ def get_by_sales_order(doc_entry):
     if not so:
         raise NotFoundError(f"Sales Order {doc_entry} not found")
     return picking_request_repository.get_picking_requests_by_doc_entry(doc_entry)
+
+def get_by_wms_reference(wms_reference):
+    try:
+        pr = picking_request_repository.get_by_wms_reference_repo(wms_reference)
+        return pr
+    except Exception:
+        raise

@@ -692,9 +692,14 @@ class TestResultWorkRun(BaseModel):
     work_run    = db.relationship('WorkRun',    back_populates='test_result_sources', lazy='noload')
 
 
+class AllocationMode(enum.Enum):
+    AUTO   = 'AUTO'    # FIFO-allocated by system
+    MANUAL = 'MANUAL'  # operator chose specific picking items
+
+
 class TestResultPickingItem(BaseModel):
     """
-    Association: which PickingRequestItem(s) were FIFO-allocated to a TestResult.
+    Association: which PickingRequestItem(s) were allocated to a TestResult.
     Used for both sales_item allocation (produce=False) and material allocation (test materials from QCItem).
     qty_allocated = locked at start; qty_consumed = reported at finalize (None = use full allocation).
     test_result_required_item_id set = came from material requirement; None = came from sales_item FIFO.
@@ -706,6 +711,7 @@ class TestResultPickingItem(BaseModel):
     test_result_required_item_id  = db.Column(db.Integer, db.ForeignKey('t_test_result_required_item.id', ondelete='SET NULL'), nullable=True)
     qty_allocated                 = db.Column(db.Integer, nullable=False)
     qty_consumed                  = db.Column(db.Integer, nullable=True)   # None = still active / use full allocation
+    allocation_mode               = db.Column(db.Enum(AllocationMode), nullable=False, default=AllocationMode.AUTO)
 
     test_result               = db.relationship('TestResult', back_populates='picking_item_sources', lazy='noload')
     picking_request_item      = db.relationship('PickingRequestItem', back_populates='test_result_consumptions', lazy='noload')
@@ -742,7 +748,7 @@ class WorkRunRequiredItem(AuditMixin, BranchScopedMixin):
 
 class WorkRunPickingItem(BaseModel):
     """
-    Association: which PickingRequestItem(s) were FIFO-allocated to a WorkRun.
+    Association: which PickingRequestItem(s) were allocated to a WorkRun.
     qty_allocated = locked at start; qty_consumed = reported at complete (None = use full allocation).
     work_run_required_item_id links back to which WorkRunRequiredItem triggered this allocation.
     """
@@ -753,6 +759,7 @@ class WorkRunPickingItem(BaseModel):
     work_run_required_item_id  = db.Column(db.Integer, db.ForeignKey('t_work_run_required_item.id', ondelete='SET NULL'), nullable=True)
     qty_allocated              = db.Column(db.Integer, nullable=False)
     qty_consumed               = db.Column(db.Integer, nullable=True)   # None = still active / use full allocation
+    allocation_mode            = db.Column(db.Enum(AllocationMode), nullable=False, default=AllocationMode.AUTO)
 
     work_run              = db.relationship('WorkRun', back_populates='work_run_picking_consumptions', lazy='noload')
     picking_request_item  = db.relationship('PickingRequestItem', back_populates='work_run_consumptions', lazy='noload')

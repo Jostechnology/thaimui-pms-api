@@ -3,6 +3,8 @@ from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.exception import NotFoundError
+
 
 def create_picking_request(picking_request):
     db.session.add(picking_request)
@@ -192,3 +194,10 @@ def get_picking_request_list(page, per_page, search="", status=None, doc_entry=N
         page=page, per_page=per_page, error_out=False
     )
     return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
+
+def get_by_wms_reference_repo(wms_reference):
+    pr = db.session.query(PickingRequest).filter(PickingRequest.wms_reference == wms_reference).first()
+    if pr is None:
+        raise NotFoundError(f"ไม่พบ Picking Request WMS_Reference : {wms_reference}")
+    
+    return pr

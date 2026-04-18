@@ -2,6 +2,7 @@ from app.con_sqlalchemy import (
     TestResult, TestResultItem, TestResultStatus, TestSessionStatus,
     TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem,
     WorkRunStatus, WorkRunTransactionType, QCWorkOrder, QCWorkOrderStatus,
+    AllocationMode,
 )
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import (
@@ -149,14 +150,25 @@ def create_test_result(qc_work_order_id, data):
         raise
 
 
-def start_test_result(test_result_id):
+def start_test_result(test_result_id, data=None):
     """
     Phase 2 — PENDING → INPROGRESS.
-    FIFO-allocates:
-      - claimed_qty from PR pool for non-produced sales items
-      - each required material from PR pool
-    Raises ValidationError (with shortage list) if pool insufficient.
+    Allocates picking items either by FIFO (auto) or operator-chosen (manual).
+
+    data (optional):
+        allocation_mode: "auto" (default) or "manual"
+        sales_item_sources: [{picking_request_item_id, qty}]       — manual only, for non-produced sales item
+        material_sources:   [{required_item_id, sources: [{picking_request_item_id, qty}]}]  — manual only
     """
+    if data is None:
+        data = {}
+
+    allocation_mode_str = data.get("allocation_mode", "auto").upper()
+    if allocation_mode_str not in ("AUTO", "MANUAL"):
+        raise ValidationError(f"allocation_mode ไม่ถูกต้อง: {allocation_mode_str}")
+    is_manual = allocation_mode_str == "MANUAL"
+    mode_enum = AllocationMode.MANUAL if is_manual else AllocationMode.AUTO
+
     try:
         test_result = test_result_repository.get_test_result_by_id(test_result_id)
         if not test_result:
@@ -177,32 +189,58 @@ def start_test_result(test_result_id):
 
         # Allocate claimed_qty for non-produced items from PR pool
         if not sales_item.produce:
-            candidates = picking_request_repository.get_available_picking_items_for_sales_item(
-                sales_item.sales_item_id
-            )
-            try:
-                sales_item_allocations = picking_allocation_service.allocate_fifo(
-                    candidates, test_result.claimed_qty
+            if is_manual:
+                manual_si_sources = data.get("sales_item_sources", [])
+                if not manual_si_sources:
+                    raise ValidationError("manual mode ต้องระบุ sales_item_sources สำหรับ non-produced item")
+                try:
+                    sales_item_allocations = picking_allocation_service.allocate_manual(
+                        manual_si_sources, test_result.claimed_qty
+                    )
+                except ValidationError:
+                    raise
+            else:
+                candidates = picking_request_repository.get_available_picking_items_for_sales_item(
+                    sales_item.sales_item_id
                 )
-            except ValidationError:
-                shortages.append(
-                    f"{sales_item.item_code} ({sales_item.item_name}) "
-                    f"ต้องการ {test_result.claimed_qty} ชิ้น"
-                )
+                try:
+                    sales_item_allocations = picking_allocation_service.allocate_fifo(
+                        candidates, test_result.claimed_qty
+                    )
+                except ValidationError:
+                    shortages.append(
+                        f"{sales_item.item_code} ({sales_item.item_name}) "
+                        f"ต้องการ {test_result.claimed_qty} ชิ้น"
+                    )
 
         # Allocate each required material from PR pool
         required = test_result_repository.get_required_items(test_result_id)
+
+        if is_manual:
+            manual_mat_sources = data.get("material_sources", [])
+            mat_source_map = {ms["required_item_id"]: ms["sources"] for ms in manual_mat_sources}
+
         for req in required:
             if not req.material_list_id:
                 continue
-            candidates = picking_request_repository.get_available_picking_items_for_material(
-                req.material_list_id
-            )
-            try:
-                allocs = picking_allocation_service.allocate_fifo(candidates, req.required_qty)
-                material_allocations.append((req, allocs))
-            except ValidationError:
-                shortages.append(f"{req.item_code} ({req.item_name})")
+            if is_manual:
+                sources = mat_source_map.get(req.id, [])
+                if not sources:
+                    raise ValidationError(f"manual mode ต้องระบุ sources สำหรับ required item {req.id} ({req.item_code})")
+                try:
+                    allocs = picking_allocation_service.allocate_manual(sources, req.required_qty)
+                    material_allocations.append((req, allocs))
+                except ValidationError:
+                    raise
+            else:
+                candidates = picking_request_repository.get_available_picking_items_for_material(
+                    req.material_list_id
+                )
+                try:
+                    allocs = picking_allocation_service.allocate_fifo(candidates, req.required_qty)
+                    material_allocations.append((req, allocs))
+                except ValidationError:
+                    shortages.append(f"{req.item_code} ({req.item_name})")
 
         if shortages:
             raise ValidationError(
@@ -216,6 +254,7 @@ def start_test_result(test_result_id):
                 picking_request_item_id=pri_id,
                 test_result_required_item_id=None,
                 qty_allocated=qty,
+                allocation_mode=mode_enum,
             ))
 
         # Commit material allocations (linked to required item for reverse-FIFO release)
@@ -226,6 +265,7 @@ def start_test_result(test_result_id):
                     picking_request_item_id=pri_id,
                     test_result_required_item_id=req.id,
                     qty_allocated=qty,
+                    allocation_mode=mode_enum,
                 ))
 
         # For produced items: fire SENT_TO_TESTING transaction now (was at create before)

@@ -24,7 +24,7 @@ class WMSService:
 
         return cls._instance
 
-    def create_pickup_from_pms(self, doc_entry: int, order_items: list) -> dict:
+    def create_pickup_from_pms(self, picking_request_code : str, doc_entry: int, order_items: list) -> dict:
         """
         POST /api/create_pickup_from_pms
 
@@ -37,6 +37,7 @@ class WMSService:
         payload = {
             "order_list": [doc_entry],
             "order_items": order_items,
+            "pms_reference" : picking_request_code
         }
         logger.info(f"WMS create_pickup_from_pms: doc_entry={doc_entry}, items={len(order_items)}")
         response = self.session.post(url=url, json=payload, timeout=self.timeout)

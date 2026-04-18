@@ -440,7 +440,11 @@ class TestResultPickingItemSchema(Schema):
     test_result_required_item_id = fields.Integer(dump_only=True, allow_none=True)
     qty_allocated                = fields.Integer(dump_only=True)
     qty_consumed                 = fields.Integer(allow_none=True)
+    allocation_mode              = fields.Method("get_allocation_mode", dump_only=True)
     picking_request_item         = fields.Nested(PickingRequestItemDetailedSchema(), dump_only=True)
+
+    def get_allocation_mode(self, obj):
+        return obj.allocation_mode.value if obj.allocation_mode else None
 
 
 class WorkRunRequiredItemSchema(Schema):
@@ -458,14 +462,18 @@ class WorkRunRequiredItemSchema(Schema):
 
 
 class WorkRunPickingItemSchema(Schema):
-    """FIFO allocation from PickingRequestItem to a WorkRun."""
+    """Allocation from PickingRequestItem to a WorkRun."""
     id                        = fields.Integer(dump_only=True)
     work_run_id               = fields.Integer(dump_only=True)
     picking_request_item_id   = fields.Integer(dump_only=True)
     work_run_required_item_id = fields.Integer(dump_only=True, allow_none=True)
     qty_allocated             = fields.Integer(dump_only=True)
     qty_consumed              = fields.Integer(allow_none=True)
+    allocation_mode           = fields.Method("get_allocation_mode", dump_only=True)
     picking_request_item      = fields.Nested(PickingRequestItemSchema(), dump_only=True)
+
+    def get_allocation_mode(self, obj):
+        return obj.allocation_mode.value if obj.allocation_mode else None
 
 
 class TestResultRequiredItemSchema(Schema):
