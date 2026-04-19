@@ -9,7 +9,7 @@ def _test_result_options():
         selectinload(TestResult.test_result_items),
         joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
         selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
-        selectinload(TestResult.required_items),
+        selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
     ]
 
 
@@ -32,7 +32,12 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
     try:
         return (
             db.session.query(TestResult)
-            .options(*_test_result_options())
+            .options(
+                selectinload(TestResult.test_result_items),
+                joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
+                joinedload(TestResult.picking_item_sources).joinedload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
+                selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list)
+            )
             .filter(TestResult.qc_work_order_id == qc_work_order_id)
             .all()
         )

@@ -480,6 +480,24 @@ def delete_required_item(test_result_id, required_item_id):
     return test_result_repository.get_required_items(test_result_id)
 
 
+def get_pick_requests_for_test_result(test_result_id):
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
+
+    qc = qc_work_order_repository.get_qc_work_order_for_availability_check(test_result.qc_work_order_id)
+    sales_item = qc.sales_item
+
+    sales_item_id = None if sales_item.produce else sales_item.sales_item_id
+    required = test_result_repository.get_required_items(test_result_id)
+    material_list_ids = [r.material_list_id for r in required if r.material_list_id]
+
+    return picking_request_repository.get_available_pick_requests_for_test_result(
+        sales_item_id=sales_item_id,
+        material_list_ids=material_list_ids or None,
+    )
+
+
 def delete_test_result(test_result_id):
     """PENDING and INPROGRESS sessions can be deleted. COMPLETED cannot."""
     try:

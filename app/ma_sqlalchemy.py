@@ -363,14 +363,26 @@ class QCWorkOrderSchema(Schema):
     created_by = fields.String()
     updated_by = fields.String()
     sales_item = fields.Nested(SalesItemNoMaterialSchema)
-    status = fields.Enum(QCWorkOrderStatus)
+    status = fields.Method("get_status")
+
+    def get_status(self, obj):
+        if obj.status is None:
+            return None
+        return obj.status.value if hasattr(obj.status, "value") else obj.status
 
 class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
     qc_form = fields.Nested(QCFormSchema, allow_none=True)
     qc_items = fields.List(fields.Nested(QCItemSchema))
+    test_results = fields.List(fields.Nested(lambda: TestResultSchema()), dump_only=True)
+    sales_order     = fields.Method("get_sales_order")
     doc_entry       = fields.Method("get_doc_entry")
     sales_item_code = fields.Method("get_sales_item_code")
     sales_item_name = fields.Method("get_sales_item_name")
+
+    def get_sales_order(self, obj):
+        if obj.sales_item and obj.sales_item.sales_order:
+            return SalesOrderSchema().dump(obj.sales_item.sales_order)
+        return None
 
     def get_doc_entry(self, obj):
         return obj.sales_item.doc_entry if obj.sales_item else None
@@ -459,6 +471,7 @@ class WorkRunRequiredItemSchema(Schema):
     qty_consumed_actual = fields.Integer(allow_none=True)
     created_by          = fields.String(dump_only=True)
     created_date        = fields.DateTime(dump_only=True)
+    material_list       = fields.Nested(MaterialListSchema)
 
 
 class WorkRunPickingItemSchema(Schema):
@@ -487,6 +500,7 @@ class TestResultRequiredItemSchema(Schema):
     required_qty        = fields.Integer()
     unit                = fields.String(allow_none=True)
     qty_consumed_actual = fields.Integer(allow_none=True)
+    material_list       = fields.Nested(MaterialListSchema, allow_none=True)
     created_by          = fields.String(dump_only=True)
     created_date        = fields.DateTime(dump_only=True)
 

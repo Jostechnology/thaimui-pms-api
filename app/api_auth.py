@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-ENABLE_TIMING = False
+ENABLE_TIMING = True
 
 def _log_timer(label: str, elapsed_ms: float, note: str = "", timing=ENABLE_TIMING):
     """Logs timing info only when ENABLE_TIMING is True."""

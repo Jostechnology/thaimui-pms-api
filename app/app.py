@@ -65,6 +65,14 @@ def handle_ratelimit_error(e):
         "message": e.description #ล็อกอินเกินกำหนด
     }), 429
 
+@app.errorhandler(404)
+def handle_not_found(e):
+    return jsonify({
+        "success": False,
+        "error": "Can't find endpoint / data",
+        "message": e.description #ล็อกอินเกินกำหนด
+    }), 404
+
 @app.errorhandler(Exception)
 def handle_generic_exception(e):
     traceback.print_exc()

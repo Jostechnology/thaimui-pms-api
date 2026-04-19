@@ -40,7 +40,7 @@ def get_work_run_display(work_run_id):
                 joinedload(WorkRun.assignments).joinedload(WorkRunAssignment.employee),
                 joinedload(WorkRun.machines).joinedload(WorkRunMachine.machine),
                 joinedload(WorkRun.breaks),
-                joinedload(WorkRun.required_items),
+                joinedload(WorkRun.required_items).options(selectinload(WorkRunRequiredItem.material_list))
             )
             .filter(WorkRun.work_run_id == work_run_id)
         )

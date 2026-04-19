@@ -1,3 +1,6 @@
+import time
+
+from app.api_auth import _log_timer
 from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem
 from app.repositories import qc_work_order_repository, sales_item_repository
 from app.app import db
@@ -18,7 +21,9 @@ def get_all_qc_work_orders(data):
 
 def get_qc_work_order_by_id(qc_work_order_id):
     try:
+        _start = time.perf_counter()
         qc = qc_work_order_repository.get_qc_work_order_by_id(qc_work_order_id)
+        _log_timer("GET qc_work_order_id", (time.perf_counter() - _start) * 1000, "", True)
         return qc
     except Exception:
         raise

@@ -1,7 +1,7 @@
-from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus, TestResultPickingItem, WorkRunPickingItem, PickingItemAdjustment, TestResult, WorkRun
+from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus, TestResultPickingItem, WorkRunPickingItem, PickingItemAdjustment, TestResult, WorkRun, SalesOrder
 from app.app import db
-from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import or_, cast, String
+from sqlalchemy.orm import joinedload, selectinload, contains_eager
 
 from app.exception import NotFoundError
 
@@ -170,9 +170,13 @@ def get_picking_item_adjustments_by_picking_request(picking_request_id, page, pe
 
 
 def get_picking_request_list(page, per_page, search="", status=None, doc_entry=None):
-    query = db.session.query(PickingRequest).options(
-        selectinload(PickingRequest.items),
-        joinedload(PickingRequest.sales_order)
+    query = (
+        db.session.query(PickingRequest)
+        .outerjoin(SalesOrder, SalesOrder.doc_entry == PickingRequest.doc_entry)
+        .options(
+            selectinload(PickingRequest.items),
+            contains_eager(PickingRequest.sales_order),
+        )
     )
 
     if search:
@@ -181,6 +185,7 @@ def get_picking_request_list(page, per_page, search="", status=None, doc_entry=N
                 PickingRequest.picking_request_code.ilike(f"%{search}%"),
                 PickingRequest.wms_reference.ilike(f"%{search}%"),
                 PickingRequest.created_by.ilike(f"%{search}%"),
+                cast(SalesOrder.doc_num, String).ilike(f"%{search}%"),
             )
         )
 
@@ -207,5 +212,60 @@ def get_by_code_repo(picking_request_code):
     pr = db.session.query(PickingRequest).filter(PickingRequest.picking_request_code == picking_request_code).first()
     if pr is None:
         raise NotFoundError(f"ไม่พบ Picking Request Code : {picking_request_code}")
-    
+
     return pr
+
+
+def get_available_pick_requests_for_test_result(sales_item_id=None, material_list_ids=None):
+    """SUCCESS PRs with items matching sales_item_id (non-produced) OR any material_list_id.
+    items filtered to matching rows only, with consumptions and adjustments loaded."""
+    filters = []
+    if sales_item_id:
+        filters.append(PickingRequestItem.sales_item_id == sales_item_id)
+    if material_list_ids:
+        filters.append(PickingRequestItem.material_list_id.in_(material_list_ids))
+    if not filters:
+        return []
+
+    item_filter = or_(*filters)
+    query = (
+        db.session.query(PickingRequest)
+        .join(
+            PickingRequestItem,
+            (PickingRequestItem.picking_request_id == PickingRequest.picking_request_id)
+            & item_filter
+        )
+        .filter(PickingRequest.status == PickingRequestStatus.SUCCESS)
+        .options(
+            joinedload(PickingRequest.sales_order),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.test_result_consumptions),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.adjustments),
+        )
+        .distinct()
+        .order_by(PickingRequest.picking_request_id.asc())
+    )
+    return query.all()
+
+
+def get_available_pick_requests_for_work_run(material_list_ids):
+    """SUCCESS PickingRequests that have items matching any of the given material_list_ids.
+    items filtered to matching materials only, with consumptions and adjustments loaded for availability calc."""
+    query = (
+        db.session.query(PickingRequest)
+        .join(
+            PickingRequestItem,
+            (PickingRequestItem.picking_request_id == PickingRequest.picking_request_id)
+            & (PickingRequestItem.material_list_id.in_(material_list_ids))
+        )
+        .filter(PickingRequest.status == PickingRequestStatus.SUCCESS)
+        .options(
+            joinedload(PickingRequest.sales_order),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.test_result_consumptions),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.adjustments),
+        )
+        .distinct()
+        .order_by(PickingRequest.picking_request_id.asc())
+    )
+    return query.all()

@@ -1,33 +1,42 @@
-from app.con_sqlalchemy import QCItem, QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest
+from app.con_sqlalchemy import QCItem, QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest, TestResult, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem
 from app.app import db
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, selectinload, contains_eager
 
 from app.exception import NotFoundError
 
 
 def _qc_work_order_options():
-    """Eager-load exactly what QCWorkOrderSchema needs — no deep SalesItem nesting."""
     return [
-        selectinload(QCWorkOrder.sales_item),
+        selectinload(QCWorkOrder.sales_item).joinedload(SalesItem.sales_order),
         joinedload(QCWorkOrder.qc_form),
-        joinedload(QCWorkOrder.qc_items).joinedload(QCItem.material_list)
+        selectinload(QCWorkOrder.qc_items).joinedload(QCItem.material_list),
+        selectinload(QCWorkOrder.test_results).selectinload(TestResult.test_result_items),
+        selectinload(QCWorkOrder.test_results).joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
+        selectinload(QCWorkOrder.test_results).selectinload(TestResult.picking_item_sources).joinedload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
+        selectinload(QCWorkOrder.test_results).selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
     ]
 
 
 def get_all_qc_work_orders(page, limit, search, filter=None):
     try:
-        query = db.session.query(QCWorkOrder)
+        query = (
+            db.session.query(QCWorkOrder)
+            .join(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
+            .options(
+                contains_eager(QCWorkOrder.sales_item).joinedload(SalesItem.work_order).selectinload(WorkOrder.work_runs)
+            )
+        )
         if search:
             query = query.filter(
                 or_(
+                    QCWorkOrder.qc_work_order_code.ilike(f"%{search}%"),
                     QCWorkOrder.qc_by.ilike(f"%{search}%"),
                     QCWorkOrder.remark.ilike(f"%{search}%"),
+                    SalesItem.item_code.ilike(f"%{search}%"),
+                    SalesItem.item_name.ilike(f"%{search}%"),
                 )
             )
-        query = query.options(
-            selectinload(QCWorkOrder.sales_item)
-        )
         result = query.order_by(QCWorkOrder.created_date.desc()).paginate(
             page=page, per_page=limit, error_out=False
         )

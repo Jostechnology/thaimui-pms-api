@@ -1,7 +1,7 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import TestResultRequiredItemSchema
+from app.ma_sqlalchemy import TestResultRequiredItemSchema, PickingRequestFullDetailSchema
 from app.services.test_result_service import (
     create_test_result,
     start_test_result,
@@ -14,6 +14,7 @@ from app.services.test_result_service import (
     add_required_item,
     get_required_items_for_test_result,
     delete_required_item,
+    get_pick_requests_for_test_result,
 )
 
 
@@ -96,6 +97,13 @@ def api_delete_test_result(test_result_id):
         return jsonify({"data": result, "success": True}), 200
     except Exception:
         raise
+
+
+@app.route("/api/test_result/<int:test_result_id>/pick_requests", methods=["GET"])
+@verify_required
+def api_test_result_pick_requests(test_result_id):
+    result = get_pick_requests_for_test_result(test_result_id)
+    return jsonify({"data": PickingRequestFullDetailSchema(many=True).dump(result), "success": True}), 200
 
 
 @app.route("/api/test_result/<int:test_result_id>/required_items", methods=["GET"])

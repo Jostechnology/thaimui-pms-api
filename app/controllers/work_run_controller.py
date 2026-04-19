@@ -3,7 +3,7 @@ import time
 from app.api_auth import _log_timer, verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import MaterialListSchema, WorkRunDisplaySchema, WorkRunSchema, WorkRunRequiredItemSchema
+from app.ma_sqlalchemy import MaterialListSchema, WorkRunDisplaySchema, WorkRunSchema, WorkRunRequiredItemSchema, PickingRequestFullDetailSchema
 from app.services.work_run_service import (
     create_work_run,
     complete_work_run,
@@ -19,7 +19,9 @@ from app.services.work_run_service import (
     unassign_machine,
     add_required_item,
     get_required_items,
-    get_material_using_in_work_order_of_work_run
+    get_material_using_in_work_order_of_work_run,
+    get_pick_requests_for_work_run,
+    update_required_item,
 )
 
 
@@ -155,3 +157,18 @@ def api_work_run_add_required_item(work_run_id):
 def api_work_run_material_of_sales_item(work_run_id):
     materials = get_material_using_in_work_order_of_work_run(work_run_id)
     return jsonify({"data": MaterialListSchema(many=True).dump(materials), "success": True}), 200
+
+
+@app.route("/api/work_run_required_item/<int:required_item_id>", methods=["PUT"])
+@verify_required
+def api_update_required_item(required_item_id):
+    data = request.get_json() or {}
+    result = update_required_item(required_item_id, data)
+    return jsonify({"data": WorkRunRequiredItemSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/work_run/<int:work_run_id>/pick_requests", methods=["GET"])
+@verify_required
+def api_work_run_pick_requests(work_run_id):
+    result = get_pick_requests_for_work_run(work_run_id)
+    return jsonify({"data": PickingRequestFullDetailSchema(many=True).dump(result), "success": True}), 200

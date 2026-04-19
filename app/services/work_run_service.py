@@ -635,6 +635,29 @@ def get_required_items(work_run_id):
         raise NotFoundError(f"Work Run {work_run_id} not found")
     return work_run_repository.get_required_items(work_run_id)
 
+def update_required_item(required_item_id, data):
+    quantity = data.get("quantity")
+    if quantity is None or quantity <= 0:
+        raise ValidationError("quantity ต้องมากกว่า 0")
+    req = work_run_repository.get_required_item_by_id(required_item_id)
+    if not req:
+        raise NotFoundError(f"Required item {required_item_id} not found")
+    req.quantity = quantity
+    db.session.commit()
+    return req
+
+
+def get_pick_requests_for_work_run(work_run_id):
+    work_run = work_run_repository.get_work_run_by_id(work_run_id)
+    if not work_run:
+        raise NotFoundError(f"Work Run {work_run_id} not found")
+    required = work_run_repository.get_required_items(work_run_id)
+    material_list_ids = [r.material_list_id for r in required if r.material_list_id]
+    if not material_list_ids:
+        return []
+    return picking_request_repository.get_available_pick_requests_for_work_run(material_list_ids)
+
+
 def get_material_using_in_work_order_of_work_run(work_run_id):
     try:
         work_run = work_run_repository.get_work_run_by_id(work_run_id)
