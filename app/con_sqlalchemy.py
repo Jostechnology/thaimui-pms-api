@@ -544,6 +544,7 @@ class QCWorkOrder(AuditMixin):
 SalesItem.num_qc_work_order = column_property(
     select(func.count(QCWorkOrder.qc_work_order_id))
     .where(QCWorkOrder.sales_item_id == SalesItem.sales_item_id)
+    .correlate(SalesItem)
     .scalar_subquery()
 )
 
@@ -553,6 +554,7 @@ SalesItem.num_qc_successed_work_order = column_property(
         QCWorkOrder.sales_item_id == SalesItem.sales_item_id,
         QCWorkOrder.status == QCWorkOrderStatus.PASSED,
     )
+    .correlate(SalesItem)
     .scalar_subquery()
 )
 

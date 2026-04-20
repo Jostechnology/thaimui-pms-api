@@ -23,9 +23,7 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
         query = (
             db.session.query(QCWorkOrder)
             .join(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
-            .options(
-                contains_eager(QCWorkOrder.sales_item).joinedload(SalesItem.work_order).selectinload(WorkOrder.work_runs)
-            )
+            .options(contains_eager(QCWorkOrder.sales_item))
         )
         if search:
             query = query.filter(
