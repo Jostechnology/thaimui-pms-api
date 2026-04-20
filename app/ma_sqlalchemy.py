@@ -709,6 +709,7 @@ class WorkOrderTrackingSchema(Schema):
 
 class QCWorkOrderTrackingSchema(Schema):
     qc_work_order_id = fields.Integer()
+    qc_work_order_code = fields.String()
     qc_date = fields.DateTime()
     qc_by = fields.String()
     quantity = fields.Integer()

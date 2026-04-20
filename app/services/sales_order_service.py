@@ -1,9 +1,10 @@
-from app.exception import MissingFieldsError
+from app.exception import MissingFieldsError, OuterServicesError
 from app.repositories import material_repository, sales_item_repository, sales_order_repository
 from app.extensions import center_service
 from app.app import db
 from app.services import branch_service, cache_service, work_order_service, transaction_service
-from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList
+from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesOrderStatus
+from app.extensions import wms_service
 
 def search_sales_order(data, branch_id=None):
     try:
@@ -184,3 +185,17 @@ def create_sales_order(data):
     except Exception:
         db.session.rollback()
         raise
+
+def sales_order_finish(sales_order : SalesOrder):
+    try:
+        sales_order.status = SalesOrderStatus.COMPLETED
+        res = wms_service.finish_sales_order(sales_order.doc_entry)
+        print(f"res : {res}")
+        print(f'{res.get("success", "LMAOOO")}')
+        if res.get("success", False) == False:
+            raise OuterServicesError(f"WMS ไม่สามารถจบ Order ได้ : {res.get('error')}")
+        
+    except Exception:
+        raise
+        
+    

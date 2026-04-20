@@ -46,7 +46,7 @@ if MINIO_ENDPOINT:
     init_storage_service(MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_SECURE)
 if REDIS_URL:
     init_cache_service(REDIS_URL)
-init_wms_service(WMS_URL)
+init_wms_service(WMS_URL, CENTER_ACCESS_KEY)
 
 
 @app.errorhandler(AppException)

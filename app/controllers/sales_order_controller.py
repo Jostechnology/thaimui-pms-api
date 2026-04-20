@@ -173,10 +173,10 @@ def api_get_by_doc_entry(doc_entry):
 
         response_dict = {"data": data, "success": True}
 
-        cutoff = datetime.utcnow() - timedelta(days=7)
-        created = sales_order.created_date
-        if created and (created.replace(tzinfo=None) >= cutoff):
-            cache_service.set(key, response_dict, ttl=SALES_ORDER_CACHE_TTL)
+        # cutoff = datetime.utcnow() - timedelta(days=7)
+        # created = sales_order.created_date
+        # if created and (created.replace(tzinfo=None) >= cutoff):
+        #     cache_service.set(key, response_dict, ttl=SALES_ORDER_CACHE_TTL)
 
         return jsonify(response_dict), 200
     except Exception:

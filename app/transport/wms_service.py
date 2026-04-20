@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class WMSService:
     _instance = None
 
-    def __new__(cls, base_url: str = None, timeout: int = 30):
+    def __new__(cls, token : str, base_url: str = None, timeout: int = 30):
         if cls._instance is None:
             if not base_url:
                 raise ValueError("WMSService must be initialized with base_url")
@@ -20,6 +20,7 @@ class WMSService:
             cls._instance.session = requests.Session()
             cls._instance.session.headers.update({
                 "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
             })
 
         return cls._instance
@@ -41,4 +42,14 @@ class WMSService:
         }
         logger.info(f"WMS create_pickup_from_pms: doc_entry={doc_entry}, items={len(order_items)}")
         response = self.session.post(url=url, json=payload, timeout=self.timeout)
+        return response.json()
+    
+    def finish_sales_order(self, doc_entry):
+        url = f"{self.base_url}/api/order/finish_from_pms"
+        payload = {
+            "doc_entry" : doc_entry
+        }
+        logger.info(f"WMS finish_sales_order: doc_entry={doc_entry}")
+        response = self.session.put(url=url, json=payload, timeout=self.timeout)
+        
         return response.json()

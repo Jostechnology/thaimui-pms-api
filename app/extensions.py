@@ -26,11 +26,11 @@ def init_document_generator_service(DOCUMENT_GENERATOR_URL):
         )
 
 
-def init_wms_service(WMS_URL):
+def init_wms_service(WMS_URL, token):
     global wms_service
 
     if WMS_URL:
-        wms_service = WMSService(base_url=WMS_URL)
+        wms_service = WMSService(base_url=WMS_URL,token=token)
 
 
 def init_storage_service(endpoint, access_key, secret_key, bucket, secure=False):

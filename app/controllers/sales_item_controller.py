@@ -5,6 +5,7 @@ from app.ma_sqlalchemy import SalesItemSchema, SalesItemTrackingSchema, WorkRunS
 from app.services.sales_item_service import get_all_sales_items, create_sales_item, get_sales_item_detail, get_sales_item_tracking, complete_sales_item
 from app.services.work_run_service import get_work_runs_by_sales_item
 from app.services.test_result_service import get_test_results_by_sales_item
+from app.services import cache_service
 
 
 @app.route("/api/get_sales_item_list", methods=["GET"])
@@ -71,6 +72,8 @@ def api_get_test_results_by_sales_item(sales_item_id):
 def api_complete_sales_item(sales_item_id):
     try:
         result = complete_sales_item(sales_item_id)
+        if result.doc_entry and result.branch_id:
+            cache_service.delete(f"sales_order_detail_{result.doc_entry}_{result.branch_id}")
         return jsonify({"data": SalesItemSchema().dump(result), "success": True}), 200
     except Exception:
         raise

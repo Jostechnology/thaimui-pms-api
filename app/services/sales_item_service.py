@@ -2,6 +2,7 @@ from app.con_sqlalchemy import SalesItem, SalesItemStatus, WorkOrderStatus, Sale
 from app.repositories import sales_item_repository, sales_order_repository
 from app.app import db
 from app.exception import NotFoundError, ValidationError
+from app.services import sales_order_service
 
 
 def get_all_sales_items(data):
@@ -59,12 +60,9 @@ def complete_sales_item(sales_item_id):
 
         db.session.flush()
 
-        if sales_item.doc_entry and not sales_item_repository.has_incomplete_items_for_sales_order(
-            sales_item.doc_entry, sales_item_id
-        ):
+        if sales_item.doc_entry and not sales_item_repository.has_incomplete_items_for_sales_order(sales_item.doc_entry, sales_item_id):
             sales_order = sales_order_repository.get_sales_order_by_doc_entry(sales_item.doc_entry)
-            if sales_order:
-                sales_order.status = SalesOrderStatus.COMPLETED
+            sales_order_service.sales_order_finish(sales_order)
 
         db.session.commit()
         return sales_item

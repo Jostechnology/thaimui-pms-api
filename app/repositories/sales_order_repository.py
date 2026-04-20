@@ -240,7 +240,10 @@ def get_all_sales_orders(page, limit, search, branch_id=None):
 
 def get_sales_order_by_doc_entry(doc_entry):
     query = db.session.query(SalesOrder).filter(SalesOrder.doc_entry == doc_entry)
-    return query.first()
+    sales_order = query.first()
+    if not sales_order:
+        raise NotFoundError(f"ไม่พบ SalesOrder : {doc_entry}")
+    return sales_order
 
 
 def get_sales_order_detail(doc_entry, branch_id=None):
@@ -268,4 +271,6 @@ def get_sales_order_detail(doc_entry, branch_id=None):
         return sales_order
     except Exception:
         raise
+    
+
 
