@@ -78,6 +78,38 @@ def get_available_picking_items_for_material(material_list_id):
     return query.all()
 
 
+def get_available_picking_items_by_code(doc_entry, item_code):
+    """PickingRequestItems where item_code matches and parent PR's doc_entry + SUCCESS, ordered FIFO.
+    Pool is shared across all SalesItem/MaterialList rows of the same item_code within the SO."""
+    query = (
+        db.session.query(PickingRequestItem)
+        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
+        .filter(
+            PickingRequest.doc_entry == doc_entry,
+            PickingRequestItem.item_code == item_code,
+            PickingRequest.status == PickingRequestStatus.SUCCESS,
+        )
+        .order_by(PickingRequestItem.picking_request_item_id.asc())
+    )
+    return query.all()
+
+
+def get_non_failed_picked_qty_by_code(doc_entry, item_code):
+    """Sum PRI.quantity for given (doc_entry, item_code) across non-FAILED PRs."""
+    query = (
+        db.session.query(
+            db.func.coalesce(db.func.sum(PickingRequestItem.quantity), 0)
+        )
+        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
+        .filter(
+            PickingRequest.doc_entry == doc_entry,
+            PickingRequestItem.item_code == item_code,
+            PickingRequest.status != PickingRequestStatus.FAILED,
+        )
+    )
+    return query.scalar()
+
+
 def get_total_committed_qty(picking_request_item_id):
     """
     Total committed qty from a PickingRequestItem across ALL consumers.
@@ -236,6 +268,34 @@ def get_available_pick_requests_for_test_result(sales_item_id=None, material_lis
             & item_filter
         )
         .filter(PickingRequest.status == PickingRequestStatus.SUCCESS)
+        .options(
+            joinedload(PickingRequest.sales_order),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.test_result_consumptions),
+            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.adjustments),
+        )
+        .distinct()
+        .order_by(PickingRequest.picking_request_id.asc())
+    )
+    return query.all()
+
+
+def get_available_pick_requests_by_codes(doc_entry, item_codes):
+    """SUCCESS PRs under the given SO (doc_entry) that have items matching any of the item_codes.
+    Items are filtered to matching codes only, with consumptions + adjustments loaded."""
+    if not item_codes:
+        return []
+    query = (
+        db.session.query(PickingRequest)
+        .join(
+            PickingRequestItem,
+            (PickingRequestItem.picking_request_id == PickingRequest.picking_request_id)
+            & (PickingRequestItem.item_code.in_(item_codes))
+        )
+        .filter(
+            PickingRequest.doc_entry == doc_entry,
+            PickingRequest.status == PickingRequestStatus.SUCCESS,
+        )
         .options(
             joinedload(PickingRequest.sales_order),
             contains_eager(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions),

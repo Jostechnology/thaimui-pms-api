@@ -195,13 +195,13 @@ def start_test_result(test_result_id, data=None):
                     raise ValidationError("manual mode ต้องระบุ sales_item_sources สำหรับ non-produced item")
                 try:
                     sales_item_allocations = picking_allocation_service.allocate_manual(
-                        manual_si_sources, test_result.claimed_qty
+                        manual_si_sources, test_result.claimed_qty, sales_item.item_code
                     )
                 except ValidationError:
                     raise
             else:
-                candidates = picking_request_repository.get_available_picking_items_for_sales_item(
-                    sales_item.sales_item_id
+                candidates = picking_request_repository.get_available_picking_items_by_code(
+                    sales_item.doc_entry, sales_item.item_code
                 )
                 try:
                     sales_item_allocations = picking_allocation_service.allocate_fifo(
@@ -228,13 +228,13 @@ def start_test_result(test_result_id, data=None):
                 if not sources:
                     raise ValidationError(f"manual mode ต้องระบุ sources สำหรับ required item {req.id} ({req.item_code})")
                 try:
-                    allocs = picking_allocation_service.allocate_manual(sources, req.required_qty)
+                    allocs = picking_allocation_service.allocate_manual(sources, req.required_qty, req.item_code)
                     material_allocations.append((req, allocs))
                 except ValidationError:
                     raise
             else:
-                candidates = picking_request_repository.get_available_picking_items_for_material(
-                    req.material_list_id
+                candidates = picking_request_repository.get_available_picking_items_by_code(
+                    sales_item.doc_entry, req.item_code
                 )
                 try:
                     allocs = picking_allocation_service.allocate_fifo(candidates, req.required_qty)
@@ -488,13 +488,18 @@ def get_pick_requests_for_test_result(test_result_id):
     qc = qc_work_order_repository.get_qc_work_order_for_availability_check(test_result.qc_work_order_id)
     sales_item = qc.sales_item
 
-    sales_item_id = None if sales_item.produce else sales_item.sales_item_id
+    codes = set()
+    if not sales_item.produce:
+        codes.add(sales_item.item_code)
     required = test_result_repository.get_required_items(test_result_id)
-    material_list_ids = [r.material_list_id for r in required if r.material_list_id]
+    for r in required:
+        if r.item_code:
+            codes.add(r.item_code)
+    if not codes:
+        return []
 
-    return picking_request_repository.get_available_pick_requests_for_test_result(
-        sales_item_id=sales_item_id,
-        material_list_ids=material_list_ids or None,
+    return picking_request_repository.get_available_pick_requests_by_codes(
+        sales_item.doc_entry, list(codes)
     )
 
 

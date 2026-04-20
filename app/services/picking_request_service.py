@@ -4,7 +4,7 @@ from app.con_sqlalchemy import (
     PickingRequest, PickingRequestItem,
     PickingRequestStatus,
 )
-from app.repositories import picking_request_repository, sales_order_repository, sales_item_repository
+from app.repositories import picking_request_repository, sales_order_repository, sales_item_repository, material_list_repository
 from app.services import document_code_service
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, OuterServicesError
@@ -44,24 +44,34 @@ def _build_items(items_data):
     return result
 
 
-def _check_sales_item_over_allocation(items):
-    """
-    For items tied to a non-produced SalesItem (sales_item_id set), block if
-    total picked qty across existing non-FAILED PRs + new qty exceeds SalesItem.quantity.
-    Skips items with only material_list_id (material over-allocation is handled by FIFO gate at WorkRun start).
-    """
-    for item in items:
-        if not item.sales_item_id:
-            continue
-        sales_item = sales_item_repository.get_sales_item_by_id(item.sales_item_id)
-        if not sales_item:
-            raise NotFoundError(f"SalesItem {item.sales_item_id} not found")
-        existing_picked = picking_request_repository.get_non_failed_picked_qty_for_sales_item(item.sales_item_id)
-        if existing_picked + item.quantity > sales_item.quantity:
-            raise ValidationError(
-                f"{sales_item.item_code} ({sales_item.item_name}): "
-                f"ขอ Pick รวม {existing_picked + item.quantity} ชิ้น แต่สั่งซื้อเพียง {sales_item.quantity} ชิ้น"
-            )
+# Over-allocation guard disabled: rework WorkRuns legitimately need extra material
+# picks beyond BOM, so a cap blocks valid workflows. Kept for future reference.
+#
+# def _check_over_allocation_by_code(doc_entry, items):
+#     """
+#     Aggregate new picked qty per item_code within the SO and block if
+#     existing non-FAILED picked qty + new qty exceeds the SO's total declared need
+#     for that code (non-produce SalesItem.quantity + MaterialList.quantity).
+#     Pool is shared across lines of the same item_code.
+#     """
+#     new_qty_by_code = {}
+#     for item in items:
+#         new_qty_by_code[item.item_code] = new_qty_by_code.get(item.item_code, 0) + item.quantity
+#
+#     for item_code, new_qty in new_qty_by_code.items():
+#         existing_picked = picking_request_repository.get_non_failed_picked_qty_by_code(doc_entry, item_code)
+#         fg_need = sales_item_repository.get_total_non_produced_qty_by_code(doc_entry, item_code)
+#         mat_need = material_list_repository.get_total_material_qty_by_code(doc_entry, item_code)
+#         cap = fg_need + mat_need
+#         if cap <= 0:
+#             raise ValidationError(
+#                 f"{item_code}: ไม่พบความต้องการใน Sales Order (non-produce SalesItem หรือ BOM)"
+#             )
+#         if existing_picked + new_qty > cap:
+#             raise ValidationError(
+#                 f"{item_code}: ขอ Pick รวม {existing_picked + new_qty} ชิ้น "
+#                 f"แต่ SO ต้องการเพียง {cap} ชิ้น (FG {fg_need} + BOM {mat_need})"
+#             )
 
 
 def _build_wms_order_items(items):
@@ -149,7 +159,7 @@ def create_for_sales_order(doc_entry, data):
             raise NotFoundError(f"Sales Order {doc_entry} not found")
 
         items = _build_items(data.get("items", []))
-        _check_sales_item_over_allocation(items)
+        # _check_over_allocation_by_code(doc_entry, items)  # disabled — rework needs extra picks
 
         pr = PickingRequest(
             picking_request_code=document_code_service.generate_number("PR"),

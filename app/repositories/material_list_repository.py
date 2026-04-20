@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import MaterialList
+from app.con_sqlalchemy import MaterialList, SalesItem
 from app.app import db
 
 
@@ -29,4 +29,17 @@ def get_material_list_of_items(item_ids : list[int]):
         materials = query.all()
         return materials
     except Exception:
-        raise 
+        raise
+
+
+def get_total_material_qty_by_code(doc_entry, item_code):
+    """Sum MaterialList.quantity for a given item_code across all SalesItems in the SO."""
+    query = (
+        db.session.query(db.func.coalesce(db.func.sum(MaterialList.quantity), 0))
+        .join(SalesItem, SalesItem.sales_item_id == MaterialList.sales_item_id)
+        .filter(
+            SalesItem.doc_entry == doc_entry,
+            MaterialList.item_code == item_code,
+        )
+    )
+    return query.scalar()

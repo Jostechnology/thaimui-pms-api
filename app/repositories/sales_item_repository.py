@@ -106,6 +106,19 @@ def has_incomplete_items_for_sales_order(doc_entry, exclude_sales_item_id):
     return query.first() is not None
 
 
+def get_total_non_produced_qty_by_code(doc_entry, item_code):
+    """Sum SalesItem.quantity for non-produce items with given item_code in a SO."""
+    query = (
+        db.session.query(db.func.coalesce(db.func.sum(SalesItem.quantity), 0))
+        .filter(
+            SalesItem.doc_entry == doc_entry,
+            SalesItem.item_code == item_code,
+            SalesItem.produce == False,
+        )
+    )
+    return query.scalar()
+
+
 def get_sales_items_by_doc_entry(doc_entry):
     try:
         return (

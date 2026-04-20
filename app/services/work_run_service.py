@@ -235,6 +235,11 @@ def start_work_run(work_run_id, data=None):
     if work_run.status != WorkRunStatus.PENDING:
         raise ValidationError(f"Work Run must be PENDING to start (current: {work_run.status.value})")
 
+    work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id)
+    if not work_order:
+        raise NotFoundError(f"Work Order {work_run.work_order_id} not found")
+    doc_entry = work_order.doc_entry
+
     required = work_run_repository.get_required_items(work_run_id)
 
     shortages = []
@@ -251,10 +256,10 @@ def start_work_run(work_run_id, data=None):
             sources = mat_source_map.get(req.id, [])
             if not sources:
                 raise ValidationError(f"manual mode ต้องระบุ sources สำหรับ required item {req.id} ({req.item_code})")
-            allocs = picking_allocation_service.allocate_manual(sources, req.quantity)
+            allocs = picking_allocation_service.allocate_manual(sources, req.quantity, req.item_code)
             all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
         else:
-            candidates = picking_request_repository.get_available_picking_items_for_material(req.material_list_id)
+            candidates = picking_request_repository.get_available_picking_items_by_code(doc_entry, req.item_code)
             try:
                 allocs = picking_allocation_service.allocate_fifo(candidates, req.quantity)
                 all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
@@ -283,8 +288,7 @@ def start_work_run(work_run_id, data=None):
     work_run.status = WorkRunStatus.INPROGRESS
     work_run.start_date = now
 
-    work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id)
-    if work_order and work_order.status != WorkOrderStatus.INPROGRESS:
+    if work_order.status != WorkOrderStatus.INPROGRESS:
         work_order.status = WorkOrderStatus.INPROGRESS
 
     db.session.commit()
@@ -651,11 +655,16 @@ def get_pick_requests_for_work_run(work_run_id):
     work_run = work_run_repository.get_work_run_by_id(work_run_id)
     if not work_run:
         raise NotFoundError(f"Work Run {work_run_id} not found")
+    work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id)
+    if not work_order:
+        raise NotFoundError(f"Work Order {work_run.work_order_id} not found")
     required = work_run_repository.get_required_items(work_run_id)
-    material_list_ids = [r.material_list_id for r in required if r.material_list_id]
-    if not material_list_ids:
+    item_codes = list({r.item_code for r in required if r.item_code})
+    if not item_codes:
         return []
-    return picking_request_repository.get_available_pick_requests_for_work_run(material_list_ids)
+    return picking_request_repository.get_available_pick_requests_by_codes(
+        work_order.doc_entry, item_codes
+    )
 
 
 def get_material_using_in_work_order_of_work_run(work_run_id):

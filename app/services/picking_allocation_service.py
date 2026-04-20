@@ -47,19 +47,21 @@ def allocate_fifo(candidates, needed_qty):
     return allocations
 
 
-def allocate_manual(manual_sources, needed_qty):
+def allocate_manual(manual_sources, needed_qty, expected_item_code=None):
     """
     Validate and apply manual allocation from operator-chosen picking items.
 
     Args:
         manual_sources: list of dicts with {picking_request_item_id, qty}.
         needed_qty: total quantity required.
+        expected_item_code: if provided, each chosen PRI.item_code must match.
 
     Returns:
         list of (picking_request_item_id, qty) tuples.
 
     Raises:
-        ValidationError if total qty doesn't match needed or picking item has insufficient availability.
+        ValidationError if total qty doesn't match, PRI has insufficient availability,
+        or code mismatch when expected_item_code is set.
     """
     total_manual = sum(s["qty"] for s in manual_sources)
     if total_manual != needed_qty:
@@ -77,6 +79,11 @@ def allocate_manual(manual_sources, needed_qty):
         pri = picking_request_repository.get_picking_request_item_by_id(pri_id)
         if not pri:
             raise ValidationError(f"ไม่พบ Picking Request Item {pri_id}")
+
+        if expected_item_code is not None and pri.item_code != expected_item_code:
+            raise ValidationError(
+                f"Picking Item {pri_id} รหัสสินค้า {pri.item_code} ไม่ตรงกับที่ต้องการ {expected_item_code}"
+            )
 
         committed = picking_request_repository.get_total_committed_qty(pri_id)
         available = pri.quantity - committed
