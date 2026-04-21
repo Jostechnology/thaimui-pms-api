@@ -1,7 +1,12 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import PickingItemAdjustmentSchema
+from app.ma_sqlalchemy import (
+    PickingItemAdjustmentSchema,
+    PickingRequestItemSchema,
+    SalesItemForWorkOrderSchema,
+    MaterialListSchema,
+)
 from app.services import picking_item_adjustment_service
 
 
@@ -41,3 +46,25 @@ def api_get_adjustments_by_picking_request(picking_request_id):
         "pagination": {"total": result["total"], "page": result["page"], "pages": result["pages"]},
         "success": True,
     }), 200
+
+
+@app.route("/api/picking_request_item/<int:source_pri_id>/reallocate_options", methods=["GET"])
+@verify_required
+def api_get_reallocate_options(source_pri_id):
+    result = picking_item_adjustment_service.get_reallocate_options(source_pri_id)
+    return jsonify({
+        "data": {
+            "picking_request_items": PickingRequestItemSchema(many=True).dump(result["picking_request_items"]),
+            "sales_items": SalesItemForWorkOrderSchema(many=True).dump(result["sales_items"]),
+            "material_lists": MaterialListSchema(many=True).dump(result["material_lists"]),
+        },
+        "success": True,
+    }), 200
+
+
+@app.route("/api/picking_request_item/<int:source_pri_id>/reallocate", methods=["POST"])
+@verify_required
+def api_reallocate_picking_item(source_pri_id):
+    data = request.get_json() or {}
+    result = picking_item_adjustment_service.reallocate(source_pri_id, data)
+    return jsonify({"data": result, "success": True}), 201

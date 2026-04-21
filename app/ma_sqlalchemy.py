@@ -428,6 +428,19 @@ class PickingRequestItemSchema(Schema):
     quantity                = fields.Integer()
     unit                    = fields.String(allow_none=True)
     remark                  = fields.String(allow_none=True)
+    picking_request_code    = fields.Method("get_picking_request_code", dump_only=True)
+    so_order_line_num       = fields.Method("get_so_order_line_num", dump_only=True)
+
+    def get_picking_request_code(self, obj):
+        pr = obj.picking_request
+        return pr.picking_request_code if pr else None
+
+    def get_so_order_line_num(self, obj):
+        if obj.sales_item_id and obj.sales_item:
+            return obj.sales_item.order_line_num
+        if obj.material_list_id and obj.material_list:
+            return obj.material_list.order_line_num
+        return None
 
 class PickingRequestSchema(Schema):
     picking_request_id   = fields.Integer()
@@ -516,6 +529,10 @@ class PickingItemAdjustmentSchema(Schema):
     remark                  = fields.String(allow_none=True)
     created_by              = fields.String(dump_only=True)
     created_date            = fields.DateTime(dump_only=True)
+    counterparty_picking_request_item_id = fields.Integer(allow_none=True, dump_only=True)
+    counterparty            = fields.Nested(
+        PickingRequestItemSchema, allow_none=True, dump_only=True
+    )
 
 
 class TestResultSummarySchema(Schema):

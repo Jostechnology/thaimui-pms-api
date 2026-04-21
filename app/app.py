@@ -77,7 +77,7 @@ def handle_not_found(e):
 def handle_generic_exception(e):
     traceback.print_exc()
     return jsonify({
-        "error": "Internal server error ",
+        "error": f"Error : {str(e)}",
         "success" : False
     }), 500
 

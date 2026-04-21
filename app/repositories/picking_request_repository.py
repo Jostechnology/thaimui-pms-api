@@ -26,12 +26,14 @@ def get_picking_request_detail_by_id(picking_request_id):
 
 
 def get_picking_request_full_detail_by_id(picking_request_id):
-    """Full detail: items + each item's test_result/work_run consumptions + adjustments."""
+    """Full detail: items + each item's test_result/work_run consumptions + adjustments (with reallocate counterparty)."""
     query = db.session.query(PickingRequest).options(
         joinedload(PickingRequest.sales_order),
         selectinload(PickingRequest.items).selectinload(PickingRequestItem.test_result_consumptions).selectinload(TestResultPickingItem.test_result),
         selectinload(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions).selectinload(WorkRunPickingItem.work_run),
-        selectinload(PickingRequest.items).selectinload(PickingRequestItem.adjustments),
+        selectinload(PickingRequest.items).selectinload(PickingRequestItem.adjustments).selectinload(PickingItemAdjustment.counterparty).joinedload(PickingRequestItem.picking_request),
+        selectinload(PickingRequest.items).selectinload(PickingRequestItem.adjustments).selectinload(PickingItemAdjustment.counterparty).joinedload(PickingRequestItem.sales_item),
+        selectinload(PickingRequest.items).selectinload(PickingRequestItem.adjustments).selectinload(PickingItemAdjustment.counterparty).joinedload(PickingRequestItem.material_list),
     ).filter(PickingRequest.picking_request_id == picking_request_id)
     return query.first()
 
@@ -76,6 +78,72 @@ def get_available_picking_items_for_material(material_list_id):
         .order_by(PickingRequestItem.picking_request_item_id.asc())
     )
     return query.all()
+
+
+def get_success_pris_for_line(doc_entry, sales_item_id=None, material_list_id=None):
+    """SUCCESS PRIs in a SO matching the given line FK (exactly one of the two FK args must be set)."""
+    query = (
+        db.session.query(PickingRequestItem)
+        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
+        .filter(
+            PickingRequest.doc_entry == doc_entry,
+            PickingRequest.status == PickingRequestStatus.SUCCESS,
+        )
+    )
+    if sales_item_id is not None:
+        query = query.filter(PickingRequestItem.sales_item_id == sales_item_id)
+    elif material_list_id is not None:
+        query = query.filter(PickingRequestItem.material_list_id == material_list_id)
+    else:
+        return []
+    return query.order_by(PickingRequestItem.picking_request_item_id.asc()).all()
+
+
+def get_reallocate_options(source_pri, doc_entry):
+    """Candidate targets for reallocate: SUCCESS PRIs, SalesItems, MaterialLists
+    in the same SO with matching item_code. Source PRI excluded."""
+    from app.con_sqlalchemy import SalesItem, MaterialList
+
+    item_code = source_pri.item_code
+
+    pris_query = (
+        db.session.query(PickingRequestItem)
+        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
+        .options(
+            contains_eager(PickingRequestItem.picking_request),
+            joinedload(PickingRequestItem.sales_item),
+            joinedload(PickingRequestItem.material_list),
+        )
+        .filter(
+            PickingRequest.doc_entry == doc_entry,
+            PickingRequest.status == PickingRequestStatus.SUCCESS,
+            PickingRequestItem.item_code == item_code,
+            PickingRequestItem.picking_request_item_id != source_pri.picking_request_item_id,
+        )
+        .order_by(PickingRequestItem.picking_request_item_id.asc())
+    )
+    pris = pris_query.all()
+
+    si_query = (
+        db.session.query(SalesItem)
+        .filter(SalesItem.doc_entry == doc_entry, SalesItem.item_code == item_code)
+        .order_by(SalesItem.sales_item_id.asc())
+    )
+    sales_items = si_query.all()
+
+    ml_query = (
+        db.session.query(MaterialList)
+        .join(SalesItem, SalesItem.sales_item_id == MaterialList.sales_item_id)
+        .filter(SalesItem.doc_entry == doc_entry, MaterialList.item_code == item_code)
+        .order_by(MaterialList.material_list_id.asc())
+    )
+    material_lists = ml_query.all()
+
+    return {
+        "picking_request_items": pris,
+        "sales_items": sales_items,
+        "material_lists": material_lists,
+    }
 
 
 def get_total_committed_qty(picking_request_item_id):

@@ -933,6 +933,7 @@ class PickingRequest(AuditMixin, BranchScopedMixin):
     status               = db.Column(db.Enum(PickingRequestStatus), nullable=False, default=PickingRequestStatus.PENDING)
     wms_reference        = db.Column(db.String(100), nullable=True)
     remark               = db.Column(db.String(500), nullable=True)
+    is_reallocation      = db.Column(db.Boolean, nullable=False, default=False)
 
     items       = db.relationship('PickingRequestItem', back_populates='picking_request', cascade='all, delete-orphan')
     sales_order = db.relationship('SalesOrder', back_populates='picking_requests', lazy='noload')
@@ -956,13 +957,14 @@ class PickingRequestItem(AuditMixin, BranchScopedMixin):
     material_list            = db.relationship('MaterialList', lazy='noload')
     test_result_consumptions = db.relationship('TestResultPickingItem', back_populates='picking_request_item', cascade='all, delete-orphan')
     work_run_consumptions    = db.relationship('WorkRunPickingItem', back_populates='picking_request_item', cascade='all, delete-orphan')
-    adjustments              = db.relationship('PickingItemAdjustment', back_populates='picking_request_item', cascade='all, delete-orphan', lazy='noload')
+    adjustments              = db.relationship('PickingItemAdjustment', back_populates='picking_request_item', foreign_keys='PickingItemAdjustment.picking_request_item_id', cascade='all, delete-orphan', lazy='noload')
 
 
 class PickingItemAdjustmentReason(enum.Enum):
     MISCOUNT   = 'MISCOUNT'    # physical count was wrong
     SPILLAGE   = 'SPILLAGE'    # material wasted/damaged
     CORRECTION = 'CORRECTION'  # admin correction of prior entry
+    REALLOCATE = 'REALLOCATE'  # qty transferred between PRIs in the same SO
     OTHER      = 'OTHER'
 
 
@@ -978,8 +980,23 @@ class PickingItemAdjustment(AuditMixin, BranchScopedMixin):
     delta_qty               = db.Column(db.Integer, nullable=False)  # signed, non-zero
     reason                  = db.Column(db.Enum(PickingItemAdjustmentReason), nullable=False)
     remark                  = db.Column(db.String(500), nullable=True)
+    counterparty_picking_request_item_id = db.Column(
+        db.Integer,
+        db.ForeignKey('t_picking_request_item.picking_request_item_id', ondelete='SET NULL'),
+        nullable=True,
+    )
 
-    picking_request_item = db.relationship('PickingRequestItem', back_populates='adjustments', lazy='noload')
+    picking_request_item = db.relationship(
+        'PickingRequestItem',
+        back_populates='adjustments',
+        foreign_keys=[picking_request_item_id],
+        lazy='noload',
+    )
+    counterparty = db.relationship(
+        'PickingRequestItem',
+        foreign_keys=[counterparty_picking_request_item_id],
+        lazy='noload',
+    )
 
 
 class DocumentCodeList(BaseModel):
