@@ -14,6 +14,8 @@ def api_get_picking_request_list():
         "search": request.args.get("search", "", type=str),
         "status": request.args.get("status", "", type=str),
         "doc_entry": request.args.get("doc_entry", None, type=int),
+        "start_date": request.args.get("start_date", None, type=str),
+        "end_date": request.args.get("end_date", None, type=str),
     }
     result = picking_request_service.get_list(data)
     return jsonify({

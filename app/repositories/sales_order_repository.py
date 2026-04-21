@@ -95,7 +95,7 @@ def assign_branch(doc_entry, branch_id):
     return sales_order
 
 
-def get_all_sales_orders(page, limit, search, branch_id=None):
+def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, end_date=None):
     try:
         items_total_subq = (
             db.session.query(func.count(SalesItem.sales_item_id))
@@ -231,6 +231,11 @@ def get_all_sales_orders(page, limit, search, branch_id=None):
                     SalesOrder.card_code.ilike(f"%{search}%"),
                 )
             )
+
+        if start_date is not None:
+            query = query.filter(SalesOrder.created_date >= start_date)
+        if end_date is not None:
+            query = query.filter(SalesOrder.created_date <= end_date)
 
         query = query.order_by(SalesOrder.created_date.desc())
         return query.paginate(page=page, per_page=limit, error_out=False)

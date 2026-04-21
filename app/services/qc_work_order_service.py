@@ -6,6 +6,7 @@ from app.repositories import qc_work_order_repository, sales_item_repository
 from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
 from app.exception import ValidationError
+from app.utils import convert_start_date, convert_end_date
 
 def get_all_qc_work_orders(data):
     try:
@@ -13,7 +14,11 @@ def get_all_qc_work_orders(data):
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
         filter = data.get("filter", None)
-        result = qc_work_order_repository.get_all_qc_work_orders(page, per_page, search, filter)
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+        start_date = convert_start_date(start_date) if start_date else None
+        end_date = convert_end_date(end_date) if end_date else None
+        result = qc_work_order_repository.get_all_qc_work_orders(page, per_page, search, filter, start_date=start_date, end_date=end_date)
         return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise

@@ -18,7 +18,7 @@ def _qc_work_order_options():
     ]
 
 
-def get_all_qc_work_orders(page, limit, search, filter=None):
+def get_all_qc_work_orders(page, limit, search, filter=None, start_date=None, end_date=None):
     try:
         query = (
             db.session.query(QCWorkOrder)
@@ -35,6 +35,10 @@ def get_all_qc_work_orders(page, limit, search, filter=None):
                     SalesItem.item_name.ilike(f"%{search}%"),
                 )
             )
+        if start_date is not None:
+            query = query.filter(QCWorkOrder.created_date >= start_date)
+        if end_date is not None:
+            query = query.filter(QCWorkOrder.created_date <= end_date)
         result = query.order_by(QCWorkOrder.created_date.desc()).paginate(
             page=page, per_page=limit, error_out=False
         )

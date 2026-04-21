@@ -9,6 +9,7 @@ from app.services import document_code_service
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, OuterServicesError
 from app.extensions import wms_service
+from app.utils import convert_start_date, convert_end_date
 
 logger = logging.getLogger(__name__)
 
@@ -231,12 +232,19 @@ def get_list(data):
 
     doc_entry = data.get("doc_entry")
 
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    start_date = convert_start_date(start_date) if start_date else None
+    end_date = convert_end_date(end_date) if end_date else None
+
     return picking_request_repository.get_picking_request_list(
         page=page,
         per_page=per_page,
         search=search,
         status=status,
         doc_entry=doc_entry,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 

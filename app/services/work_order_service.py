@@ -4,6 +4,7 @@ from app.app import db
 from app.repositories import sales_item_repository
 from app.services import sales_item_service, transaction_service
 from app.exception import AuthorizationError, NotFoundError, UniqueError
+from app.utils import convert_start_date, convert_end_date
 
 def get_all_work_orders(data):
     try:
@@ -12,7 +13,11 @@ def get_all_work_orders(data):
         search = data.get("search", "")
         filter = data.get("filter", "")
         month = data.get("month", "")
-        result = work_order_repository.get_all_work_orders(page, per_page, search,filter, month)
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+        start_date = convert_start_date(start_date) if start_date else None
+        end_date = convert_end_date(end_date) if end_date else None
+        result = work_order_repository.get_all_work_orders(page, per_page, search, filter, month, start_date=start_date, end_date=end_date)
         return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise

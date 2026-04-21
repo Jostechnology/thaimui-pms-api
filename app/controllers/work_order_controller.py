@@ -16,7 +16,9 @@ def api_get_work_order_list():
         search = request.args.get("search", "", type=str)
         filter = request.args.get("filter", None, type=WorkOrderStatus)
         month = request.args.get("month", "", type=str)
-        data = {"page": page, "per_page": per_page, "search": search, "filter": filter, "month": month}
+        start_date = request.args.get("start_date", None, type=str)
+        end_date = request.args.get("end_date", None, type=str)
+        data = {"page": page, "per_page": per_page, "search": search, "filter": filter, "month": month, "start_date": start_date, "end_date": end_date}
         result = get_all_work_orders(data)
         return jsonify({
             "data": {"items": WorkOrderSchema(many=True).dump(result["items"])},

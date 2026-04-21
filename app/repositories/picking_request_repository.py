@@ -237,7 +237,7 @@ def get_picking_item_adjustments_by_picking_request(picking_request_id, page, pe
     return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
 
 
-def get_picking_request_list(page, per_page, search="", status=None, doc_entry=None):
+def get_picking_request_list(page, per_page, search="", status=None, doc_entry=None, start_date=None, end_date=None):
     query = (
         db.session.query(PickingRequest)
         .outerjoin(SalesOrder, SalesOrder.doc_entry == PickingRequest.doc_entry)
@@ -262,6 +262,11 @@ def get_picking_request_list(page, per_page, search="", status=None, doc_entry=N
 
     if doc_entry:
         query = query.filter(PickingRequest.doc_entry == doc_entry)
+
+    if start_date is not None:
+        query = query.filter(PickingRequest.created_date >= start_date)
+    if end_date is not None:
+        query = query.filter(PickingRequest.created_date <= end_date)
 
     result = query.order_by(PickingRequest.picking_request_id.desc()).paginate(
         page=page, per_page=per_page, error_out=False

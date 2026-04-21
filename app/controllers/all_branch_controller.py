@@ -12,7 +12,9 @@ def api_all_branch_get_all_sales_orders():
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 10, type=int)
         search = request.args.get("search", "", type=str)
-        data = {"page": page, "per_page": per_page, "search": search}
+        start_date = request.args.get("start_date", None, type=str)
+        end_date = request.args.get("end_date", None, type=str)
+        data = {"page": page, "per_page": per_page, "search": search, "start_date": start_date, "end_date": end_date}
 
         result = get_all_sales_orders(
             data,

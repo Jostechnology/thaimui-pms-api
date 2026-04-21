@@ -1,6 +1,7 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
+from app.exception import MissingFieldsError
 from app.services.operation_cost_monthly_service import (
     get_all_operation_cost_monthly,
     create_operation_cost_monthly,
@@ -29,7 +30,11 @@ def api_get_all_operation_cost_monthly():
 @verify_required
 def api_create_operation_cost_monthly():
     try:
-        data = request.get_json()
+        payload = request.get_json()
+        data = payload.get("data", None)
+        if data is None:
+            raise MissingFieldsError("ไม่พบ data")
+        
         result = create_operation_cost_monthly(data)
         return jsonify({"data": result, "success": True}), 201
     except Exception:

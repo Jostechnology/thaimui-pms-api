@@ -5,6 +5,7 @@ from app.app import db
 from app.services import branch_service, cache_service, work_order_service, transaction_service
 from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesOrderStatus
 from app.extensions import wms_service
+from app.utils import convert_start_date, convert_end_date
 
 def search_sales_order(data, branch_id=None):
     try:
@@ -12,7 +13,7 @@ def search_sales_order(data, branch_id=None):
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
         result = sales_order_repository.search_sales_order(page, per_page, search, branch_id=branch_id)
-        cache_service()
+        # cache_service()
         return {"items": result["items"], "total": result["total"], "page": result["page"], "pages": result["pages"]}
     except Exception:
         raise
@@ -33,7 +34,11 @@ def get_all_sales_orders(data, branch_id=None):
         page = data.get("page", 1)
         per_page = data.get("per_page", 10)
         search = data.get("search", "")
-        result = sales_order_repository.get_all_sales_orders(page, per_page, search, branch_id=branch_id)
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+        start_date = convert_start_date(start_date) if start_date else None
+        end_date = convert_end_date(end_date) if end_date else None
+        result = sales_order_repository.get_all_sales_orders(page, per_page, search, branch_id=branch_id, start_date=start_date, end_date=end_date)
         items_data = []
         for row in result.items:
             so = row.SalesOrder

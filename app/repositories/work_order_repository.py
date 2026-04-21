@@ -20,7 +20,7 @@ def _work_order_options():
     ]
 
 
-def get_all_work_orders(page, limit, search, filter, month):
+def get_all_work_orders(page, limit, search, filter, month, start_date=None, end_date=None):
     try:
         query = db.session.query(WorkOrder).options(selectinload(WorkOrder.sales_item))
         branch_id = g.get("branch_id")
@@ -41,6 +41,10 @@ def get_all_work_orders(page, limit, search, filter, month):
                 extract('year', WorkOrder.created_date) == filter_year,
                 extract('month', WorkOrder.created_date) == filter_month
             )
+        if start_date is not None:
+            query = query.filter(WorkOrder.created_date >= start_date)
+        if end_date is not None:
+            query = query.filter(WorkOrder.created_date <= end_date)
         query = query.order_by(desc(WorkOrder.created_date))
         query = query.paginate(page=page, per_page=limit, error_out=False)
         return {"items": query.items, "total": query.total, "page": query.page, "pages": query.pages}
