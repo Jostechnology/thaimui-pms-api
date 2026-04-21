@@ -186,6 +186,65 @@ def register_service(data):
         db.session.rollback()
         raise AppException("An unexpected error occurred")
 
+def sso_login_service(data):
+    import requests 
+    from app.config import AUTH_PORTAL_URL, SHARED_SECRET
+
+    try:
+        token = data.get("token")
+        if not token:
+            raise ValidationError("จำเป็นต้องมี token")
+
+        res = requests.post(
+            f"{AUTH_PORTAL_URL}/api/verify-platform-token",
+            json = {"token": token, "shared_secret": SHARED_SECRET},
+            timeout = 5
+        )
+
+        result = res.json()
+        if not result.get("success"):
+            raise AuthenticationError(result.get("error", "Token ไม่ถูกต้องหรือหมดอายุ"))
+
+        username = result["data"]["username"]
+
+        user = user_repository.get_user_for_login(username)
+        if not user:
+            raise NotFoundError("ไม่พบผู้ใช้งานนี้ในระบบ")
+        
+        if not bool(user.is_active):
+            raise NotFoundError("ผู้ใช้งานนี้ถูกระงับการใช้งาน")
+        
+        user_branch_ids = []
+        user_branches= []
+        for branch in user.branches:
+            if branch.is_active:
+                user_branch_ids.append(branch.branch_id)
+                user_branches.append({
+                    "branch_id": branch.branch_id,
+                    "branch_name": branch.branch_name
+                })
+        
+        has_all_branch_access = check_user_permission(user.user_id, "ALL_BRANCH", "view")
+        if not user_branch_ids and not has_all_branch_access:
+            raise NotFoundError("คุณไม่มีสิทธิ์เข้าถึงสาขาใดเลย")
+        
+        branch_select_token = create_token(
+            {
+                "user_id": user.user_id,
+                "username": user.username,
+                "allowed_branches": user_branch_ids,
+            },
+            "branch_select"    
+        )
+
+        return branch_select_token, user_branches, has_all_branch_access
+    
+    except AppException:
+        raise
+    except Exception:
+        raise
+        
+
 
 def logout_service(refresh_token):
     try:

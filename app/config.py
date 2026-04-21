@@ -18,3 +18,5 @@ MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 REDIS_URL = os.getenv("REDIS_URL")
 WMS_URL = os.getenv("WMS_URL")
+AUTH_PORTAL_URL = os.getenv("AUTH_PORTAL_URL")
+SHARED_SECRET = os.getenv("SHARED_SECRET")

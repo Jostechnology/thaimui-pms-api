@@ -56,6 +56,16 @@ def logout_controller():
     result = auth_service.logout_service(refresh_token)
     return jsonify({"data": result, "success": True}), 200
 
+@app.route('/api/sso-login', methods=['POST'])
+def sso_login_controller():
+    data = request.get_json()
+    branch_select_token, user_branches, has_all_branch_access = auth_service.sso_login_service(data)
+    return jsonify({
+        "branch_select_token": branch_select_token,
+        "user_branches": user_branches,
+        "has_all_branch_access": has_all_branch_access,
+        "success": True
+    }), 200
 
 @app.route('/api/refresh-token', methods=['POST'])
 def refresh_token_controller():
