@@ -10,7 +10,7 @@ services:
 
   thaimui-pms-api:
     platform: linux/amd64
-    image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:1.0.0
+    image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:${TAG}
     container_name: thaimui-pms-api
     restart: always
 
