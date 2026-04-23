@@ -142,7 +142,7 @@ class Module(BaseModel):
     __tablename__ = "m_module"
     module_id = db.Column(db.Integer, primary_key=True)
     module_name = db.Column(db.String(255), nullable=False)
-    module_code = db.Column(db.String(20), nullable=False)
+    module_code = db.Column(db.String(20), nullable=False, unique=True)
     parent_id = db.Column(db.Integer)
     level = db.Column(db.Integer, default=1)
     sort_order = db.Column(db.Integer)
@@ -169,6 +169,10 @@ class Permission(BaseModel):
     module = db.relationship(
         'Module',
         back_populates='permissions'
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint('module_id', 'method', name='uq_permission_module_method'),
     )
 
 

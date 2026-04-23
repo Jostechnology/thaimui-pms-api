@@ -32,7 +32,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deploy-files
-          path: docker-compose.yml
+          path: |
+            docker-compose.yml
+            seeds/permissions.yml
 
       # Build and push the Docker image
       - name: Build and push Docker image
@@ -83,6 +85,13 @@ jobs:
 
           sshpass -p "$PASS" scp -o StrictHostKeyChecking=no docker-compose.yml \
             ${{ secrets.DEV_DEPLOY_USER }}@${{ secrets.DEV_DEPLOY_HOST }}:/root/thaimui-pms-api/docker-compose.yml
+
+          sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.DEV_DEPLOY_USER }}@${{ secrets.DEV_DEPLOY_HOST }} \
+            "mkdir -p /root/thaimui-pms-api/seeds"
+
+          sshpass -p "$PASS" scp -o StrictHostKeyChecking=no seeds/permissions.yml \
+            ${{ secrets.DEV_DEPLOY_USER }}@${{ secrets.DEV_DEPLOY_HOST }}:/root/thaimui-pms-api/seeds/permissions.yml
 
           sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no \
             ${{ secrets.DEV_DEPLOY_USER }}@${{ secrets.DEV_DEPLOY_HOST }} << 'EOF'

@@ -1,0 +1,692 @@
+modules:
+- code: SALE_ORDER
+  name: ใบสั่งขาย
+  parent_code: null
+  level: 1
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.SALE_ORDER
+    description: Create ใบสั่งขาย
+  - method: delete
+    code: delete.SALE_ORDER
+    description: Delete ใบสั่งขาย
+  - method: edit
+    code: edit.SALE_ORDER
+    description: Edit ใบสั่งขาย
+  - method: view
+    code: view.SALE_ORDER
+    description: View ใบสั่งขาย
+- code: WORKORDERS
+  name: ใบสั่งผลิต
+  parent_code: null
+  level: 1
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.WORKORDERS
+    description: Create ใบจ่ายงาน
+  - method: delete
+    code: delete.WORKORDERS
+    description: Delete ใบจ่ายงาน
+  - method: edit
+    code: edit.WORKORDERS
+    description: Edit ใบจ่ายงาน
+  - method: view
+    code: view.WORKORDERS
+    description: View ใบจ่ายงาน
+- code: TRACKING
+  name: การติดตามสินค้า
+  parent_code: null
+  level: 1
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.TRACKING
+    description: Create การติดตามสินค้า
+  - method: delete
+    code: delete.TRACKING
+    description: Delete การติดตามสินค้า
+  - method: edit
+    code: edit.TRACKING
+    description: Edit การติดตามสินค้า
+  - method: view
+    code: view.TRACKING
+    description: View การติดตามสินค้า
+- code: QC
+  name: การเทส
+  parent_code: null
+  level: 1
+  sort_order: 3
+  permissions:
+  - method: create
+    code: create.QC
+    description: Create การเทส
+  - method: delete
+    code: delete.QC
+    description: Delete การเทส
+  - method: edit
+    code: edit.QC
+    description: Edit การเทส
+  - method: view
+    code: view.QC
+    description: View การเทส
+- code: EMPLOYEE
+  name: พนักงาน
+  parent_code: null
+  level: 1
+  sort_order: 4
+  permissions:
+  - method: create
+    code: create.EMPLOYEE
+    description: Create พนักงาน
+  - method: delete
+    code: delete.EMPLOYEE
+    description: Delete พนักงาน
+  - method: edit
+    code: edit.EMPLOYEE
+    description: Edit พนักงาน
+  - method: view
+    code: view.EMPLOYEE
+    description: View พนักงาน
+- code: DOCUMENTS
+  name: รายการเอกสาร
+  parent_code: null
+  level: 1
+  sort_order: 4
+  permissions:
+  - method: create
+    code: create.DOCUMENTS
+    description: Create รายการเอกสาร
+  - method: delete
+    code: delete.DOCUMENTS
+    description: Delete รายการเอกสาร
+  - method: edit
+    code: edit.DOCUMENTS
+    description: Edit รายการเอกสาร
+  - method: view
+    code: view.DOCUMENTS
+    description: View รายการเอกสาร
+- code: CAL_COST
+  name: คำนวณต้นทุน
+  parent_code: null
+  level: 1
+  sort_order: 6
+  permissions:
+  - method: create
+    code: create.CAL_COST
+    description: Create คำนวณต้นทุน
+  - method: delete
+    code: delete.CAL_COST
+    description: Delete คำนวณต้นทุน
+  - method: edit
+    code: edit.CAL_COST
+    description: Edit คำนวณต้นทุน
+  - method: view
+    code: view.CAL_COST
+    description: View คำนวณต้นทุน
+- code: PM_MACHINE
+  name: ซ่อมบำรุงเครื่องจักร
+  parent_code: null
+  level: 1
+  sort_order: 7
+  permissions:
+  - method: create
+    code: create.PM_MACHINE
+    description: Create ซ่อมบำรุงเครื่องจักร
+  - method: delete
+    code: delete.PM_MACHINE
+    description: Delete ซ่อมบำรุงเครื่องจักร
+  - method: edit
+    code: edit.PM_MACHINE
+    description: Edit ซ่อมบำรุงเครื่องจักร
+  - method: view
+    code: view.PM_MACHINE
+    description: View ซ่อมบำรุงเครื่องจักร
+- code: MACHINE
+  name: เครื่องจักร
+  parent_code: null
+  level: 1
+  sort_order: 8
+  permissions:
+  - method: create
+    code: create.MACHINE
+    description: Create เครื่องจักร
+  - method: delete
+    code: delete.MACHINE
+    description: Delete เครื่องจักร
+  - method: edit
+    code: edit.MACHINE
+    description: Edit เครื่องจักร
+  - method: view
+    code: view.MACHINE
+    description: View เครื่องจักร
+- code: SALES_ORDER
+  name: Sales Order
+  parent_code: null
+  level: 1
+  sort_order: 10
+  permissions:
+  - method: create
+    code: create.SALES_ORDER
+    description: Create Sales Order
+  - method: delete
+    code: delete.SALES_ORDER
+    description: Delete Sales Order
+  - method: edit
+    code: edit.SALES_ORDER
+    description: Edit Sales Order
+  - method: view
+    code: view.SALES_ORDER
+    description: View Sales Order
+- code: SETTING
+  name: การตั้งค่า
+  parent_code: null
+  level: 1
+  sort_order: 9999
+  permissions:
+  - method: create
+    code: create.SETTING
+    description: Create การตั้งค่า
+  - method: delete
+    code: delete.SETTING
+    description: Delete การตั้งค่า
+  - method: edit
+    code: edit.SETTING
+    description: Edit การตั้งค่า
+  - method: view
+    code: view.SETTING
+    description: View การตั้งค่า
+- code: ROLE_MANAGEMENT
+  name: การจัดการสิทธิผู้ใช้
+  parent_code: SETTING
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.ROLE_MANAGEMENT
+    description: Create การจัดการสิทธิผู้ใช้
+  - method: delete
+    code: delete.ROLE_MANAGEMENT
+    description: Delete การจัดการสิทธิผู้ใช้
+  - method: edit
+    code: edit.ROLE_MANAGEMENT
+    description: Edit การจัดการสิทธิผู้ใช้
+  - method: view
+    code: view.ROLE_MANAGEMENT
+    description: View การจัดการสิทธิผู้ใช้
+- code: DASHBOARD
+  name: แดชบอร์ด
+  parent_code: WORKORDERS
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: view
+    code: view.DASHBOARD
+    description: View แดชบอร์ด
+- code: EMPLOYEE_LIST
+  name: จัดการผู้ใช้
+  parent_code: EMPLOYEE
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.EMPLOYEE_LIST
+    description: Create จัดการผู้ใช้
+  - method: delete
+    code: delete.EMPLOYEE_LIST
+    description: Delete จัดการผู้ใช้
+  - method: edit
+    code: edit.EMPLOYEE_LIST
+    description: Edit จัดการผู้ใช้
+  - method: view
+    code: view.EMPLOYEE_LIST
+    description: View จัดการผู้ใช้
+- code: QC_WORKORDERS
+  name: รายการใบสั่งเทส
+  parent_code: QC
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.QC_WORKORDERS
+    description: Create รายการใบสั่งเทส
+  - method: delete
+    code: delete.QC_WORKORDERS
+    description: Delete รายการใบสั่งเทส
+  - method: edit
+    code: edit.QC_WORKORDERS
+    description: Edit รายการใบสั่งเทส
+  - method: view
+    code: view.QC_WORKORDERS
+    description: View รายการใบสั่งเทส
+- code: SALE_ORD_LIST
+  name: รายการใบสั่งขาย
+  parent_code: SALE_ORDER
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.SALE_ORD_LIST
+    description: Create รายการใบสั่งขาย
+  - method: delete
+    code: delete.SALE_ORD_LIST
+    description: Delete รายการใบสั่งขาย
+  - method: edit
+    code: edit.SALE_ORD_LIST
+    description: Edit รายการใบสั่งขาย
+  - method: view
+    code: view.SALE_ORD_LIST
+    description: View รายการใบสั่งขาย
+- code: TEST_TRACKING
+  name: ติดตามรายการเทส
+  parent_code: TRACKING
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.TEST_TRACKING
+    description: Create ติดตามรายการเทส
+  - method: delete
+    code: delete.TEST_TRACKING
+    description: Delete ติดตามรายการเทส
+  - method: edit
+    code: edit.TEST_TRACKING
+    description: Edit ติดตามรายการเทส
+  - method: view
+    code: view.TEST_TRACKING
+    description: View ติดตามรายการเทส
+- code: PICKING_REQUEST
+  name: ใบเบิกสินค้า
+  parent_code: DOCUMENTS
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.PICKING_REQUEST
+    description: Create ใบเบิกสินค้า
+  - method: delete
+    code: delete.PICKING_REQUEST
+    description: Delete ใบเบิกสินค้า
+  - method: edit
+    code: edit.PICKING_REQUEST
+    description: Edit ใบเบิกสินค้า
+  - method: view
+    code: view.PICKING_REQUEST
+    description: View ใบเบิกสินค้า
+- code: CAL_COST_MONTHLY
+  name: ค่าใช้จ่ายรายเดือน
+  parent_code: CAL_COST
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.CAL_COST_MONTHLY
+    description: Create ค่าใช้จ่ายรายเดือน
+  - method: delete
+    code: delete.CAL_COST_MONTHLY
+    description: Delete ค่าใช้จ่ายรายเดือน
+  - method: edit
+    code: edit.CAL_COST_MONTHLY
+    description: Edit ค่าใช้จ่ายรายเดือน
+  - method: view
+    code: view.CAL_COST_MONTHLY
+    description: View ค่าใช้จ่ายรายเดือน
+- code: PM_ITEM
+  name: รายการซ่อม
+  parent_code: PM_MACHINE
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.PM_ITEM
+    description: Create รายการซ่อม
+  - method: delete
+    code: delete.PM_ITEM
+    description: Delete รายการซ่อม
+  - method: edit
+    code: edit.PM_ITEM
+    description: Edit รายการซ่อม
+  - method: view
+    code: view.PM_ITEM
+    description: View รายการซ่อม
+- code: MACHINE_LIST
+  name: รายการเครื่องจักร
+  parent_code: MACHINE
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: create
+    code: create.MACHINE_LIST
+    description: Create รายการเครื่องจักร
+  - method: delete
+    code: delete.MACHINE_LIST
+    description: Delete รายการเครื่องจักร
+  - method: edit
+    code: edit.MACHINE_LIST
+    description: Edit รายการเครื่องจักร
+  - method: view
+    code: view.MACHINE_LIST
+    description: View รายการเครื่องจักร
+- code: MODULE_MANAGEMENT
+  name: จัดการโมดูล
+  parent_code: SETTING
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.MODULE_MANAGEMENT
+    description: Create จัดการโมดูล
+  - method: delete
+    code: delete.MODULE_MANAGEMENT
+    description: Delete จัดการโมดูล
+  - method: edit
+    code: edit.MODULE_MANAGEMENT
+    description: Edit จัดการโมดูล
+  - method: view
+    code: view.MODULE_MANAGEMENT
+    description: View จัดการโมดูล
+- code: WORKORDERS_LIST
+  name: รายการใบสั่งผลิต
+  parent_code: WORKORDERS
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.WORKORDERS_LIST
+    description: Create รายการใบสั่งงาน
+  - method: delete
+    code: delete.WORKORDERS_LIST
+    description: Delete รายการใบสั่งงาน
+  - method: edit
+    code: edit.WORKORDERS_LIST
+    description: Edit รายการใบสั่งงาน
+  - method: view
+    code: view.WORKORDERS_LIST
+    description: View รายการใบสั่งงาน
+- code: EMPLOYEE_SAL
+  name: จัดการเงินเดือนพนักงาน
+  parent_code: EMPLOYEE
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: edit
+    code: edit.EMPLOYEE_SAL
+    description: Edit จัดการเงินเดือนพนักงาน
+  - method: view
+    code: view.EMPLOYEE_SAL
+    description: View จัดการเงินเดือนพนักงาน
+- code: QC_TEST_CERT
+  name: certificates
+  parent_code: QC
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.QC_TEST_CERT
+    description: Create certificates
+  - method: delete
+    code: delete.QC_TEST_CERT
+    description: Delete certificates
+  - method: edit
+    code: edit.QC_TEST_CERT
+    description: Edit certificates
+  - method: view
+    code: view.QC_TEST_CERT
+    description: View certificates
+- code: SALE_ORD_DASHBOARD
+  name: ภาพรวมใบสั่งขาย
+  parent_code: SALE_ORDER
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.SALE_ORD_DASHBOARD
+    description: Create ภาพรวมใบสั่งขาย
+  - method: delete
+    code: delete.SALE_ORD_DASHBOARD
+    description: Delete ภาพรวมใบสั่งขาย
+  - method: edit
+    code: edit.SALE_ORD_DASHBOARD
+    description: Edit ภาพรวมใบสั่งขาย
+  - method: view
+    code: view.SALE_ORD_DASHBOARD
+    description: View ภาพรวมใบสั่งขาย
+- code: PRODUCTION_TRACKING
+  name: ติดตามรายการผลิต
+  parent_code: TRACKING
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.PRODUCTION_TRACKING
+    description: Create ติดตามรายการผลิต
+  - method: delete
+    code: delete.PRODUCTION_TRACKING
+    description: Delete ติดตามรายการผลิต
+  - method: edit
+    code: edit.PRODUCTION_TRACKING
+    description: Edit ติดตามรายการผลิต
+  - method: view
+    code: view.PRODUCTION_TRACKING
+    description: View ติดตามรายการผลิต
+- code: PM_DASHBOARD
+  name: ภาพรวมการซ่อมบำรุง
+  parent_code: PM_MACHINE
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.PM_DASHBOARD
+    description: Create ภาพรวมการซ่อมบำรุง
+  - method: delete
+    code: delete.PM_DASHBOARD
+    description: Delete ภาพรวมการซ่อมบำรุง
+  - method: edit
+    code: edit.PM_DASHBOARD
+    description: Edit ภาพรวมการซ่อมบำรุง
+  - method: view
+    code: view.PM_DASHBOARD
+    description: View ภาพรวมการซ่อมบำรุง
+- code: MACHINE_CREATE
+  name: สร้างเครื่องจักร
+  parent_code: MACHINE
+  level: 2
+  sort_order: 2
+  permissions:
+  - method: create
+    code: create.MACHINE_CREATE
+    description: Create สร้างเครื่องจักร
+  - method: delete
+    code: delete.MACHINE_CREATE
+    description: Delete สร้างเครื่องจักร
+  - method: edit
+    code: edit.MACHINE_CREATE
+    description: Edit สร้างเครื่องจักร
+  - method: view
+    code: view.MACHINE_CREATE
+    description: View สร้างเครื่องจักร
+- code: USER_MANAGEMENT
+  name: จัดการพนักงาน
+  parent_code: SETTING
+  level: 2
+  sort_order: 3
+  permissions:
+  - method: create
+    code: create.USER_MANAGEMENT
+    description: Create จัดการพนักงาน
+  - method: delete
+    code: delete.USER_MANAGEMENT
+    description: Delete จัดการพนักงาน
+  - method: edit
+    code: edit.USER_MANAGEMENT
+    description: Edit จัดการพนักงาน
+  - method: view
+    code: view.USER_MANAGEMENT
+    description: View จัดการพนักงาน
+- code: MACHINE_DASHBOARD
+  name: ภาพรวมเครื่องจักร
+  parent_code: MACHINE
+  level: 2
+  sort_order: 3
+  permissions:
+  - method: create
+    code: create.MACHINE_DASHBOARD
+    description: Create ภาพรวมเครื่องจักร
+  - method: delete
+    code: delete.MACHINE_DASHBOARD
+    description: Delete ภาพรวมเครื่องจักร
+  - method: edit
+    code: edit.MACHINE_DASHBOARD
+    description: Edit ภาพรวมเครื่องจักร
+  - method: view
+    code: view.MACHINE_DASHBOARD
+    description: View ภาพรวมเครื่องจักร
+- code: WORKORDERS_TEMPLATE
+  name: จัดการแม่แบบ
+  parent_code: WORKORDERS
+  level: 2
+  sort_order: 3
+  permissions:
+  - method: create
+    code: create.WORKORDERS_TEMPLATE
+    description: Create จัดการแม่แบบ
+  - method: delete
+    code: delete.WORKORDERS_TEMPLATE
+    description: Delete จัดการแม่แบบ
+  - method: edit
+    code: edit.WORKORDERS_TEMPLATE
+    description: Edit จัดการแม่แบบ
+  - method: view
+    code: view.WORKORDERS_TEMPLATE
+    description: View จัดการแม่แบบ
+- code: UNASSIGNED_SO
+  name: จัดการกับใบสั่งขายที่ยังไม่มีสาขา
+  parent_code: SALE_ORDER
+  level: 2
+  sort_order: 3
+  permissions:
+  - method: create
+    code: create.UNASSIGNED_SO
+    description: Create จัดการกับใบสั่งขายที่ยังไม่มีสาขา
+  - method: edit
+    code: edit.UNASSIGNED_SO
+    description: Edit จัดการกับใบสั่งขายที่ยังไม่มีสาขา
+  - method: view
+    code: view.UNASSIGNED_SO
+    description: View จัดการกับใบสั่งขายที่ยังไม่มีสาขา
+- code: DOCUMENT_CODE
+  name: หมายเลขเอกสาร
+  parent_code: SETTING
+  level: 2
+  sort_order: 4
+  permissions:
+  - method: create
+    code: create.DOCUMENT_CODE
+    description: Create หมายเลขเอกสาร
+  - method: delete
+    code: delete.DOCUMENT_CODE
+    description: Delete หมายเลขเอกสาร
+  - method: edit
+    code: edit.DOCUMENT_CODE
+    description: Edit หมายเลขเอกสาร
+  - method: view
+    code: view.DOCUMENT_CODE
+    description: View หมายเลขเอกสาร
+- code: PHASE_TEMPLATE
+  name: รูปแบบ Phase
+  parent_code: WORKORDERS
+  level: 2
+  sort_order: 4
+  permissions:
+  - method: create
+    code: create.PHASE_TEMPLATE
+    description: Create รูปแบบ Phase
+  - method: delete
+    code: delete.PHASE_TEMPLATE
+    description: Delete รูปแบบ Phase
+  - method: edit
+    code: edit.PHASE_TEMPLATE
+    description: Edit รูปแบบ Phase
+  - method: view
+    code: view.PHASE_TEMPLATE
+    description: View รูปแบบ Phase
+- code: MACHINE_TYPE_LIST
+  name: ประเภทเครื่องจักร
+  parent_code: MACHINE
+  level: 2
+  sort_order: 4
+  permissions:
+  - method: create
+    code: create.MACHINE_TYPE_LIST
+    description: Create ประเภทเครื่องจักร
+  - method: delete
+    code: delete.MACHINE_TYPE_LIST
+    description: Delete ประเภทเครื่องจักร
+  - method: edit
+    code: edit.MACHINE_TYPE_LIST
+    description: Edit ประเภทเครื่องจักร
+  - method: view
+    code: view.MACHINE_TYPE_LIST
+    description: View ประเภทเครื่องจักร
+- code: BRANCH_MANAGEMENT
+  name: จัดการสาขา
+  parent_code: SETTING
+  level: 2
+  sort_order: 5
+  permissions:
+  - method: create
+    code: create.BRANCH_MANAGEMENT
+    description: Create จัดการสาขา
+  - method: delete
+    code: delete.BRANCH_MANAGEMENT
+    description: Delete จัดการสาขา
+  - method: edit
+    code: edit.BRANCH_MANAGEMENT
+    description: Edit จัดการสาขา
+  - method: view
+    code: view.BRANCH_MANAGEMENT
+    description: View จัดการสาขา
+- code: BRANCH_LIST
+  name: รายการสาขา
+  parent_code: SETTING
+  level: 2
+  sort_order: 6
+  permissions:
+  - method: create
+    code: create.BRANCH_LIST
+    description: Create รายการสาขา
+  - method: delete
+    code: delete.BRANCH_LIST
+    description: Delete รายการสาขา
+  - method: edit
+    code: edit.BRANCH_LIST
+    description: Edit รายการสาขา
+  - method: view
+    code: view.BRANCH_LIST
+    description: View รายการสาขา
+- code: ALL_BRANCH
+  name: ดูข้อมูลทุกสาขา (Login อีกระบบ)
+  parent_code: SETTING
+  level: 2
+  sort_order: 7
+  permissions:
+  - method: view
+    code: view.ALL_BRANCH
+    description: View ดูข้อมูลทุกสาขา (Login อีกระบบ)
+
+bootstrap:
+  roles:
+    - role_code: ADMIN
+      role_name: Admin
+      description: Administrator
+      active_flag: true
+      grant_all_permissions: false
+      permissions:
+        - view.ROLE_MANAGEMENT
+        - create.ROLE_MANAGEMENT
+        - edit.ROLE_MANAGEMENT
+        - delete.ROLE_MANAGEMENT
+  user:
+    role_code: ADMIN
+    password: 1234

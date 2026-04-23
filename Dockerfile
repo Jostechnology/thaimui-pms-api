@@ -22,5 +22,8 @@ EXPOSE 5000
 # RUN useradd appuser && chown -R appuser /
 # USER appuser
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0"]
-ENTRYPOINT ["gunicorn", "--config", "gunicorn_config.py", "--log-level", "info", "--access-logfile", "-", "wsgi:app"]
+ENTRYPOINT ["/entrypoint.sh"]

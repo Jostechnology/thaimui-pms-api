@@ -412,7 +412,7 @@ def create_user(data):
         username = data.get("username")
         password = data.get("password")
         role_id = data.get("role_id")
-        if not username or not password:
+        if not username or not password or (role_id is None):
             raise MissingFieldsError("Missing username, password, or role_id")
 
         if user_repository.check_username_exist(username):

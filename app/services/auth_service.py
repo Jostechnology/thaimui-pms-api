@@ -161,9 +161,10 @@ def register_service(data):
         user_schema = UserSchema()
         username = data.get("username")
         password = data.get("password")
+        role_id = data.get("role_id", None)
 
-        if not username or not password:
-            raise ValidationError("Username and password are required")
+        if not username or not password or (role_id is None):
+            raise ValidationError("Username, password and role_id are required")
 
         if user_repository.check_username_exist(username):
             raise UniqueError("username นี้มีอยู่แล้ว")
@@ -171,7 +172,8 @@ def register_service(data):
         hashed_password = hash_bcrypt(password)
         create_user_data = {
             "username": username,
-            "password": hashed_password
+            "password": hashed_password,
+            "role_id" : role_id
         }
 
         new_user = user_repository.create_user(create_user_data)
