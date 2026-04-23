@@ -126,6 +126,7 @@ BOOTSTRAP_USERNAME = "jaoaurai798"
 def _apply_bootstrap(payload):
     exists = db.session.query(User).filter(User.username == BOOTSTRAP_USERNAME).first()
     if exists:
+        print(f"Already have admin account : {exists.user_id} | {exists.username} ")
         return
 
     bootstrap = payload.get("bootstrap") or {}
