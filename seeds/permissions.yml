@@ -687,6 +687,7 @@ bootstrap:
         - create.ROLE_MANAGEMENT
         - edit.ROLE_MANAGEMENT
         - delete.ROLE_MANAGEMENT
+        - view.ALL_BRANCH
   user:
     role_code: ADMIN
     password: "1234"
