@@ -21,9 +21,9 @@ def search_sales_order(data, branch_id=None):
 
 def assign_branch_to_sales_order(doc_entry, branch_id):
     try:
-        sales_order = sales_order_repository.assign_branch(doc_entry, branch_id)
+        sales_order, old_branch_id = sales_order_repository.assign_branch(doc_entry, branch_id)
         db.session.commit()
-        return sales_order
+        return sales_order, old_branch_id
     except Exception:
         db.session.rollback()
         raise
@@ -88,6 +88,15 @@ def get_sales_items_from_sales_order(doc_entry):
 def get_material_list_from_sales_order(doc_entry):
     try:
         return material_repository.get_material_list_from_doc_entry(doc_entry)
+    except Exception:
+        raise
+
+
+def get_sales_items_and_material_lists(doc_entry):
+    try:
+        sales_items = sales_item_repository.get_sales_items_by_doc_entry(doc_entry)
+        material_lists = material_repository.get_material_list_from_doc_entry(doc_entry)
+        return {"sales_items": sales_items, "material_lists": material_lists}
     except Exception:
         raise
 

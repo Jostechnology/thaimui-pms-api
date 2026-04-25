@@ -4,7 +4,7 @@ from flask import request, jsonify, g
 from app.exception import DisabledAction
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
 from app.services import cache_service
-from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order
+from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order, get_sales_items_and_material_lists
 from app.services.storage_service import PRESIGNED_CACHE_TTL
 from app.utils import decode_token, check_true_permissions
 import base64, json
@@ -95,10 +95,14 @@ def api_assign_branch_to_sales_order(doc_entry):
         branch_id = data.get("branch_id")
         if branch_id is None:
             return jsonify({"message": "branch_id is required"}), 400
-        sales_order = assign_branch_to_sales_order(doc_entry, branch_id)
+        sales_order, old_branch_id = assign_branch_to_sales_order(doc_entry, branch_id)
         for p in range(1, 4):
             cache_service.delete(_sales_order_page_cache(p, 10, branch_id))
+        if old_branch_id and old_branch_id != branch_id:
+            for p in range(1, 4):
+                cache_service.delete(_sales_order_page_cache(p, 10, old_branch_id))
         cache_service.delete(_sales_order_detail_cache(doc_entry, branch_id))
+        cache_service.delete(_sales_order_detail_cache(doc_entry, old_branch_id))
         return jsonify({"data": SalesOrderSchema().dump(sales_order), "success": True}), 200
     except Exception:
         raise
@@ -194,6 +198,19 @@ def api_get_sales_items_from_sales_order(doc_entry):
         return jsonify({"data": SalesItemSchema(many=True).dump(items), "success": True}), 200
     except Exception:
         raise
+
+
+@app.route("/api/sales_order/<int:doc_entry>/items", methods=["GET"])
+@verify_required
+def api_get_sales_order_items(doc_entry):
+    result = get_sales_items_and_material_lists(doc_entry)
+    return jsonify({
+        "data": {
+            "sales_items": SalesItemSchema(many=True).dump(result["sales_items"]),
+            "material_lists": MaterialListSchema(many=True).dump(result["material_lists"]),
+        },
+        "success": True,
+    }), 200
 
 
 @app.route("/api/sales_order/get_test_quick", methods=["POST"])

@@ -43,6 +43,7 @@ def assign_branch(doc_entry, branch_id):
     sales_order = query.first()
     if not sales_order:
         raise NotFoundError(f"ไม่พบใบ Sales Order นี้ -> {doc_entry}")
+    old_branch_id = sales_order.branch_id
     sales_order.branch_id = branch_id
 
     # Cascade to SalesItem
@@ -92,7 +93,7 @@ def assign_branch(doc_entry, branch_id):
                 ComponentMaterialUsage.item_component_id.in_(item_component_ids)
             ).update({ComponentMaterialUsage.branch_id: branch_id}, synchronize_session=False)
 
-    return sales_order
+    return sales_order, old_branch_id
 
 
 def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, end_date=None):

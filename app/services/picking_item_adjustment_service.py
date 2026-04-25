@@ -137,7 +137,7 @@ def _create_reallocation_pr(doc_entry, target_line, qty, remark):
             order_line_num=target_line.order_line_num,
             item_code=target_line.item_code,
             item_name=target_line.item_name,
-            quantity=qty,
+            quantity=0,
             unit=target_line.unit_name,
         )
     else:
@@ -148,7 +148,7 @@ def _create_reallocation_pr(doc_entry, target_line, qty, remark):
             order_line_num=target_line.order_line_num,
             item_code=target_line.item_code,
             item_name=target_line.item_name,
-            quantity=qty,
+            quantity=0,
             unit=target_line.unit_name,
         )
     db.session.add(pri)
@@ -169,6 +169,7 @@ def reallocate(source_pri_id, data):
             to_picking_request_item_id
             to_sales_item_id
             to_material_list_id
+        so_doc_entry: int — required when to_sales_item_id or to_material_list_id is given
         remark: optional
 
     Returns a dict describing the outcome.
@@ -228,23 +229,29 @@ def reallocate(source_pri_id, data):
 
         # --- Path B: line FK given, look up existing SUCCESS PRI ---
         else:
+            so_doc_entry = data.get("so_doc_entry")
+            if so_doc_entry is None:
+                raise ValidationError("so_doc_entry จำเป็นต้องระบุเมื่อใช้ to_sales_item_id หรือ to_material_list_id")
+
+            if to_si_id is not None:
+                if target_line.doc_entry != so_doc_entry:
+                    raise ValidationError(f"SalesItem {to_si_id} ไม่ได้อยู่ใน Sales Order นี้")
+            else:
+                from app.con_sqlalchemy import SalesItem as _SI
+                parent_si = db.session.query(_SI).filter(
+                    _SI.sales_item_id == target_line.sales_item_id,
+                    _SI.doc_entry == so_doc_entry,
+                ).first()
+                if not parent_si:
+                    raise ValidationError(f"MaterialList {to_ml_id} ไม่ได้อยู่ใน Sales Order นี้")
+
             if source_pri.item_code != target_line.item_code:
                 raise ValidationError(
                     f"item_code ไม่ตรงกัน: source {source_pri.item_code} vs target line {target_line.item_code}"
                 )
-            # SalesItem doc_entry or MaterialList.sales_item.doc_entry
-            target_doc_entry = None
-            if to_si_id is not None:
-                target_doc_entry = target_line.doc_entry
-            else:
-                from app.repositories import sales_item_repository
-                si = sales_item_repository.get_sales_item_by_id(target_line.sales_item_id)
-                target_doc_entry = si.doc_entry if si else None
-            if target_doc_entry != source_pr.doc_entry:
-                raise ValidationError("Target line ต้องอยู่ Sales Order เดียวกับ source")
 
             existing = picking_request_repository.get_success_pris_for_line(
-                source_pr.doc_entry,
+                so_doc_entry,
                 sales_item_id=to_si_id,
                 material_list_id=to_ml_id,
             )
@@ -264,8 +271,16 @@ def reallocate(source_pri_id, data):
                 picking_request_repository.create_picking_item_adjustment(target_adjustment)
             else:
                 new_reallocation_pr, target_pri = _create_reallocation_pr(
-                    source_pr.doc_entry, target_line, qty, remark
+                    so_doc_entry, target_line, qty, remark
                 )
+                target_adjustment = PickingItemAdjustment(
+                    picking_request_item_id=target_pri.picking_request_item_id,
+                    delta_qty=qty,
+                    reason=PickingItemAdjustmentReason.REALLOCATE,
+                    remark=remark,
+                    counterparty_picking_request_item_id=source_pri.picking_request_item_id,
+                )
+                picking_request_repository.create_picking_item_adjustment(target_adjustment)
 
         # --- Source -qty adjustment (always) ---
         source_adjustment = PickingItemAdjustment(
