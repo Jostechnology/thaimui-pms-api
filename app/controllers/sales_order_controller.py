@@ -59,11 +59,11 @@ def api_get_all_sales_orders():
         end_date = request.args.get("end_date", None, type=str)
         data = {"page": page, "per_page": per_page, "search": search, "start_date": start_date, "end_date": end_date}
         
-        key = _sales_order_page_cache(page, per_page, g.branch_id)
-        if not search and not start_date and not end_date:
-            cached = cache_service.get(key)
-            if cached:
-                return jsonify(cached), 200
+        # key = _sales_order_page_cache(page, per_page, g.branch_id)
+        # if not search and not start_date and not end_date:
+        #     cached = cache_service.get(key)
+        #     if cached:
+        #         return jsonify(cached), 200
 
         # permission_token = get_requests_permission(request)
         # show_unassigned = bool(permission_token and _has_unassigned_sales_order_view_permission(permission_token))
@@ -80,8 +80,8 @@ def api_get_all_sales_orders():
             "success": True,
         }
 
-        if page <= 3 and per_page == 10 and g.branch_id and not search and not start_date and not end_date:
-            cache_service.set(key, response_dict, ttl=PAGE_CACHE_TTL)
+        # if page <= 3 and per_page == 10 and g.branch_id and not search and not start_date and not end_date:
+        #     cache_service.set(key, response_dict, ttl=PAGE_CACHE_TTL)
         return jsonify(response_dict), 200
     except Exception:
         raise

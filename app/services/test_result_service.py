@@ -338,9 +338,9 @@ def finalize_test_result(test_result_id, data):
         reported_req_ids = set()
         for actual in material_actuals:
             req_id = actual.get("test_result_required_item_id")
-            qty_used = actual.get("qty_used")
-            if req_id is None or qty_used is None:
+            if req_id is None:
                 continue
+            qty_used = actual.get("qty_used") or 0
             if qty_used < 0:
                 raise ValidationError(f"qty_used ต้องไม่ติดลบ (required_item {req_id})")
 
