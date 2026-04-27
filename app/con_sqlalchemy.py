@@ -228,8 +228,25 @@ class WorkRunMachine(AuditMixin, BranchScopedMixin):
     machine_id = db.Column(db.Integer, db.ForeignKey('m_machine.machine_id'), nullable=False)
     from_time = db.Column(db.DateTime, nullable=False, default=bangkok_now)
     to_time = db.Column(db.DateTime, nullable=True)
+    allocated_maintenance_cost = db.Column(db.Float, nullable=True, default=0.0)
+    depreciation_per_second = db.Column(db.Float, nullable=False, default=0.0)
+    maintenance_rate_per_second = db.Column(db.Float, nullable=False, default=0.0)
+    depreciation_cost = db.Column(db.Float, nullable=True)
+    maintenance_cost = db.Column(db.Float, nullable=True)
     work_run = db.relationship('WorkRun', back_populates='machines', lazy='noload')
     machine = db.relationship('Machine', lazy='noload')
+
+class WorkRunCost(AuditMixin, BranchScopedMixin):
+    """Aggregated cost summary for one WorkRun (material + labor + machine)."""
+    __tablename__ = "t_work_run_cost"
+    cost_id = db.Column(db.Integer, primary_key=True)
+    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), unique=True, nullable=False)
+    material_cost = db.Column(db.Float, nullable=True)
+    depreciation_cost = db.Column(db.Float, nullable=True)
+    maintenance_cost = db.Column(db.Float, nullable=True)
+    labor_cost = db.Column(db.Float, nullable=True)
+    total_cost = db.Column(db.Float, nullable=True)
+    work_run = db.relationship('WorkRun', lazy='noload', overlaps='cost')
 
 class WorkRunBreak(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_work_run_break"
@@ -320,6 +337,7 @@ class WorkRun(AuditMixin, BranchScopedMixin):
     transactions              = db.relationship('WorkRunTransaction', back_populates='work_run', cascade='all, delete-orphan')
     required_items            = db.relationship('WorkRunRequiredItem', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
     work_run_picking_consumptions = db.relationship('WorkRunPickingItem', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
+    cost                      = db.relationship('WorkRunCost', foreign_keys='WorkRunCost.work_run_id', uselist=False, lazy='noload', overlaps='work_run')
 
 
     @property
@@ -477,8 +495,14 @@ class Machine(AuditMixin,BranchScopedMixin):
     machine_description = db.Column(db.String(500))
     manufacturer = db.Column(db.String(255), nullable=True)
     purchase_date = db.Column(db.DateTime, nullable=True)
+    purchase_price = db.Column(db.Float, nullable=False, default=0)
+    useful_life_years = db.Column(db.Integer, nullable=True, default=0)
+    working_hours_per_day = db.Column(db.Integer, nullable=True, default=0)
+    remaining_maintenance_cost = db.Column(db.Float, nullable=True, default=0.0)
     status = db.Column(db.Enum(MachineStatus), nullable=False, default=MachineStatus.IDLE)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    is_second_hand = db.Column(db.Boolean, nullable=False, default=False)
+    accumulated_hours = db.Column(db.Float, nullable=True, default=0.0)
     machine_type_id = db.Column(db.Integer, db.ForeignKey('m_machine_type.machine_type_id'), nullable=True)
     machine_type = db.relationship('MachineType', back_populates='machines', lazy='joined')
     maintenances = db.relationship('MachineMaintenance', back_populates='machine', lazy='noload')
@@ -522,6 +546,12 @@ class MaterialList(AuditMixin):
     @property
     def remaining_num(self):
         return sum(t.amount for t in self.transactions)
+
+    @property
+    def cost_per_unit(self):
+        if self.quantity and self.quantity > 0:
+            return round(self.cost_price / self.quantity, 6)
+        return 0.0
 
 class QCWorkOrderStatus(enum.Enum):
     PENDING = 'PENDING'

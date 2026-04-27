@@ -22,6 +22,7 @@ from app.services.work_run_service import (
     get_material_using_in_work_order_of_work_run,
     get_pick_requests_for_work_run,
     update_required_item,
+    delete_required_item,
 )
 
 
@@ -165,6 +166,13 @@ def api_update_required_item(required_item_id):
     data = request.get_json() or {}
     result = update_required_item(required_item_id, data)
     return jsonify({"data": WorkRunRequiredItemSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/work_run_required_item/<int:required_item_id>", methods=["DELETE"])
+@verify_required
+def api_work_run_delete_required_item(required_item_id):
+    delete_required_item(required_item_id)
+    return jsonify({"success": True}), 200
 
 
 @app.route("/api/work_run/<int:work_run_id>/pick_requests", methods=["GET"])

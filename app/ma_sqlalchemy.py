@@ -87,6 +87,7 @@ class MaterialListSchema(Schema):
     unit_id = fields.Integer()
     remaining_num = fields.Integer(dump_only=True)
     cost_price = fields.Float()
+    cost_per_unit = fields.Float(dump_only=True)
     unit_price = fields.Float()
     created_date = fields.DateTime()
     branch_id = fields.Integer(allow_none=True)
@@ -129,13 +130,43 @@ class WorkRunAssignmentSchema(Schema):
     to_time = fields.DateTime(allow_none=True)
     employee = fields.Nested(lambda: EmployeeSchema())
 
+class WorkRunCostSchema(Schema):
+    """Aggregated cost summary for one WorkRun."""
+    cost_id = fields.Integer(dump_only=True)
+    work_run_id = fields.Integer(dump_only=True)
+    material_cost = fields.Float(allow_none=True)
+    depreciation_cost = fields.Float(allow_none=True)
+    maintenance_cost = fields.Float(allow_none=True)
+    labor_cost = fields.Float(allow_none=True)
+    total_cost = fields.Float(allow_none=True)
+
+class WorkRunMachineCostFieldsSchema(Schema):
+    """Machine-level cost fields, now sourced from WorkRunMachine columns."""
+    depreciation_per_second = fields.Float()
+    depreciation_cost = fields.Float(allow_none=True)
+    maintenance_rate_per_second = fields.Float()
+    maintenance_cost = fields.Float(allow_none=True)
+    total_cost = fields.Method('get_total')
+
+    def get_total(self, obj):
+        d = obj.depreciation_cost
+        m = obj.maintenance_cost
+        if d is None and m is None:
+            return None
+        return round((d or 0.0) + (m or 0.0), 6)
+
 class WorkRunMachineSchema(Schema):
     work_run_machine_id = fields.Integer()
     work_run_id = fields.Integer()
     machine_id = fields.Integer()
     from_time = fields.DateTime()
     to_time = fields.DateTime(allow_none=True)
+    allocated_maintenance_cost = fields.Float(allow_none=True)
     machine = fields.Nested(lambda: MachineSchema())
+    cost = fields.Method('get_cost')
+
+    def get_cost(self, obj):
+        return WorkRunMachineCostFieldsSchema().dump(obj)
 
 
 
@@ -610,6 +641,8 @@ class WorkRunDisplaySchema(WorkRunSchema):
     machines         = fields.List(fields.Nested(WorkRunMachineSchema()))
     breaks           = fields.List(fields.Nested(WorkRunBreakSchema()))
     required_items   = fields.List(fields.Nested(WorkRunRequiredItemSchema()), dump_only=True)
+    work_order       = fields.Nested(WorkOrderSchema(), allow_none=True)
+    cost             = fields.Nested(WorkRunCostSchema(), allow_none=True)
 
 class WorkRunDetailSchema(WorkRunSchema):
     test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
@@ -777,8 +810,14 @@ class MachineSchema(Schema):
     machine_description = fields.String(allow_none=True)
     manufacturer = fields.String(allow_none=True)
     purchase_date = fields.Date(allow_none=True)
+    purchase_price = fields.Float()
+    useful_life_years = fields.Integer()
+    working_hours_per_day = fields.Integer()
+    remaining_maintenance_cost = fields.Float(allow_none=True)
     status = fields.Enum(MachineStatus)
     is_active = fields.Boolean()
+    is_second_hand = fields.Boolean()
+    accumulated_hours = fields.Float(allow_none=True)
     machine_type_id = fields.Integer(allow_none=True)
     machine_type = fields.Nested(MachineTypeSchema, allow_none=True)
     created_date = fields.DateTime()
