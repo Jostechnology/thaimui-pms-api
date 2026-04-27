@@ -1,10 +1,149 @@
-from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem, WorkRunPickingItem, AllocationMode
+import logging
+from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem, WorkRunPickingItem, AllocationMode
 from app.repositories import work_run_repository, work_order_repository, test_result_repository, picking_request_repository, material_list_repository
 from app.services import transaction_service, document_code_service, picking_allocation_service, work_order_service
 from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, MissingFieldsError
 from app.repositories import employee_salary_repository
+
+logger = logging.getLogger(__name__)
+
+
+def _to_naive(dt):
+    return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
+
+
+def _calc_depreciation_per_second(machine) -> float:
+    if not all([machine.purchase_price, machine.useful_life_years, machine.working_hours_per_day]):
+        return 0.0
+    total_seconds = machine.useful_life_years * 365 * machine.working_hours_per_day * 3600
+    if total_seconds <= 0:
+        return 0.0
+    return machine.purchase_price / total_seconds
+
+
+def _calc_maintenance_rate_per_second(machine) -> float:
+    remaining = machine.remaining_maintenance_cost or 0
+    if remaining <= 0:
+        return 0.0
+
+    past_entries = db.session.query(WorkRunMachine).filter(
+        WorkRunMachine.machine_id == machine.machine_id,
+        WorkRunMachine.to_time.isnot(None),
+    ).all()
+
+    history_seconds = sum(
+        max(0, (_to_naive(e.to_time) - _to_naive(e.from_time)).total_seconds())
+        for e in past_entries
+        if e.from_time and e.to_time
+    )
+
+    if machine.is_second_hand and (machine.accumulated_hours or 0) > 0:
+        total_past_seconds = history_seconds + (machine.accumulated_hours * 3600)
+    else:
+        total_past_seconds = history_seconds
+
+    if total_past_seconds <= 0:
+        return 0.0
+
+    return remaining / total_past_seconds
+
+
+def _create_machine_cost_record(machine_entry, machine):
+    """Store cost rates directly on the WorkRunMachine entry."""
+    machine_entry.depreciation_per_second = _calc_depreciation_per_second(machine)
+    machine_entry.maintenance_rate_per_second = _calc_maintenance_rate_per_second(machine)
+
+
+def _allocate_and_finalize_machine_cost(machine_entry, breaks):
+    """Compute and store finalized cost on WorkRunMachine when it is closed."""
+    from app.con_sqlalchemy import Machine
+    machine = db.session.query(Machine).filter(Machine.machine_id == machine_entry.machine_id).first()
+    if not machine:
+        return
+
+    mStart = _to_naive(machine_entry.from_time)
+    mEnd = _to_naive(machine_entry.to_time)
+    total_seconds = max(0, (mEnd - mStart).total_seconds())
+    break_seconds = sum(
+        max(0, (min(_to_naive(b.break_end or machine_entry.to_time), mEnd)
+                - max(_to_naive(b.break_start), mStart)).total_seconds())
+        for b in breaks if b.break_start
+    )
+    entry_seconds = max(0, total_seconds - break_seconds)
+
+    remaining = machine.remaining_maintenance_cost or 0
+    dep_cost = machine_entry.depreciation_per_second * entry_seconds
+    allocated = min(machine_entry.maintenance_rate_per_second * entry_seconds, remaining)
+
+    machine_entry.depreciation_cost = round(dep_cost, 6)
+    machine_entry.maintenance_cost = round(allocated, 6)
+    machine_entry.allocated_maintenance_cost = round(allocated, 6)
+    machine.remaining_maintenance_cost = round(remaining - allocated, 6)
+
+
+def _compute_and_save_work_run_cost(work_run, breaks):
+    """Aggregate material + labor + machine costs and upsert into t_work_run_cost."""
+    now = _to_naive(bangkok_now())
+
+    # ── Material cost: cost_per_unit × quantity for each required item ──
+    material_cost = 0.0
+    for item in (work_run.required_items or []):
+        ml = item.material_list
+        if ml:
+            qty_batch = ml.quantity or 0
+            cpu = round(ml.cost_price / qty_batch, 6) if qty_batch > 0 else 0.0
+        else:
+            cpu = 0.0
+        material_cost += cpu * item.quantity
+
+    # ── Labor cost: hourly rate × effective seconds per assignment ──
+    labor_cost = 0.0
+    for assignment in (work_run.assignments or []):
+        assign_end = _to_naive(assignment.to_time) if assignment.to_time else now
+        assign_start = _to_naive(assignment.from_time)
+        total_sec = max(0, (assign_end - assign_start).total_seconds())
+
+        break_sec = sum(
+            max(0, (min(_to_naive(b.break_end or now), assign_end)
+                    - max(_to_naive(b.break_start), assign_start)).total_seconds())
+            for b in breaks if b.break_start
+        )
+        effective_sec = max(0, total_sec - break_sec)
+
+        salary = employee_salary_repository.get_salary_at_date(assignment.employee_id, work_run.created_date)
+        if salary is None:
+            emp = assignment.employee
+            salary = (emp.salary_base or 0.0) if emp else 0.0
+        hourly_rate = salary / 30 / 8 if salary > 0 else 0.0
+        labor_cost += round(hourly_rate * effective_sec / 3600, 6)
+
+    # ── Machine cost: sum finalized costs from all machine entries ──
+    depreciation_cost = 0.0
+    maintenance_cost = 0.0
+    for me in (work_run.machines or []):
+        depreciation_cost += me.depreciation_cost or 0.0
+        maintenance_cost += me.maintenance_cost or 0.0
+
+    total_cost = round(material_cost + depreciation_cost + maintenance_cost + labor_cost, 6)
+
+    existing = db.session.query(WorkRunCost).filter_by(work_run_id=work_run.work_run_id).first()
+    if existing:
+        existing.material_cost = round(material_cost, 6)
+        existing.depreciation_cost = round(depreciation_cost, 6)
+        existing.maintenance_cost = round(maintenance_cost, 6)
+        existing.labor_cost = round(labor_cost, 6)
+        existing.total_cost = total_cost
+    else:
+        db.session.add(WorkRunCost(
+            work_run_id=work_run.work_run_id,
+            material_cost=round(material_cost, 6),
+            depreciation_cost=round(depreciation_cost, 6),
+            maintenance_cost=round(maintenance_cost, 6),
+            labor_cost=round(labor_cost, 6),
+            total_cost=total_cost,
+        ))
 
 
 def _apply_actuals_reverse_fifo(allocation_rows, qty_used_actual):
@@ -373,9 +512,11 @@ def complete_work_run(work_run_id, data):
     for assignment in work_run_repository.get_open_assignments(work_run_id):
         assignment.to_time = now
 
-    # Close open machines
+    # Close open machines + finalize cost
+    breaks = db.session.query(WorkRunBreak).filter(WorkRunBreak.work_run_id == work_run_id).all()
     for machine_entry in work_run_repository.get_open_machines(work_run_id):
         machine_entry.to_time = now
+        _allocate_and_finalize_machine_cost(machine_entry, breaks)
 
     work_run.usable_qty = usable_qty
     work_run.completion_remark = data.get("completion_remark")
@@ -409,6 +550,16 @@ def complete_work_run(work_run_id, data):
             allocation_rows = work_run_repository.get_wrpi_rows_for_required_item(req.id)
             for r in allocation_rows:
                 r.qty_consumed = r.qty_allocated
+
+    # Flush first, then expire all session objects so that identity map cache
+    # (populated by get_open_assignments / get_open_machines / get_required_items
+    # with lazy='noload' setting relationships to [] / None) does not cause
+    # get_work_run_display to return stale empty collections.
+    db.session.flush()
+    db.session.expire_all()
+    full_run = work_run_repository.get_work_run_display(work_run_id)
+    fresh_breaks = db.session.query(WorkRunBreak).filter(WorkRunBreak.work_run_id == work_run_id).all()
+    _compute_and_save_work_run_cost(full_run, fresh_breaks)
 
     db.session.commit()
     return work_run
@@ -471,6 +622,13 @@ def assign_machine(work_run_id, machine_id):
         machine_id=machine_id,
     )
     work_run_repository.save_machine_entry(machine_entry)
+    db.session.flush()
+
+    from app.con_sqlalchemy import Machine
+    machine = db.session.query(Machine).filter(Machine.machine_id == machine_id).first()
+    if machine:
+        _create_machine_cost_record(machine_entry, machine)
+
     db.session.commit()
     return work_run_repository.get_work_run_display(work_run_id)
 
@@ -486,6 +644,8 @@ def unassign_machine(work_run_id, machine_id):
         raise NotFoundError(f"Machine {machine_id} has no open entry on Work Run {work_run_id}")
 
     machine_entry.to_time = bangkok_now()
+    breaks = db.session.query(WorkRunBreak).filter(WorkRunBreak.work_run_id == work_run_id).all()
+    _allocate_and_finalize_machine_cost(machine_entry, breaks)
     db.session.commit()
     return work_run_repository.get_work_run_display(work_run_id)
 
@@ -552,17 +712,44 @@ def get_work_run_detail(work_run_id):
             "net_cost": net_cost,
         })
 
-    # Machine time summary
+    # Machine time summary + depreciation + maintenance cost
     machine_breakdown = []
+    total_depreciation_cost = 0.0
+    total_maintenance_cost = 0.0
+
     for me in work_run.machines:
-        machine_end = me.to_time or now
-        machine_seconds = max(0, (machine_end - me.from_time).total_seconds())
+        m = me.machine
+        is_running = me.to_time is None
+
+        dep_per_sec = me.depreciation_per_second or 0.0
+        maint_per_sec = me.maintenance_rate_per_second or 0.0
+
+        if is_running:
+            dep_cost = me.depreciation_cost  # None until closed
+            maint_cost = me.maintenance_cost
+            total_cost = None
+        else:
+            dep_cost = me.depreciation_cost or 0.0
+            maint_cost = me.maintenance_cost or 0.0
+            total_cost = round((dep_cost or 0.0) + (maint_cost or 0.0), 6)
+            total_depreciation_cost += dep_cost or 0.0
+            total_maintenance_cost += maint_cost or 0.0
+
         machine_breakdown.append({
+            "work_run_machine_id": me.work_run_machine_id,
             "machine_id": me.machine_id,
-            "machine_name": me.machine.machine_name if me.machine else None,
+            "machine_name": m.machine_name if m else None,
+            "machine_code": m.machine_code if m else None,
+            "is_second_hand": m.is_second_hand if m else False,
             "from_time": me.from_time.isoformat() if me.from_time else None,
             "to_time": me.to_time.isoformat() if me.to_time else None,
-            "time_spent_seconds": round(machine_seconds, 2),
+            "cost": {
+                "depreciation_per_second": dep_per_sec,
+                "depreciation_cost": dep_cost,
+                "maintenance_rate_per_second": maint_per_sec,
+                "maintenance_cost": maint_cost,
+                "total_cost": total_cost,
+            },
         })
 
     breaks_data = [
@@ -584,10 +771,14 @@ def get_work_run_detail(work_run_id):
         "end_date": work_run.end_date.isoformat() if work_run.end_date else None,
         "total_work_seconds": round(total_work_seconds, 2),
         "total_labor_cost": round(total_labor_cost, 2),
+        "total_depreciation_cost": round(total_depreciation_cost, 6),
+        "total_maintenance_cost": round(total_maintenance_cost, 6),
+        "total_machine_cost": round(total_depreciation_cost + total_maintenance_cost, 6),
         "employee_breakdown": employee_breakdown,
         "machine_breakdown": machine_breakdown,
         "breaks": breaks_data,
     }
+
 
 
 # --- Required items (rework extras) ---
@@ -645,6 +836,14 @@ def update_required_item(required_item_id, data):
     req.quantity = quantity
     db.session.commit()
     return req
+
+
+def delete_required_item(required_item_id):
+    req = work_run_repository.get_required_item_by_id(required_item_id)
+    if not req:
+        raise NotFoundError(f"Required item {required_item_id} not found")
+    db.session.delete(req)
+    db.session.commit()
 
 
 def get_pick_requests_for_work_run(work_run_id):

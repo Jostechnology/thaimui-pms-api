@@ -1,7 +1,7 @@
 import time
 
 from app.api_auth import _log_timer
-from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem, WorkRunPickingItem
+from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem, WorkRunPickingItem
 from app.app import db
 from sqlalchemy.orm import selectinload, joinedload
 
@@ -31,7 +31,7 @@ def get_sales_item_by_work_run(work_run_id):
 
 
 def get_work_run_display(work_run_id):
-    """Full fetch — loads assignments, machines, breaks, required_items in 1 query."""
+    """Full fetch — loads assignments, machines, breaks, required_items, cost in 1 query."""
     try:
         _start = time.perf_counter()
         query = (
@@ -40,7 +40,9 @@ def get_work_run_display(work_run_id):
                 joinedload(WorkRun.assignments).joinedload(WorkRunAssignment.employee),
                 joinedload(WorkRun.machines).joinedload(WorkRunMachine.machine),
                 joinedload(WorkRun.breaks),
-                joinedload(WorkRun.required_items).options(selectinload(WorkRunRequiredItem.material_list))
+                joinedload(WorkRun.required_items).options(selectinload(WorkRunRequiredItem.material_list)),
+                joinedload(WorkRun.work_order).joinedload(WorkOrder.sales_item),
+                joinedload(WorkRun.cost),
             )
             .filter(WorkRun.work_run_id == work_run_id)
         )
@@ -63,6 +65,7 @@ def get_work_runs_by_work_order(work_order_id):
                 selectinload(WorkRun.machines).selectinload(WorkRunMachine.machine),
                 selectinload(WorkRun.breaks),
                 selectinload(WorkRun.rework_sources),
+                selectinload(WorkRun.cost),
             )
             .filter(WorkRun.work_order_id == work_order_id)
             .order_by(WorkRun.created_date.asc())

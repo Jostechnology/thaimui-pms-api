@@ -1,7 +1,8 @@
-from app.con_sqlalchemy import MachineMaintenance , Machine
+from app.con_sqlalchemy import MachineMaintenance, Machine
 from app.ma_sqlalchemy import MachineMaintenanceSchema
-from app.repositories import pm_machine_repository
+from app.repositories import pm_machine_repository, machine_repository
 from app.app import db
+from app.exception import NotFoundError
 from flask import g
 
 def get_all_pm_machines(data):
@@ -21,14 +22,24 @@ def get_all_pm_machines(data):
 
 def create_pm_machine(data):
     try:
+        fix_cost = data.get("fix_cost") or 0
+
         pm_machine = MachineMaintenance(
             machine_id=data.get("machine_id"),
             maintenance_date=data.get("maintenance_date"),
             maintenance_type=data.get("maintenance_type"),
             description=data.get("description"),
-            fix_cost=data.get("fix_cost", 0),
+            fix_cost=fix_cost,
         )
         pm_machine = pm_machine_repository.create_pm_machine(pm_machine)
+
+        # เพิ่มค่าซ่อมเข้า remaining ของเครื่อง
+        if fix_cost and fix_cost > 0:
+            machine = machine_repository.get_machine_by_id(data.get("machine_id"))
+            if not machine:
+                raise NotFoundError(f"ไม่พบรหัสเครื่องจักร {data.get('machine_id')}")
+            machine.remaining_maintenance_cost = (machine.remaining_maintenance_cost or 0) + fix_cost
+
         db.session.commit()
         return MachineMaintenanceSchema().dump(pm_machine)
     except Exception:

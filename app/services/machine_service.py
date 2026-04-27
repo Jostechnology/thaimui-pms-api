@@ -104,15 +104,21 @@ def get_machine_by_id(machine_id):
 
 def create_machine(data):
     try:
+        is_second_hand = _to_bool(data.get("is_second_hand"), False)
         machine = Machine(
             machine_code=data.get("machine_code"),
             machine_name=data.get("machine_name"),
             machine_description=data.get("machine_description"),
             manufacturer=data.get("manufacturer"),
             purchase_date=_to_purchase_date(data.get("purchase_date")),
+            purchase_price=data.get("purchase_price"),
+            useful_life_years=data.get("useful_life_years"),
+            working_hours_per_day=data.get("working_hours_per_day"),
             status=_to_machine_status(data.get("status")),
             is_active=_to_bool(data.get("is_active"), True),
             machine_type_id=data.get("machine_type_id") or None,
+            is_second_hand=is_second_hand,
+            accumulated_hours=data.get("accumulated_hours") if is_second_hand else 0.0,
         )
 
         if not machine.machine_code:
@@ -142,6 +148,15 @@ def update_machine(machine_id, data):
         if "purchase_date" in data:
             machine.purchase_date = _to_purchase_date(data.get("purchase_date"))
 
+        if "purchase_price" in data:
+            machine.purchase_price = data.get("purchase_price")
+        
+        if "useful_life_years" in data:
+            machine.useful_life_years = data.get("useful_life_years")
+
+        if "working_hours_per_day" in data:
+            machine.working_hours_per_day = data.get("working_hours_per_day")
+
         if "status" in data:
             machine.status = _to_machine_status(data.get("status"))
 
@@ -150,6 +165,12 @@ def update_machine(machine_id, data):
 
         if "machine_type_id" in data:
             machine.machine_type_id = data.get("machine_type_id") or None
+
+        if "is_second_hand" in data:
+            machine.is_second_hand = _to_bool(data.get("is_second_hand"), machine.is_second_hand)
+
+        if "accumulated_hours" in data:
+            machine.accumulated_hours = data.get("accumulated_hours") if machine.is_second_hand else 0.0
 
         machine = machine_repository.update_machine(machine)
         db.session.commit()
