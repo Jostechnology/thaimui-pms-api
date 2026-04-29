@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem
+from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak
 from app.app import db
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -10,6 +10,10 @@ def _test_result_options():
         joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
         selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
         selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
+        selectinload(TestResult.assignments).joinedload(TestResultAssignment.employee),
+        selectinload(TestResult.machines).joinedload(TestResultMachine.machine),
+        selectinload(TestResult.breaks),
+        joinedload(TestResult.cost),
     ]
 
 
@@ -175,5 +179,71 @@ def get_trpi_rows_for_required_item(test_result_required_item_id):
         db.session.query(TestResultPickingItem)
         .filter(TestResultPickingItem.test_result_required_item_id == test_result_required_item_id)
         .order_by(TestResultPickingItem.picking_request_item_id.asc())
+    )
+    return query.all()
+
+
+# --- Assignment management ---
+
+def get_open_assignment(test_result_id, employee_id):
+    query = (
+        db.session.query(TestResultAssignment)
+        .filter(
+            TestResultAssignment.test_result_id == test_result_id,
+            TestResultAssignment.employee_id == employee_id,
+            TestResultAssignment.to_time == None,
+        )
+    )
+    return query.first()
+
+
+def save_assignment(assignment):
+    db.session.add(assignment)
+    return assignment
+
+
+# --- Machine management ---
+
+def get_open_machine(test_result_id, machine_id):
+    query = (
+        db.session.query(TestResultMachine)
+        .filter(
+            TestResultMachine.test_result_id == test_result_id,
+            TestResultMachine.machine_id == machine_id,
+            TestResultMachine.to_time == None,
+        )
+    )
+    return query.first()
+
+
+def save_machine_entry(machine_entry):
+    db.session.add(machine_entry)
+    return machine_entry
+
+
+# --- Break management ---
+
+def save_break(test_result_break):
+    db.session.add(test_result_break)
+    return test_result_break
+
+
+def get_active_break(test_result_id):
+    """Return the open break (break_end IS NULL) for a test result, or None."""
+    query = (
+        db.session.query(TestResultBreak)
+        .filter(
+            TestResultBreak.test_result_id == test_result_id,
+            TestResultBreak.break_end == None,
+        )
+    )
+    return query.first()
+
+
+def get_all_breaks(test_result_id):
+    query = (
+        db.session.query(TestResultBreak)
+        .filter(TestResultBreak.test_result_id == test_result_id)
+        .order_by(TestResultBreak.break_start)
     )
     return query.all()

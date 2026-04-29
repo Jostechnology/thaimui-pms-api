@@ -1,8 +1,10 @@
 from app.con_sqlalchemy import (
     TestResult, TestResultItem, TestResultStatus, TestSessionStatus,
     TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem,
+    TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak,
+    Machine, MaterialList, BreakType,
     WorkRunStatus, WorkRunTransactionType, QCWorkOrder, QCWorkOrderStatus,
-    AllocationMode,
+    AllocationMode, bangkok_now,
 )
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import (
@@ -12,6 +14,12 @@ from app.repositories import (
 from app.services import transaction_service, document_code_service, picking_allocation_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
+from sqlalchemy.orm import joinedload
+
+
+def _naive(dt):
+    """Strip timezone info so datetime arithmetic works against DB-loaded naive datetimes."""
+    return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
 
 
 def _resolve_status(val):
@@ -361,6 +369,118 @@ def finalize_test_result(test_result_id, data):
                 for r in allocation_rows:
                     r.qty_consumed = r.qty_allocated
 
+        # Auto-close any open assignments
+        now_naive = _naive(bangkok_now())
+        open_assignments = (
+            db.session.query(TestResultAssignment)
+            .filter(TestResultAssignment.test_result_id == test_result_id,
+                    TestResultAssignment.to_time == None)
+            .all()
+        )
+        for a in open_assignments:
+            a.to_time = now_naive
+
+        # Close any open break (session ended while paused)
+        active_break = test_result_repository.get_active_break(test_result_id)
+        if active_break:
+            active_break.break_end = now_naive
+
+        db.session.flush()
+
+        # Load all breaks for cost deduction
+        all_breaks = test_result_repository.get_all_breaks(test_result_id)
+
+        # Auto-close any open machine entries and calculate their costs (deducting break time)
+        open_machines = (
+            db.session.query(TestResultMachine)
+            .filter(TestResultMachine.test_result_id == test_result_id,
+                    TestResultMachine.to_time == None)
+            .all()
+        )
+        for m in open_machines:
+            m.to_time = now_naive
+            machine = db.session.query(Machine).filter(Machine.machine_id == m.machine_id).first()
+            if machine:
+                m_start = _naive(m.from_time)
+                m_end = now_naive
+                total_secs = max(0, (m_end - m_start).total_seconds())
+                break_secs = sum(
+                    max(0, (min(_naive(b.break_end or m_end), m_end)
+                            - max(_naive(b.break_start), m_start)).total_seconds())
+                    for b in all_breaks if b.break_start
+                )
+                eff_secs = max(0, total_secs - break_secs)
+                remaining = machine.remaining_maintenance_cost or 0
+                dep = m.depreciation_per_second * eff_secs
+                allocated = min(m.maintenance_rate_per_second * eff_secs, remaining)
+                m.depreciation_cost = round(dep, 6)
+                m.maintenance_cost = round(allocated, 6)
+                m.allocated_maintenance_cost = round(allocated, 6)
+                machine.remaining_maintenance_cost = round(remaining - allocated, 6)
+
+        db.session.flush()
+
+        # Calculate total costs and create TestResultCost record
+        all_assignments = (
+            db.session.query(TestResultAssignment)
+            .options(joinedload(TestResultAssignment.employee))
+            .filter(TestResultAssignment.test_result_id == test_result_id)
+            .all()
+        )
+        labor_cost = 0.0
+        for a in all_assignments:
+            if a.employee and a.from_time and a.to_time:
+                a_start = _naive(a.from_time)
+                a_end = _naive(a.to_time)
+                total_secs = max(0, (a_end - a_start).total_seconds())
+                break_secs = sum(
+                    max(0, (min(_naive(b.break_end or a_end), a_end)
+                            - max(_naive(b.break_start), a_start)).total_seconds())
+                    for b in all_breaks if b.break_start
+                )
+                eff_secs = max(0, total_secs - break_secs)
+                rate = (a.employee.salary_base or 0) / 30 / 8 / 3600
+                labor_cost += rate * eff_secs
+
+        all_machines = (
+            db.session.query(TestResultMachine)
+            .filter(TestResultMachine.test_result_id == test_result_id)
+            .all()
+        )
+        dep_cost_total = sum(m.depreciation_cost or 0 for m in all_machines)
+        maint_cost_total = sum(m.maintenance_cost or 0 for m in all_machines)
+
+        # required items อยู่ใน identity map แล้ว (จาก get_required_items ข้างบน) พร้อม
+        # material_list = None (committed-by-noload) ทำให้ joinedload ไม่ override ได้
+        # → query MaterialList ตรงๆ ด้วย FK แทน
+        ml_ids = [ri.material_list_id for ri in required if ri.material_list_id]
+        ml_map: dict = {}
+        if ml_ids:
+            ml_rows = (
+                db.session.query(MaterialList)
+                .filter(MaterialList.material_list_id.in_(ml_ids))
+                .all()
+            )
+            ml_map = {ml.material_list_id: ml for ml in ml_rows}
+
+        mat_cost = 0.0
+        for ri in required:
+            if ri.material_list_id:
+                ml = ml_map.get(ri.material_list_id)
+                if ml:
+                    qty = ri.qty_consumed_actual if ri.qty_consumed_actual is not None else (ri.required_qty or 0)
+                    mat_cost += ml.cost_per_unit * qty
+
+        cost_record = TestResultCost(
+            test_result_id=test_result_id,
+            labor_cost=round(labor_cost, 4),
+            depreciation_cost=round(dep_cost_total, 4),
+            maintenance_cost=round(maint_cost_total, 4),
+            material_cost=round(mat_cost, 4),
+            total_cost=round(labor_cost + dep_cost_total + maint_cost_total + mat_cost, 4),
+        )
+        db.session.add(cost_record)
+
         db.session.commit()
         db.session.refresh(test_result)
         return test_result_repository.get_test_result_by_id(test_result_id)
@@ -422,12 +542,16 @@ def get_test_results_by_doc_entry(doc_entry):
 
 
 def add_required_item(test_result_id, items):
-    """Add material requirements to a PENDING TestResult. Accepts a list."""
+    """Replace material requirements for a PENDING TestResult (delete-then-insert)."""
     test_result = test_result_repository.get_test_result_by_id(test_result_id)
     if not test_result:
         raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
     if test_result.session_status != TestSessionStatus.PENDING:
         raise ValidationError("เพิ่มรายการได้เฉพาะตอน PENDING")
+
+    db.session.query(TestResultRequiredItem).filter(
+        TestResultRequiredItem.test_result_id == test_result_id
+    ).delete(synchronize_session=False)
 
     for i, data in enumerate(items):
         item_code = (data.get("item_code") or "").strip()
@@ -496,6 +620,177 @@ def get_pick_requests_for_test_result(test_result_id):
         sales_item_id=sales_item_id,
         material_list_ids=material_list_ids or None,
     )
+
+
+def assign_employee(test_result_id, employee_id):
+    """Open a new assignment for an employee on this test result."""
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError(f"Test Result {test_result_id} not found")
+    if test_result.session_status not in (TestSessionStatus.INPROGRESS, TestSessionStatus.PAUSED):
+        raise ValidationError("Can only assign employees to an active (INPROGRESS or PAUSED) test session")
+
+    existing = test_result_repository.get_open_assignment(test_result_id, employee_id)
+    if existing:
+        raise ValidationError(f"Employee {employee_id} already has an open assignment on this test session")
+
+    assignment = TestResultAssignment(
+        test_result_id=test_result_id,
+        employee_id=employee_id,
+    )
+    test_result_repository.save_assignment(assignment)
+    db.session.commit()
+    return test_result_repository.get_test_result_by_id(test_result_id)
+
+
+def unassign_employee(test_result_id, employee_id):
+    """Close the open assignment for an employee."""
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError(f"Test Result {test_result_id} not found")
+
+    assignment = test_result_repository.get_open_assignment(test_result_id, employee_id)
+    if not assignment:
+        raise NotFoundError(f"Employee {employee_id} has no open assignment on Test Result {test_result_id}")
+
+    assignment.to_time = bangkok_now()
+    db.session.commit()
+    return test_result_repository.get_test_result_by_id(test_result_id)
+
+
+def _calc_tr_depreciation_per_second(machine):
+    pp = machine.purchase_price or 0
+    uly = machine.useful_life_years or 0
+    whpd = machine.working_hours_per_day or 0
+    if pp > 0 and uly > 0 and whpd > 0:
+        total_sec = uly * 365 * whpd * 3600
+        if total_sec > 0:
+            return pp / total_sec
+    return 0.0
+
+
+def _calc_tr_maintenance_rate_per_second(machine):
+    remaining = machine.remaining_maintenance_cost or 0
+    if remaining <= 0:
+        return 0.0
+    from app.con_sqlalchemy import TestResultMachine as TRM
+    past_seconds = db.session.query(
+        db.func.coalesce(
+            db.func.sum(
+                db.func.greatest(0, db.func.timestampdiff(
+                    db.text('SECOND'), TRM.from_time, TRM.to_time
+                ))
+            ), 0
+        )
+    ).filter(TRM.machine_id == machine.machine_id, TRM.to_time != None).scalar() or 0
+
+    accumulated_sec = (machine.accumulated_hours or 0) * 3600 if machine.is_second_hand else 0
+    total_past_sec = float(past_seconds) + accumulated_sec
+    if total_past_sec > 0:
+        return remaining / total_past_sec
+    return 0.0
+
+
+def assign_machine(test_result_id, machine_id):
+    """Open a new machine entry for this test result."""
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError(f"Test Result {test_result_id} not found")
+    if test_result.session_status not in (TestSessionStatus.INPROGRESS, TestSessionStatus.PAUSED):
+        raise ValidationError("Can only assign machines to an active (INPROGRESS or PAUSED) test session")
+
+    existing = test_result_repository.get_open_machine(test_result_id, machine_id)
+    if existing:
+        raise ValidationError(f"Machine {machine_id} is already assigned to this test session")
+
+    machine_entry = TestResultMachine(
+        test_result_id=test_result_id,
+        machine_id=machine_id,
+    )
+    test_result_repository.save_machine_entry(machine_entry)
+    db.session.flush()
+
+    machine = db.session.query(Machine).filter(Machine.machine_id == machine_id).first()
+    if machine:
+        machine_entry.depreciation_per_second = _calc_tr_depreciation_per_second(machine)
+        machine_entry.maintenance_rate_per_second = _calc_tr_maintenance_rate_per_second(machine)
+
+    db.session.commit()
+    return test_result_repository.get_test_result_by_id(test_result_id)
+
+
+def unassign_machine(test_result_id, machine_id):
+    """Close the open machine entry and finalize its cost."""
+    try:
+        test_result = test_result_repository.get_test_result_by_id(test_result_id)
+        if not test_result:
+            raise NotFoundError(f"Test Result {test_result_id} not found")
+
+        machine_entry = test_result_repository.get_open_machine(test_result_id, machine_id)
+        if not machine_entry:
+            raise NotFoundError(f"Machine {machine_id} has no open entry on Test Result {test_result_id}")
+
+        now_naive = _naive(bangkok_now())
+        machine_entry.to_time = now_naive
+
+        machine = db.session.query(Machine).filter(Machine.machine_id == machine_id).first()
+        if machine:
+            entry_seconds = max(0, (now_naive - _naive(machine_entry.from_time)).total_seconds())
+            remaining = machine.remaining_maintenance_cost or 0
+            dep_cost = machine_entry.depreciation_per_second * entry_seconds
+            allocated = min(machine_entry.maintenance_rate_per_second * entry_seconds, remaining)
+            machine_entry.depreciation_cost = round(dep_cost, 6)
+            machine_entry.maintenance_cost = round(allocated, 6)
+            machine_entry.allocated_maintenance_cost = round(allocated, 6)
+            machine.remaining_maintenance_cost = round(remaining - allocated, 6)
+
+        db.session.commit()
+        return test_result_repository.get_test_result_by_id(test_result_id)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def pause_test_result(test_result_id, data):
+    """INPROGRESS → PAUSED. Creates a TestResultBreak with break_start=now."""
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError(f"Test Result {test_result_id} not found")
+    if test_result.session_status != TestSessionStatus.INPROGRESS:
+        raise ValidationError(f"Test Result must be INPROGRESS to pause (current: {test_result.session_status.value})")
+
+    break_type_str = data.get("break_type", "OTHER")
+    try:
+        break_type = BreakType(break_type_str)
+    except ValueError:
+        raise ValidationError(f"Invalid break_type: {break_type_str}")
+
+    test_result.session_status = TestSessionStatus.PAUSED
+    tr_break = TestResultBreak(
+        test_result_id=test_result_id,
+        break_type=break_type,
+        remark=data.get("remark"),
+    )
+    test_result_repository.save_break(tr_break)
+    db.session.commit()
+    return test_result_repository.get_test_result_by_id(test_result_id)
+
+
+def resume_test_result(test_result_id):
+    """PAUSED → INPROGRESS. Closes the active break."""
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError(f"Test Result {test_result_id} not found")
+    if test_result.session_status != TestSessionStatus.PAUSED:
+        raise ValidationError(f"Test Result must be PAUSED to resume (current: {test_result.session_status.value})")
+
+    active_break = test_result_repository.get_active_break(test_result_id)
+    if active_break:
+        active_break.break_end = bangkok_now()
+
+    test_result.session_status = TestSessionStatus.INPROGRESS
+    db.session.commit()
+    return test_result_repository.get_test_result_by_id(test_result_id)
 
 
 def delete_test_result(test_result_id):

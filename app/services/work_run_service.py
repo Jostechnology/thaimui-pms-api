@@ -178,6 +178,9 @@ def get_work_runs_by_work_order(work_order_id):
     return work_run_repository.get_work_runs_by_work_order(work_order_id)
 
 
+def get_work_runs_cost_by_work_order(work_order_id):
+    return work_run_repository.get_work_runs_for_cost_by_work_order(work_order_id)
+
 def get_work_runs_by_sales_item(sales_item_id):
     return work_run_repository.get_work_runs_by_sales_item(sales_item_id)
 

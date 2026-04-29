@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -627,6 +627,13 @@ class WorkRunDisplaySchema(WorkRunSchema):
     work_order       = fields.Nested(WorkOrderSchema(), allow_none=True)
     cost             = fields.Nested(WorkRunCostSchema(), allow_none=True)
 
+class WorkRunCostDisplaySchema(WorkRunSchema):
+    assignments = fields.List(fields.Nested(WorkRunAssignmentSchema()))
+    machines = fields.List(fields.Nested(WorkRunMachineSchema()))
+    breaks = fields.List(fields.Nested(WorkRunBreakSchema())) 
+    required_items = fields.List(fields.Nested(WorkRunRequiredItemSchema()), dump_only=True)
+    cost = fields.Nested(WorkRunCostSchema(), allow_none=True)
+
 class WorkRunDetailSchema(WorkRunSchema):
     test_result_sources = fields.List(fields.Nested(lambda: TestResultWorkRunFromRunSchema()))
     rework_sources      = fields.List(fields.Nested(WorkRunReworkSourceSchema()), dump_only=True)
@@ -638,6 +645,57 @@ class TestResultWorkRunFromRunSchema(Schema):
     test_result_id = fields.Integer(dump_only=True)
     qty_from_run   = fields.Integer()
     test_result    = fields.Nested(lambda: TestResultSchema(), dump_only=True)
+
+class TestResultBreakSchema(Schema):
+    break_id    = fields.Integer(dump_only=True)
+    break_start = fields.DateTime(dump_only=True)
+    break_end   = fields.DateTime(allow_none=True, dump_only=True)
+    break_type  = fields.Enum(BreakType, dump_only=True)
+    remark      = fields.String(allow_none=True, dump_only=True)
+
+class TestResultAssignmentSchema(Schema):
+    test_result_assignment_id = fields.Integer(dump_only=True)
+    test_result_id = fields.Integer(dump_only=True)
+    employee_id = fields.Integer()
+    from_time = fields.DateTime()
+    to_time = fields.DateTime(allow_none=True)
+    employee = fields.Nested(lambda: EmployeeSchema())
+
+class TestResultMachineCostFieldSchema(Schema):
+    depreciation_per_second = fields.Float()
+    depreciation_cost = fields.Float(allow_none=True)
+    maintenance_rate_per_second = fields.Float()
+    maintenance_cost = fields.Float(allow_none=True)
+    total_cost = fields.Method('get_total')
+
+    def get_total(self, obj):
+        d = obj.depreciation_cost
+        m = obj.maintenance_cost
+        if d is None and m is None:
+            return None
+        return round((d or 0.0) + (m or 0.0), 6)
+
+class TestResultMachineSchema(Schema):
+    test_result_machine_id = fields.Integer(dump_only=True)
+    test_result_id = fields.Integer(dump_only=True)
+    machine_id = fields.Integer()
+    from_time = fields.DateTime()
+    to_time = fields.DateTime(allow_none=True)
+    allocated_maintenance_cost = fields.Float(allow_none=True)
+    machine = fields.Nested(lambda: MachineSchema())
+    cost = fields.Method('get_cost')
+
+    def get_cost(self, obj):
+        return TestResultMachineCostFieldSchema().dump(obj)
+    
+class TestResultCostSchema(Schema):
+    cost_id = fields.Integer(dump_only=True)
+    test_result_id = fields.Integer(dump_only=True)
+    material_cost = fields.Float(allow_none=True)
+    depreciation_cost = fields.Float(allow_none=True)
+    maintenance_cost = fields.Float(allow_none=True)
+    labor_cost = fields.Float(allow_none=True)
+    total_cost = fields.Float(allow_none=True)
 
 class TestResultSchema(Schema):
     test_result_id          = fields.Integer(dump_only=True)
@@ -658,6 +716,10 @@ class TestResultSchema(Schema):
     work_run_sources        = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
     picking_item_sources    = fields.List(fields.Nested(TestResultPickingItemSchema()), dump_only=True)
     required_items          = fields.List(fields.Nested(TestResultRequiredItemSchema()), dump_only=True)
+    assignments             = fields.List(fields.Nested(TestResultAssignmentSchema()), dump_only=True)
+    machines                = fields.List(fields.Nested(TestResultMachineSchema()), dump_only=True)
+    breaks                  = fields.List(fields.Nested(TestResultBreakSchema()), dump_only=True)
+    cost                    = fields.Nested(TestResultCostSchema(), allow_none=True, dump_only=True)
     created_date            = fields.DateTime(dump_only=True)
     updated_date            = fields.DateTime(dump_only=True)
     created_by              = fields.String(dump_only=True)

@@ -75,6 +75,29 @@ def get_work_runs_by_work_order(work_order_id):
         raise
 
 
+def get_work_runs_for_cost_by_work_order(work_order_id):
+    """Fetch all started work runs for a work order with joins needed for cost calculation.
+    Excludes work_order join since caller already knows work_order_id."""
+    try:
+        query = (
+            db.session.query(WorkRun)
+            .options(
+                selectinload(WorkRun.assignments).selectinload(WorkRunAssignment.employee),
+                selectinload(WorkRun.machines).selectinload(WorkRunMachine.machine),
+                selectinload(WorkRun.breaks),
+                selectinload(WorkRun.required_items).selectinload(WorkRunRequiredItem.material_list),
+                selectinload(WorkRun.cost),
+            )
+            .filter(
+                WorkRun.work_order_id == work_order_id,
+                WorkRun.start_date.isnot(None),
+            )
+            .order_by(WorkRun.created_date.asc())
+        )
+        return query.all()
+    except Exception:
+        raise
+
 def get_work_runs_by_sales_item(sales_item_id):
     try:
         query = (
