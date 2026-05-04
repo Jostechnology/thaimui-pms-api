@@ -1,12 +1,13 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import TestResultRequiredItemSchema, PickingRequestFullDetailSchema
+from app.ma_sqlalchemy import TestResultRequiredItemSchema, TestResultSchema, PickingRequestFullDetailSchema
 from app.services.test_result_service import (
     create_test_result,
     start_test_result,
     finalize_test_result,
     get_test_results_by_qc_work_order,
+    get_test_results_cost_by_qc_work_order,
     get_test_results_by_doc_entry,
     get_test_result_by_id,
     update_test_result,
@@ -15,6 +16,12 @@ from app.services.test_result_service import (
     get_required_items_for_test_result,
     delete_required_item,
     get_pick_requests_for_test_result,
+    assign_employee,
+    unassign_employee,
+    assign_machine,
+    unassign_machine,
+    pause_test_result,
+    resume_test_result,
 )
 
 
@@ -32,9 +39,12 @@ def api_create_test_result(qc_work_order_id):
 @app.route("/api/test_result/<int:test_result_id>/start", methods=["POST"])
 @verify_required
 def api_start_test_result(test_result_id):
-    data = request.get_json() or {}
-    result = start_test_result(test_result_id, data)
-    return jsonify({"data": "Cool !!", "success": True}), 200
+    try:
+        data = request.get_json() or {}
+        start_test_result(test_result_id, data)
+        return jsonify({"data": "Cool !!", "success": True}), 200
+    except Exception:
+        raise
 
 
 @app.route("/api/test_result/<int:test_result_id>/finalize", methods=["PUT"])
@@ -53,6 +63,16 @@ def api_finalize_test_result(test_result_id):
 def api_get_test_results_by_qc_work_order(qc_work_order_id):
     try:
         result = get_test_results_by_qc_work_order(qc_work_order_id)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/qc_work_order/<int:qc_work_order_id>/test_results/cost", methods=["GET"])
+@verify_required
+def api_get_test_results_cost_by_qc_work_order(qc_work_order_id):
+    try:
+        result = get_test_results_cost_by_qc_work_order(qc_work_order_id)
         return jsonify({"data": result, "success": True}), 200
     except Exception:
         raise
@@ -138,3 +158,66 @@ def api_delete_required_item(test_result_id, required_item_id):
         return jsonify({"data": TestResultRequiredItemSchema(many=True).dump(result), "success": True}), 200
     except Exception:
         raise
+
+
+@app.route("/api/test_result/<int:test_result_id>/assign_employee", methods=["POST"])
+@verify_required
+def api_assign_employee_to_test_result(test_result_id):
+    data = request.get_json() or {}
+    employee_id = data.get("employee_id")
+    if not employee_id:
+        from app.exception import MissingFieldsError
+        raise MissingFieldsError("employee_id is required")
+    result = assign_employee(test_result_id, employee_id)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/test_result/<int:test_result_id>/unassign_employee", methods=["POST"])
+@verify_required
+def api_unassign_employee_from_test_result(test_result_id):
+    data = request.get_json() or {}
+    employee_id = data.get("employee_id")
+    if not employee_id:
+        from app.exception import MissingFieldsError
+        raise MissingFieldsError("employee_id is required")
+    result = unassign_employee(test_result_id, employee_id)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/test_result/<int:test_result_id>/assign_machine", methods=["POST"])
+@verify_required
+def api_assign_machine_to_test_result(test_result_id):
+    data = request.get_json() or {}
+    machine_id = data.get("machine_id")
+    if not machine_id:
+        from app.exception import MissingFieldsError
+        raise MissingFieldsError("machine_id is required")
+    result = assign_machine(test_result_id, machine_id)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/test_result/<int:test_result_id>/unassign_machine", methods=["POST"])
+@verify_required
+def api_unassign_machine_from_test_result(test_result_id):
+    data = request.get_json() or {}
+    machine_id = data.get("machine_id")
+    if not machine_id:
+        from app.exception import MissingFieldsError
+        raise MissingFieldsError("machine_id is required")
+    result = unassign_machine(test_result_id, machine_id)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/test_result/<int:test_result_id>/pause", methods=["POST"])
+@verify_required
+def api_pause_test_result(test_result_id):
+    data = request.get_json() or {}
+    result = pause_test_result(test_result_id, data)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/test_result/<int:test_result_id>/resume", methods=["POST"])
+@verify_required
+def api_resume_test_result(test_result_id):
+    result = resume_test_result(test_result_id)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200

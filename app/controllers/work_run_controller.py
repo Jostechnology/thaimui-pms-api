@@ -3,12 +3,13 @@ import time
 from app.api_auth import _log_timer, verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import MaterialListSchema, WorkRunDisplaySchema, WorkRunSchema, WorkRunRequiredItemSchema, PickingRequestFullDetailSchema
+from app.ma_sqlalchemy import MaterialListSchema, WorkRunDisplaySchema, WorkRunCostDisplaySchema, WorkRunSchema, WorkRunRequiredItemSchema, PickingRequestFullDetailSchema
 from app.services.work_run_service import (
     create_work_run,
     complete_work_run,
     get_work_run_by_id,
     get_work_runs_by_work_order,
+    get_work_runs_cost_by_work_order,
     get_work_run_detail,
     start_work_run,
     pause_work_run,
@@ -57,6 +58,12 @@ def api_get_work_runs(work_order_id):
     result = get_work_runs_by_work_order(work_order_id)
     return jsonify({"data": WorkRunDisplaySchema(many=True).dump(result), "success": True}), 200
 
+
+@app.route("/api/work_order/<int:work_order_id>/work_runs_cost", methods=["GET"])
+@verify_required
+def api_get_work_runs_cost(work_order_id):
+    result = get_work_runs_cost_by_work_order(work_order_id)
+    return jsonify({"data": WorkRunCostDisplaySchema(many=True).dump(result), "success": True}), 200
 
 @app.route("/api/work_run/<int:work_run_id>/start", methods=["POST"])
 @verify_required

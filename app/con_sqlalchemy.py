@@ -290,6 +290,7 @@ class Employee(AuditMixin):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     salary_base = db.Column(db.Float, nullable=False, default=0.0)
     work_run_assignments = db.relationship('WorkRunAssignment', back_populates='employee', lazy='noload')
+    test_result_assignments = db.relationship('TestResultAssignment', back_populates='employee', lazy='noload')
 
 class EmployeeSalaryHistory(AuditMixin):
     __tablename__ = "t_employee_salary_history"
@@ -660,6 +661,7 @@ class TestResultStatus(enum.Enum):
 class TestSessionStatus(enum.Enum):
     PENDING    = 'PENDING'
     INPROGRESS = 'INPROGRESS'
+    PAUSED     = 'PAUSED'
     COMPLETED  = 'COMPLETED'
 
 
@@ -675,8 +677,7 @@ class TestResult(AuditMixin, BranchScopedMixin):
     qc_work_order_id   = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='SET NULL'), nullable=True)
     claimed_qty        = db.Column(db.Integer, nullable=False)
     session_status     = db.Column(db.Enum(TestSessionStatus), nullable=False, default=TestSessionStatus.INPROGRESS)
-    test_date          = db.Column(db.DateTime, nullable=True)
-    tested_by          = db.Column(db.String(100), nullable=True)
+    started_at         = db.Column(db.DateTime, nullable=True)
     test_method        = db.Column(db.String(255), nullable=True)
     standard_reference = db.Column(db.String(255), nullable=True)
     overall_status     = db.Column(db.Enum(TestResultStatus), nullable=True)
@@ -687,6 +688,10 @@ class TestResult(AuditMixin, BranchScopedMixin):
     required_items          = db.relationship('TestResultRequiredItem', back_populates='test_result', cascade='all, delete-orphan', lazy='noload')
     qc_work_order           = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
     rework_work_runs        = db.relationship('WorkRun', foreign_keys='WorkRun.rework_source_test_result_id', back_populates='rework_source_test_result', lazy='noload')
+    assignments             = db.relationship('TestResultAssignment', back_populates='test_result', cascade='all, delete-orphan', lazy='noload')
+    machines                = db.relationship('TestResultMachine', back_populates='test_result', cascade='all, delete-orphan', lazy='noload')
+    breaks                  = db.relationship('TestResultBreak', back_populates='test_result', cascade='all, delete-orphan', order_by='TestResultBreak.break_start', lazy='noload')
+    cost                    = db.relationship('TestResultCost', foreign_keys='TestResultCost.test_result_id', uselist=False, lazy='noload', overlaps='test_result')
 
     @property
     def failed_item_qty(self):
@@ -822,6 +827,59 @@ class TestResultRequiredItem(AuditMixin, BranchScopedMixin):
     material_list         = db.relationship('MaterialList', lazy='noload')
     picking_item_allocations = db.relationship('TestResultPickingItem', back_populates='test_result_required_item', lazy='noload')
 
+
+class TestResultAssignment(AuditMixin, BranchScopedMixin):
+    __tablename__ = "t_test_result_assignment"
+
+    test_result_assignment_id = db.Column(db.Integer, primary_key=True)
+    test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
+    from_time = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    to_time = db.Column(db.DateTime, nullable=True)
+    test_result = db.relationship('TestResult', back_populates='assignments', lazy='noload')
+    employee = db.relationship('Employee', back_populates='test_result_assignments', lazy='noload')
+
+
+class TestResultMachine(AuditMixin, BranchScopedMixin):
+    __tablename__ = "t_test_result_machine"
+
+    test_result_machine_id = db.Column(db.Integer, primary_key=True)
+    test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    machine_id = db.Column(db.Integer, db.ForeignKey('m_machine.machine_id'), nullable=False)
+    from_time = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    to_time = db.Column(db.DateTime, nullable=True)
+    allocated_maintenance_cost = db.Column(db.Float, nullable=True, default=0.0)
+    depreciation_per_second = db.Column(db.Float, nullable=False, default=0.0)
+    maintenance_rate_per_second = db.Column(db.Float, nullable=False, default=0.0)
+    depreciation_cost = db.Column(db.Float, nullable=True)
+    maintenance_cost = db.Column(db.Float, nullable=True)
+    test_result = db.relationship('TestResult', back_populates='machines', lazy='noload')
+    machine = db.relationship('Machine', lazy='noload')
+
+
+class TestResultBreak(AuditMixin, BranchScopedMixin):
+    __tablename__ = "t_test_result_break"
+
+    break_id       = db.Column(db.Integer, primary_key=True)
+    test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    break_start    = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    break_end      = db.Column(db.DateTime, nullable=True)
+    break_type     = db.Column(db.Enum(BreakType), nullable=False, default=BreakType.OTHER)
+    remark         = db.Column(db.String(255), nullable=True)
+    test_result    = db.relationship('TestResult', back_populates='breaks', lazy='noload')
+
+
+class TestResultCost(AuditMixin, BranchScopedMixin):
+    __tablename__ = "t_test_result_cost"
+
+    cost_id = db.Column(db.Integer, primary_key=True)
+    test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), unique=True, nullable=False)
+    material_cost = db.Column(db.Float, nullable=True)
+    depreciation_cost = db.Column(db.Float, nullable=True)
+    maintenance_cost = db.Column(db.Float, nullable=True)
+    labor_cost = db.Column(db.Float, nullable=True)
+    total_cost = db.Column(db.Float, nullable=True)
+    test_result = db.relationship('TestResult', lazy='noload', overlaps='cost')
 
 class WorkRunTransaction(AuditMixin, BranchScopedMixin):
     """Audit log of item movements on a WorkRun (sent to testing, defects consumed by rework)."""
