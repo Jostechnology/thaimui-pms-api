@@ -34,7 +34,7 @@ def create_test_result(test_result):
 
 def get_test_results_by_qc_work_order(qc_work_order_id):
     try:
-        return (
+        query = (
             db.session.query(TestResult)
             .options(
                 selectinload(TestResult.test_result_items),
@@ -43,8 +43,20 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
                 selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list)
             )
             .filter(TestResult.qc_work_order_id == qc_work_order_id)
-            .all()
         )
+        return query.all()
+    except Exception:
+        raise
+
+
+def get_test_results_cost_by_qc_work_order(qc_work_order_id):
+    try:
+        query = (
+            db.session.query(TestResult)
+            .options(*_test_result_options())
+            .filter(TestResult.qc_work_order_id == qc_work_order_id)
+        )
+        return query.all()
     except Exception:
         raise
 

@@ -288,6 +288,7 @@ def start_test_result(test_result_id, data=None):
                 )
 
         test_result.session_status = TestSessionStatus.INPROGRESS
+        test_result.started_at = _naive(bangkok_now())
         db.session.commit()
         return test_result_repository.get_test_result_by_id(test_result_id)
     except Exception:
@@ -316,8 +317,6 @@ def finalize_test_result(test_result_id, data):
         if not items_data:
             raise ValidationError("ไม่พบ TestItem กรุณาตรวจสอบอีกครั้ง")
 
-        test_result.test_date = data.get("test_date")
-        test_result.tested_by = data.get("tested_by")
         test_result.test_method = data.get("test_method")
         test_result.standard_reference = data.get("standard_reference")
         test_result.remark = data.get("remark", test_result.remark)
@@ -421,10 +420,14 @@ def finalize_test_result(test_result_id, data):
         db.session.flush()
 
         # Calculate total costs and create TestResultCost record
+        # populate_existing=True forces SQLAlchemy to re-populate the employee
+        # relationship even for objects already in the identity map (loaded without
+        # joinedload in the open_assignments query above, leaving employee=None).
         all_assignments = (
             db.session.query(TestResultAssignment)
             .options(joinedload(TestResultAssignment.employee))
             .filter(TestResultAssignment.test_result_id == test_result_id)
+            .populate_existing()
             .all()
         )
         labor_cost = 0.0
@@ -491,6 +494,14 @@ def finalize_test_result(test_result_id, data):
 def get_test_results_by_qc_work_order(qc_work_order_id):
     try:
         results = test_result_repository.get_test_results_by_qc_work_order(qc_work_order_id)
+        return TestResultSchema(many=True).dump(results)
+    except Exception:
+        raise
+
+
+def get_test_results_cost_by_qc_work_order(qc_work_order_id):
+    try:
+        results = test_result_repository.get_test_results_cost_by_qc_work_order(qc_work_order_id)
         return TestResultSchema(many=True).dump(results)
     except Exception:
         raise

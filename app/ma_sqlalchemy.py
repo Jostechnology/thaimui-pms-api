@@ -554,8 +554,6 @@ class TestResultSummarySchema(Schema):
     test_result_code = fields.String(allow_none=True, dump_only=True)
     session_status   = fields.Enum(TestSessionStatus, dump_only=True)
     overall_status   = fields.Enum(TestResultStatus, allow_none=True, dump_only=True)
-    tested_by        = fields.String(allow_none=True, dump_only=True)
-    test_date        = fields.DateTime(allow_none=True, dump_only=True)
 
 
 class WorkRunSummarySchema(Schema):
@@ -703,8 +701,7 @@ class TestResultSchema(Schema):
     qc_work_order_id        = fields.Integer(allow_none=True)
     claimed_qty             = fields.Integer()
     session_status          = fields.Enum(TestSessionStatus, dump_only=True)
-    test_date               = fields.DateTime(allow_none=True)
-    tested_by               = fields.String(allow_none=True)
+    started_at              = fields.DateTime(allow_none=True, dump_only=True)
     test_method             = fields.String(allow_none=True)
     standard_reference      = fields.String(allow_none=True)
     overall_status          = fields.Enum(TestResultStatus, allow_none=True)
@@ -789,8 +786,6 @@ class TestResultSimpleSchema(Schema):
     claimed_qty        = fields.Integer()
     session_status     = fields.Enum(TestSessionStatus)
     overall_status     = fields.Enum(TestResultStatus, allow_none=True)
-    test_date          = fields.DateTime(allow_none=True)
-    tested_by          = fields.String(allow_none=True)
     created_date       = fields.DateTime()
 
 
