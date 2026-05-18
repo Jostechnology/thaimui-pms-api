@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import Branch, SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList, ItemComponent, ComponentMaterialUsage
+from app.con_sqlalchemy import Branch, SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList, ItemComponent, ComponentMaterialUsage, PickingRequest
 from app.app import db
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import selectinload
@@ -250,6 +250,59 @@ def get_sales_order_by_doc_entry(doc_entry):
     if not sales_order:
         raise NotFoundError(f"ไม่พบ SalesOrder : {doc_entry}")
     return sales_order
+
+
+def get_sales_order_by_doc_num(doc_num, branch_id=None):
+    query = db.session.query(SalesOrder).filter(SalesOrder.doc_num == doc_num)
+    if branch_id is not None:
+        query = query.filter(SalesOrder.branch_id == branch_id)
+    sales_order = query.first()
+    if not sales_order:
+        raise NotFoundError(f"ไม่พบ SalesOrder doc_num : {doc_num}")
+    return sales_order
+
+
+def delete_sales_order_cascade(sales_order: SalesOrder):
+    """
+    Explicit cascade delete. SalesItem.doc_entry FK lacks ON DELETE CASCADE,
+    so we must trigger child deletes manually. Order matters:
+    TestResults first (SET NULL link to QCWorkOrder leaves orphans otherwise),
+    then SalesItems (DB cascades MaterialList, WorkOrder->WorkRun->..., QCWorkOrder->...),
+    then PickingRequest (doc_entry FK is SET NULL),
+    then SalesOrder (cascades QCCertification).
+    """
+    doc_entry = sales_order.doc_entry
+
+    sales_item_id_rows = db.session.query(SalesItem.sales_item_id).filter(
+        SalesItem.doc_entry == doc_entry
+    ).all()
+    sales_item_ids = [r[0] for r in sales_item_id_rows]
+
+    if sales_item_ids:
+        qc_wo_id_rows = db.session.query(QCWorkOrder.qc_work_order_id).filter(
+            QCWorkOrder.sales_item_id.in_(sales_item_ids)
+        ).all()
+        qc_wo_ids = [r[0] for r in qc_wo_id_rows]
+
+        if qc_wo_ids:
+            test_result_id_rows = db.session.query(TestResult.test_result_id).filter(
+                TestResult.qc_work_order_id.in_(qc_wo_ids)
+            ).all()
+            test_result_ids = [r[0] for r in test_result_id_rows]
+            if test_result_ids:
+                db.session.query(TestResult).filter(
+                    TestResult.test_result_id.in_(test_result_ids)
+                ).delete(synchronize_session=False)
+
+        db.session.query(SalesItem).filter(
+            SalesItem.doc_entry == doc_entry
+        ).delete(synchronize_session=False)
+
+    db.session.query(PickingRequest).filter(
+        PickingRequest.doc_entry == doc_entry
+    ).delete(synchronize_session=False)
+
+    db.session.delete(sales_order)
 
 
 def get_sales_order_detail(doc_entry, branch_id=None):

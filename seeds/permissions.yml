@@ -674,6 +674,42 @@ modules:
   - method: view
     code: view.ALL_BRANCH
     description: View ดูข้อมูลทุกสาขา (Login อีกระบบ)
+- code: SHIFT_MANAGEMENT
+  name: จัดการกะการทำงาน
+  parent_code: SETTING
+  level: 2
+  sort_order: 8
+  permissions:
+  - method: create
+    code: create.SHIFT_MANAGEMENT
+    description: Create จัดการกะการทำงาน
+  - method: delete
+    code: delete.SHIFT_MANAGEMENT
+    description: Delete จัดการกะการทำงาน
+  - method: edit
+    code: edit.SHIFT_MANAGEMENT
+    description: Edit จัดการกะการทำงาน
+  - method: view
+    code: view.SHIFT_MANAGEMENT
+    description: View จัดการกะการทำงาน
+- code: HOLIDAY_MANAGEMENT
+  name: จัดการวันหยุด
+  parent_code: SETTING
+  level: 2
+  sort_order: 9
+  permissions:
+  - method: create
+    code: create.HOLIDAY_MANAGEMENT
+    description: Create จัดการวันหยุด
+  - method: delete
+    code: delete.HOLIDAY_MANAGEMENT
+    description: Delete จัดการวันหยุด
+  - method: edit
+    code: edit.HOLIDAY_MANAGEMENT
+    description: Edit จัดการวันหยุด
+  - method: view
+    code: view.HOLIDAY_MANAGEMENT
+    description: View จัดการวันหยุด
 
 bootstrap:
   roles:

@@ -77,7 +77,9 @@ def create_employee(data):
             address=data.get("address"),
             status=_to_employee_status(data.get("status")),
             user_id=data.get("user_id"),
-            salary_base=data.get("salary_base", 0.0),
+            base_salary=data.get("base_salary", 0.0),
+            day_rate=data.get("day_rate", 0.0),
+            ot_hourly_rate=data.get("ot_hourly_rate", 0.0),
             is_active=data.get("is_active", True)
         )
         # If user_id wasn't provided by client, try to map from authenticated username

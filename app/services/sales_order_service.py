@@ -170,7 +170,7 @@ def create_sales_order(data):
                 center_sales_item_id=item.get("sales_item_id"),
                 produce=item.get("produce", False),
                 test=item.get("test", False),
-                item_group=item.get("item_group"),
+                item_group=item.get("category_name"),
                 branch_id = branch.branch_id
             )
             sales_order.sales_items.append(sales_item)
@@ -187,7 +187,7 @@ def create_sales_order(data):
                     unit_id=mat.get("unit_id", 0),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
-                    item_group=mat.get("item_group"),
+                    item_group=mat.get("category_name"),
                     branch_id = branch.branch_id,
                     order_line_num = mat.get("order_line_num")
                 )
@@ -199,6 +199,18 @@ def create_sales_order(data):
     except Exception:
         db.session.rollback()
         raise
+
+def delete_sales_order_by_doc_num(doc_num, branch_id=None):
+    try:
+        sales_order = sales_order_repository.get_sales_order_by_doc_num(doc_num, branch_id=branch_id)
+        doc_entry = sales_order.doc_entry
+        sales_order_repository.delete_sales_order_cascade(sales_order)
+        db.session.commit()
+        return {"doc_num": doc_num, "doc_entry": doc_entry}
+    except Exception:
+        db.session.rollback()
+        raise
+
 
 def sales_order_finish(sales_order : SalesOrder):
     try:

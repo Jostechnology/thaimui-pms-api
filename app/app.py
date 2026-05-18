@@ -106,6 +106,9 @@ from .controllers import component_template_controller
 from .controllers import machine_type_controller
 from .controllers import phase_template_controller
 from .controllers import all_branch_controller
+from .controllers import shift_controller
+from .controllers import employee_shift_controller
+from .controllers import holiday_controller
 
 from app.cli import register_cli
 register_cli(app)

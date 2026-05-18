@@ -244,7 +244,9 @@ class WorkRunCost(AuditMixin, BranchScopedMixin):
     material_cost = db.Column(db.Float, nullable=True)
     depreciation_cost = db.Column(db.Float, nullable=True)
     maintenance_cost = db.Column(db.Float, nullable=True)
-    labor_cost = db.Column(db.Float, nullable=True)
+    base_labor_cost = db.Column(db.Float, nullable=True)
+    day_labor_cost = db.Column(db.Float, nullable=True)
+    ot_labor_cost = db.Column(db.Float, nullable=True)
     total_cost = db.Column(db.Float, nullable=True)
     work_run = db.relationship('WorkRun', lazy='noload', overlaps='cost')
 
@@ -276,6 +278,27 @@ class EmployeeStatus(enum.Enum):
     ONLEAVE = 'ONLEAVE'
     SUSPENDED = 'SUSPENDED'
 
+class Shift(AuditMixin):
+    """Global shift config. Defines work window, work days, and pay multipliers."""
+    __tablename__ = "m_shift"
+    shift_id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, default="DEFAULT")
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+    work_days = db.Column(db.String(40), nullable=False, default="MON,TUE,WED,THU,FRI")
+    ot_multiplier = db.Column(db.Float, nullable=False, default=1.5)
+    weekend_multiplier = db.Column(db.Float, nullable=False, default=2.0)
+    holiday_multiplier = db.Column(db.Float, nullable=False, default=3.0)
+    is_default = db.Column(db.Boolean, nullable=False, default=False)
+
+class Holiday(AuditMixin):
+    __tablename__ = "m_holiday"
+    holiday_id = db.Column(db.Integer, primary_key=True)
+    holiday_date = db.Column(db.Date, nullable=False, unique=True)
+    name = db.Column(db.String(255), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    source = db.Column(db.String(50), nullable=False, default="MANUAL")
+
 class Employee(AuditMixin):
     __tablename__ = "m_employee"
     employee_id = db.Column(db.Integer, primary_key=True)
@@ -288,16 +311,33 @@ class Employee(AuditMixin):
     status = db.Column(db.Enum(EmployeeStatus),nullable=False,default=EmployeeStatus.UNEMPLOYED)
     user_id = db.Column(db.Integer, db.ForeignKey('m_user.user_id'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
-    salary_base = db.Column(db.Float, nullable=False, default=0.0)
+    base_salary = db.Column(db.Float, nullable=False, default=0.0)
+    day_rate = db.Column(db.Float, nullable=False, default=0.0)
+    ot_hourly_rate = db.Column(db.Float, nullable=False, default=0.0)
     work_run_assignments = db.relationship('WorkRunAssignment', back_populates='employee', lazy='noload')
     test_result_assignments = db.relationship('TestResultAssignment', back_populates='employee', lazy='noload')
+    shift_override = db.relationship('EmployeeShift', back_populates='employee', uselist=False, lazy='noload')
+
+class EmployeeShift(AuditMixin):
+    """Per-employee override of the global Shift. Full override (replaces shift window/days)."""
+    __tablename__ = "m_employee_shift"
+    employee_shift_id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id', ondelete='CASCADE'), unique=True, nullable=False)
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+    work_days = db.Column(db.String(40), nullable=False, default="MON,TUE,WED,THU,FRI")
+    employee = db.relationship('Employee', back_populates='shift_override', lazy='noload')
 
 class EmployeeSalaryHistory(AuditMixin):
     __tablename__ = "t_employee_salary_history"
     salary_history_id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('m_employee.employee_id'), nullable=False)
-    old_salary = db.Column(db.Float, nullable=False)
-    new_salary = db.Column(db.Float, nullable=False)
+    old_base_salary = db.Column(db.Float, nullable=False, default=0.0)
+    new_base_salary = db.Column(db.Float, nullable=False, default=0.0)
+    old_day_rate = db.Column(db.Float, nullable=False, default=0.0)
+    new_day_rate = db.Column(db.Float, nullable=False, default=0.0)
+    old_ot_hourly_rate = db.Column(db.Float, nullable=False, default=0.0)
+    new_ot_hourly_rate = db.Column(db.Float, nullable=False, default=0.0)
     effective_date = db.Column(db.DateTime, nullable=False, default=bangkok_now)
     remark= db.Column(db.String(255), nullable=True)
 
@@ -877,7 +917,9 @@ class TestResultCost(AuditMixin, BranchScopedMixin):
     material_cost = db.Column(db.Float, nullable=True)
     depreciation_cost = db.Column(db.Float, nullable=True)
     maintenance_cost = db.Column(db.Float, nullable=True)
-    labor_cost = db.Column(db.Float, nullable=True)
+    base_labor_cost = db.Column(db.Float, nullable=True)
+    day_labor_cost = db.Column(db.Float, nullable=True)
+    ot_labor_cost = db.Column(db.Float, nullable=True)
     total_cost = db.Column(db.Float, nullable=True)
     test_result = db.relationship('TestResult', lazy='noload', overlaps='cost')
 

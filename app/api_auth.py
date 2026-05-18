@@ -1,12 +1,46 @@
 from app.con_sqlalchemy import Tokenlist
 from app.config import CENTER_ACCESS_KEY
 from app.utils import decode_token, check_true_permissions
+from app.services import cache_service
 from functools import wraps
 from flask import request, jsonify, g
 import base64
 import json
 import time
 import logging
+
+
+# Redis-backed JTI existence cache. Sub-millisecond replacement for the
+# `SELECT FROM t_token_list WHERE jwt_id = ?` on every authenticated request.
+# MySQL remains source-of-truth; cache is invalidated on logout / refresh /
+# token rotation so revocation propagates immediately.
+JTI_CACHE_PREFIX = "jti:"
+
+
+def jti_cache_key(jti: str) -> str:
+    return f"{JTI_CACHE_PREFIX}{jti}"
+
+
+def _jti_cache_ttl_from_exp(decoded: dict, fallback: int = 3600) -> int:
+    """TTL seconds remaining until the token's own exp. Clamp 1min..7d."""
+    exp = decoded.get("exp") if decoded else None
+    if not exp:
+        return fallback
+    remaining = int(exp) - int(time.time())
+    return max(60, min(remaining, 7 * 24 * 3600))
+
+
+def _verify_jti_alive(jti: str, decoded: dict) -> bool:
+    """Cache-first JTI existence check. Returns True if token is in Tokenlist."""
+    key = jti_cache_key(jti)
+    cached = cache_service.get(key)
+    if cached is not None:
+        return True
+    if not Tokenlist.query.filter_by(jwt_id=jti).first():
+        return False
+    cache_service.set(key, True, ttl=_jti_cache_ttl_from_exp(decoded))
+    return True
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +84,7 @@ def verify_required(f):
             return jsonify({"message": "Invalid or expired token"}), 401
 
         jti = decoded.get("jti")
-        if not Tokenlist.query.filter_by(jwt_id=jti).first():
+        if not _verify_jti_alive(jti, decoded):
             _log_timer("verify_required", (time.perf_counter() - _start) * 1000, "early exit: token not in DB")
             return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
 
@@ -105,7 +139,7 @@ def verify_required_all_branch(f):
             return jsonify({"message": "Invalid or expired token"}), 401
 
         jti = decoded.get("jti")
-        if not Tokenlist.query.filter_by(jwt_id=jti).first():
+        if not _verify_jti_alive(jti, decoded):
             _log_timer("verify_required_all_branch", (time.perf_counter() - _start) * 1000, "early exit: token not in DB")
             return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
 
@@ -165,7 +199,7 @@ def verify_required_center(f):
             return jsonify({"message": "Invalid or expired token"}), 401
 
         jti = decoded.get("jti")
-        if not Tokenlist.query.filter_by(jwt_id=jti).first():
+        if not _verify_jti_alive(jti, decoded):
             _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, "early exit: token not in DB")
             return jsonify({"message": "Token ไม่ถูกต้องหรือหมดอายุ"}), 401
 

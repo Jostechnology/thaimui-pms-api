@@ -54,6 +54,31 @@ class RolePermissionSchema(SQLAlchemyAutoSchema):
 
 
 
+class ShiftSchema(Schema):
+    shift_id = fields.Integer()
+    name = fields.String()
+    start_time = fields.Time()
+    end_time = fields.Time()
+    work_days = fields.String()
+    ot_multiplier = fields.Float()
+    weekend_multiplier = fields.Float()
+    holiday_multiplier = fields.Float()
+    is_default = fields.Boolean()
+
+class EmployeeShiftSchema(Schema):
+    employee_shift_id = fields.Integer()
+    employee_id = fields.Integer()
+    start_time = fields.Time()
+    end_time = fields.Time()
+    work_days = fields.String()
+
+class HolidaySchema(Schema):
+    holiday_id = fields.Integer()
+    holiday_date = fields.Date()
+    name = fields.String()
+    is_active = fields.Boolean()
+    source = fields.String()
+
 class EmployeeSchema(Schema):
     employee_id = fields.Integer()
     employee_first_name = fields.String()
@@ -65,13 +90,20 @@ class EmployeeSchema(Schema):
     address = fields.String()
     user_id = fields.Integer()
     is_active = fields.Boolean()
-    salary_base = fields.Float()
+    base_salary = fields.Float()
+    day_rate = fields.Float()
+    ot_hourly_rate = fields.Float()
+    shift_override = fields.Nested(EmployeeShiftSchema(), allow_none=True, dump_only=True)
 
 class EmployeeSalaryHistorySchema(Schema):
     salary_history_id = fields.Integer()
     employee_id = fields.Integer()
-    old_salary = fields.Float()
-    new_salary = fields.Float()
+    old_base_salary = fields.Float()
+    new_base_salary = fields.Float()
+    old_day_rate = fields.Float()
+    new_day_rate = fields.Float()
+    old_ot_hourly_rate = fields.Float()
+    new_ot_hourly_rate = fields.Float()
     effective_date = fields.DateTime()
     remark = fields.String()
 
@@ -137,7 +169,9 @@ class WorkRunCostSchema(Schema):
     material_cost = fields.Float(allow_none=True)
     depreciation_cost = fields.Float(allow_none=True)
     maintenance_cost = fields.Float(allow_none=True)
-    labor_cost = fields.Float(allow_none=True)
+    base_labor_cost = fields.Float(allow_none=True)
+    day_labor_cost = fields.Float(allow_none=True)
+    ot_labor_cost = fields.Float(allow_none=True)
     total_cost = fields.Float(allow_none=True)
 
 class WorkRunMachineCostFieldsSchema(Schema):
@@ -709,7 +743,9 @@ class TestResultCostSchema(Schema):
     material_cost = fields.Float(allow_none=True)
     depreciation_cost = fields.Float(allow_none=True)
     maintenance_cost = fields.Float(allow_none=True)
-    labor_cost = fields.Float(allow_none=True)
+    base_labor_cost = fields.Float(allow_none=True)
+    day_labor_cost = fields.Float(allow_none=True)
+    ot_labor_cost = fields.Float(allow_none=True)
     total_cost = fields.Float(allow_none=True)
 
 class TestResultSchema(Schema):

@@ -6,6 +6,7 @@ from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, MissingFieldsError
 from app.repositories import employee_salary_repository
+from app.services import labor_cost_service
 
 logger = logging.getLogger(__name__)
 
@@ -98,26 +99,16 @@ def _compute_and_save_work_run_cost(work_run, breaks):
             cpu = 0.0
         material_cost += cpu * item.quantity
 
-    # ── Labor cost: hourly rate × effective seconds per assignment ──
-    labor_cost = 0.0
-    for assignment in (work_run.assignments or []):
-        assign_end = _to_naive(assignment.to_time) if assignment.to_time else now
-        assign_start = _to_naive(assignment.from_time)
-        total_sec = max(0, (assign_end - assign_start).total_seconds())
-
-        break_sec = sum(
-            max(0, (min(_to_naive(b.break_end or now), assign_end)
-                    - max(_to_naive(b.break_start), assign_start)).total_seconds())
-            for b in breaks if b.break_start
-        )
-        effective_sec = max(0, total_sec - break_sec)
-
-        salary = employee_salary_repository.get_salary_at_date(assignment.employee_id, work_run.created_date)
-        if salary is None:
-            emp = assignment.employee
-            salary = (emp.salary_base or 0.0) if emp else 0.0
-        hourly_rate = salary / 30 / 8 if salary > 0 else 0.0
-        labor_cost += round(hourly_rate * effective_sec / 3600, 6)
+    # ── Labor cost: split into base/day/ot via shift+holiday-aware helper ──
+    labor = labor_cost_service.aggregate_labor_costs(
+        work_run.assignments or [],
+        breaks,
+        work_run.created_date,
+    )
+    base_labor_cost = labor["totals"]["base_cost"]
+    day_labor_cost = labor["totals"]["day_cost"]
+    ot_labor_cost = labor["totals"]["ot_cost"]
+    labor_cost = labor["totals"]["total"]
 
     # ── Machine cost: sum finalized costs from all machine entries ──
     depreciation_cost = 0.0
@@ -133,7 +124,9 @@ def _compute_and_save_work_run_cost(work_run, breaks):
         existing.material_cost = round(material_cost, 6)
         existing.depreciation_cost = round(depreciation_cost, 6)
         existing.maintenance_cost = round(maintenance_cost, 6)
-        existing.labor_cost = round(labor_cost, 6)
+        existing.base_labor_cost = round(base_labor_cost, 6)
+        existing.day_labor_cost = round(day_labor_cost, 6)
+        existing.ot_labor_cost = round(ot_labor_cost, 6)
         existing.total_cost = total_cost
     else:
         db.session.add(WorkRunCost(
@@ -141,7 +134,9 @@ def _compute_and_save_work_run_cost(work_run, breaks):
             material_cost=round(material_cost, 6),
             depreciation_cost=round(depreciation_cost, 6),
             maintenance_cost=round(maintenance_cost, 6),
-            labor_cost=round(labor_cost, 6),
+            base_labor_cost=round(base_labor_cost, 6),
+            day_labor_cost=round(day_labor_cost, 6),
+            ot_labor_cost=round(ot_labor_cost, 6),
             total_cost=total_cost,
         ))
 
@@ -685,34 +680,39 @@ def get_work_run_detail(work_run_id):
 
     total_work_seconds = work_ms / 1000
 
-    # Per-employee cost — use each employee's own assignment window
+    # Per-employee cost — split into base/day/ot via shift+holiday-aware helper
     employee_breakdown = []
-    total_labor_cost = 0.0
+    labor = labor_cost_service.aggregate_labor_costs(
+        work_run.assignments,
+        work_run.breaks,
+        work_run.created_date,
+    )
+    total_base_labor = labor["totals"]["base_cost"]
+    total_day_labor = labor["totals"]["day_cost"]
+    total_ot_labor = labor["totals"]["ot_cost"]
+    total_labor_cost = labor["totals"]["total"]
 
-    for assignment in work_run.assignments:
+    for row in labor["rows"]:
+        assignment = row["assignment"]
         emp = assignment.employee
         assign_end = assignment.to_time or now
-        assign_seconds = max(0, (assign_end - assignment.from_time).total_seconds())
-
-        salary = employee_salary_repository.get_salary_at_date(emp.employee_id, work_run.created_date)
-        if salary is None:
-            salary = emp.salary_base or 0.0
-
-        hourly_rate = salary / 30 / 8 if salary > 0 else 0.0
-        net_cost = round(hourly_rate * (assign_seconds / 3600), 2)
-        total_labor_cost += net_cost
-
+        assign_seconds = max(0, (assign_end - assignment.from_time).total_seconds()) if assignment.from_time else 0
         employee_breakdown.append({
-            "employee_id": emp.employee_id,
-            "employee_first_name": emp.employee_first_name,
-            "employee_last_name": emp.employee_last_name,
-            "status": emp.status.value if hasattr(emp.status, "value") else str(emp.status),
-            "salary_at_run": salary,
-            "hourly_rate": round(hourly_rate, 2),
+            "employee_id": emp.employee_id if emp else None,
+            "employee_first_name": emp.employee_first_name if emp else None,
+            "employee_last_name": emp.employee_last_name if emp else None,
+            "status": (emp.status.value if hasattr(emp.status, "value") else str(emp.status)) if emp else None,
+            "base_salary_at_run": row["base_salary_at_run"],
+            "day_rate_at_run": row["day_rate_at_run"],
+            "ot_hourly_rate_at_run": row["ot_hourly_rate_at_run"],
             "from_time": assignment.from_time.isoformat() if assignment.from_time else None,
             "to_time": assignment.to_time.isoformat() if assignment.to_time else None,
             "time_spent_seconds": round(assign_seconds, 2),
-            "net_cost": net_cost,
+            "effective_seconds": row["effective_seconds"],
+            "base_cost": row["base_cost"],
+            "day_cost": row["day_cost"],
+            "ot_cost": row["ot_cost"],
+            "net_cost": round(row["base_cost"] + row["day_cost"] + row["ot_cost"], 6),
         })
 
     # Machine time summary + depreciation + maintenance cost
@@ -773,7 +773,10 @@ def get_work_run_detail(work_run_id):
         "start_date": work_run.start_date.isoformat() if work_run.start_date else None,
         "end_date": work_run.end_date.isoformat() if work_run.end_date else None,
         "total_work_seconds": round(total_work_seconds, 2),
-        "total_labor_cost": round(total_labor_cost, 2),
+        "total_base_labor_cost": round(total_base_labor, 6),
+        "total_day_labor_cost": round(total_day_labor, 6),
+        "total_ot_labor_cost": round(total_ot_labor, 6),
+        "total_labor_cost": round(total_labor_cost, 6),
         "total_depreciation_cost": round(total_depreciation_cost, 6),
         "total_maintenance_cost": round(total_maintenance_cost, 6),
         "total_machine_cost": round(total_depreciation_cost + total_maintenance_cost, 6),

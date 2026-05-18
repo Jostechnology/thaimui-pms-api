@@ -11,7 +11,7 @@ from app.repositories import (
     test_result_repository, qc_work_order_repository,
     work_run_repository, picking_request_repository,
 )
-from app.services import transaction_service, document_code_service, picking_allocation_service
+from app.services import transaction_service, document_code_service, picking_allocation_service, labor_cost_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
 from sqlalchemy.orm import joinedload
@@ -430,20 +430,15 @@ def finalize_test_result(test_result_id, data):
             .populate_existing()
             .all()
         )
-        labor_cost = 0.0
-        for a in all_assignments:
-            if a.employee and a.from_time and a.to_time:
-                a_start = _naive(a.from_time)
-                a_end = _naive(a.to_time)
-                total_secs = max(0, (a_end - a_start).total_seconds())
-                break_secs = sum(
-                    max(0, (min(_naive(b.break_end or a_end), a_end)
-                            - max(_naive(b.break_start), a_start)).total_seconds())
-                    for b in all_breaks if b.break_start
-                )
-                eff_secs = max(0, total_secs - break_secs)
-                rate = (a.employee.salary_base or 0) / 30 / 8 / 3600
-                labor_cost += rate * eff_secs
+        labor = labor_cost_service.aggregate_labor_costs(
+            all_assignments,
+            all_breaks,
+            test_result.created_date,
+        )
+        base_labor_cost = labor["totals"]["base_cost"]
+        day_labor_cost = labor["totals"]["day_cost"]
+        ot_labor_cost = labor["totals"]["ot_cost"]
+        labor_cost = labor["totals"]["total"]
 
         all_machines = (
             db.session.query(TestResultMachine)
@@ -476,7 +471,9 @@ def finalize_test_result(test_result_id, data):
 
         cost_record = TestResultCost(
             test_result_id=test_result_id,
-            labor_cost=round(labor_cost, 4),
+            base_labor_cost=round(base_labor_cost, 4),
+            day_labor_cost=round(day_labor_cost, 4),
+            ot_labor_cost=round(ot_labor_cost, 4),
             depreciation_cost=round(dep_cost_total, 4),
             maintenance_cost=round(maint_cost_total, 4),
             material_cost=round(mat_cost, 4),

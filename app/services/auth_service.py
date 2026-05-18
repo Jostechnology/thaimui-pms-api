@@ -2,9 +2,18 @@ from app.exception import AppException, UniqueError, ValidationError, NotFoundEr
 from app.ma_sqlalchemy import UserSchema
 from app.repositories import user_login_repository, user_repository
 from app.services.user_service import check_user_permission
+from app.services import cache_service
+from app.api_auth import jti_cache_key
 from app.utils import create_token, hash_bcrypt, verify_bcrypt, decode_token
 from app.app import db
 from app.con_sqlalchemy import Tokenlist
+
+
+def _invalidate_jti_cache(jtis):
+    """Drop Redis JTI entries so revocation propagates immediately."""
+    for jti in jtis:
+        if jti:
+            cache_service.delete(jti_cache_key(jti))
 
 
 def login_service(data):
@@ -194,8 +203,13 @@ def logout_service(refresh_token):
         decoded = decode_token(refresh_token)
         if decoded:
             user_id = decoded.get("user_id")
+        access_jtis = [
+            row.jwt_id for row in
+            Tokenlist.query.filter_by(user_id=user_id, token_type="access").all()
+        ]
         Tokenlist.query.filter_by(user_id=user_id, token_type="access").delete()
         db.session.commit()
+        _invalidate_jti_cache(access_jtis)
         return {"message": "Logged out successfully"}
     except Exception as e:
         db.session.rollback()
@@ -219,6 +233,10 @@ def refresh_token_service(refresh_token):
         if not valid_token:
             raise ValidationError("Refresh token ไม่ถูกต้องหรือหมดอายุ")
 
+        revoked_jtis = [
+            row.jwt_id for row in
+            Tokenlist.query.filter_by(user_id=user_id).all()
+        ]
         db.session.delete(valid_token)
         Tokenlist.query.filter_by(user_id=user_id).delete()
 
@@ -243,6 +261,7 @@ def refresh_token_service(refresh_token):
         db.session.add(Tokenlist(jwt_id=new_access_jti, user_id=user_id, token_type="access"))
         db.session.add(Tokenlist(jwt_id=new_refresh_jti, user_id=user_id, token_type="refresh"))
         db.session.commit()
+        _invalidate_jti_cache(revoked_jtis)
 
         return new_access_token, new_refresh_token
 
