@@ -1,9 +1,11 @@
+import copy
 import logging
 import threading
 
 from app.exception import NotFoundError
 from app.extensions import document_generator_service
 from app.repositories import item_component_repository
+from app.services.storage_service import get_as_base64
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +47,16 @@ def generate_component_detail(item_component_id):
         if not work_order:
             raise NotFoundError(f"ไม่พบข้อมูล Work Order สำหรับ Item Component {item_component_id}")
 
-        # Build sections from template
-        sections = template.sections if template.sections else []
+        # Build sections from template (deep copy — JSON column, must not mutate)
+        sections = copy.deepcopy(template.sections) if template.sections else []
+        for sec in sections:
+            if sec.get("type") == "image_select":
+                for opt in sec.get("options") or []:
+                    key = opt.get("imageUrl")
+                    if not key or key.startswith("http"):
+                        continue
+                    b64 = get_as_base64(key.lstrip("/"))
+                    opt["imageUrl"] = f"data:image/jpeg;base64,{b64}"
 
         # Build form_data from section data
         form_data = {}

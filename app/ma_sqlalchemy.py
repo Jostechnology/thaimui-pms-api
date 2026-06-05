@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -304,6 +304,7 @@ class SalesOrderSchema(Schema):
     group_code = fields.String()
     group_name = fields.String()
     status = fields.Enum(SalesOrderStatus)
+    urgency_level = fields.Enum(UrgencyLevel, allow_none=True)
     created_date = fields.String()
     branch_id = fields.Integer(allow_none=True)
 
@@ -491,6 +492,7 @@ class PickingRequestItemSchema(Schema):
     item_code               = fields.String()
     item_name               = fields.String()
     quantity                = fields.Integer()
+    qty_received_actual     = fields.Integer(allow_none=True)
     unit                    = fields.String(allow_none=True)
     remark                  = fields.String(allow_none=True)
     picking_request_code    = fields.Method("get_picking_request_code", dump_only=True)
@@ -660,7 +662,7 @@ class PickingRequestItemFullSchema(PickingRequestItemSchema):
     def get_qty_available(self, obj):
         committed = self.get_qty_committed(obj)
         adj = self.get_adj_total(obj)
-        return obj.quantity + adj - committed
+        return obj.effective_quantity + adj - committed
 
 
 class PickingRequestFullDetailSchema(PickingRequestSchema):

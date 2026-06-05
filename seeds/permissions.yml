@@ -710,6 +710,24 @@ modules:
   - method: view
     code: view.HOLIDAY_MANAGEMENT
     description: View จัดการวันหยุด
+- code: REPORT
+  name: รายงาน
+  parent_code: null
+  level: 1
+  sort_order: 50
+  permissions:
+  - method: view
+    code: view.REPORT
+    description: View รายงาน
+- code: REPORT_LIST
+  name: รายการรายงาน
+  parent_code: REPORT
+  level: 2
+  sort_order: 1
+  permissions:
+  - method: view
+    code: view.REPORT_LIST
+    description: View รายการรายงาน
 bootstrap:
   roles:
   - role_code: ADMIN

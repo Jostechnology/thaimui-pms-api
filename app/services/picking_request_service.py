@@ -179,6 +179,11 @@ def update_status(picking_request_id, data):
     """
     Manually update the status of a picking request.
     Allowed transitions: PENDING → SENT → SUCCESS | FAILED
+
+    On SENT→SUCCESS, caller may pass `items` to verify actual received qty per line:
+        items: [{picking_request_item_id: int, qty_received_actual: int >= 0}]
+    Any PRI omitted from `items` keeps its requested quantity as effective qty.
+    `items` is rejected for transitions other than SENT→SUCCESS.
     """
     try:
         pr = picking_request_repository.get_picking_request_detail_by_id(picking_request_id)
@@ -203,6 +208,17 @@ def update_status(picking_request_id, data):
                 f"ไม่สามารถเปลี่ยนสถานะจาก {pr.status.value} เป็น {new_status.value} ได้"
             )
 
+        items_payload = data.get("items")
+        is_verify_transition = (
+            pr.status == PickingRequestStatus.SENT
+            and new_status == PickingRequestStatus.SUCCESS
+        )
+        if items_payload and not is_verify_transition:
+            raise ValidationError("items ใช้ได้เฉพาะตอนเปลี่ยนสถานะ SENT → SUCCESS")
+
+        if is_verify_transition and items_payload:
+            _apply_verified_quantities(pr, items_payload)
+
         pr.status = new_status
         if data.get("wms_reference"):
             pr.wms_reference = data["wms_reference"]
@@ -214,6 +230,32 @@ def update_status(picking_request_id, data):
     except Exception:
         db.session.rollback()
         raise
+
+
+def _apply_verified_quantities(pr, items_payload):
+    """Write qty_received_actual onto each PRI listed in payload.
+
+    Validates each entry references a PRI on this PR and qty_received_actual >= 0.
+    """
+    pri_map = {pri.picking_request_item_id: pri for pri in pr.items}
+    for entry in items_payload:
+        pri_id = entry.get("picking_request_item_id")
+        qty = entry.get("qty_received_actual")
+        if pri_id is None or qty is None:
+            raise ValidationError(
+                "ต้องระบุ picking_request_item_id และ qty_received_actual ของทุกรายการ"
+            )
+        if pri_id not in pri_map:
+            raise ValidationError(
+                f"PickingRequestItem {pri_id} ไม่อยู่ใน Picking Request นี้"
+            )
+        try:
+            qty_int = int(qty)
+        except (TypeError, ValueError):
+            raise ValidationError(f"qty_received_actual ของ PRI {pri_id} ต้องเป็นตัวเลข")
+        if qty_int < 0:
+            raise ValidationError(f"qty_received_actual ของ PRI {pri_id} ต้อง >= 0")
+        pri_map[pri_id].qty_received_actual = qty_int
 
 
 def get_list(data):

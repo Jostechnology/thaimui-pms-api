@@ -1,11 +1,22 @@
-from app.exception import MissingFieldsError, OuterServicesError
+from app.exception import MissingFieldsError, OuterServicesError, ValidationError
 from app.repositories import material_repository, sales_item_repository, sales_order_repository
 from app.extensions import center_service
 from app.app import db
 from app.services import branch_service, cache_service, work_order_service, transaction_service
-from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesOrderStatus
+from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesOrderStatus, UrgencyLevel
 from app.extensions import wms_service
 from app.utils import convert_start_date, convert_end_date
+
+
+def _parse_urgency(raw, default=None):
+    """Coerce raw urgency string to UrgencyLevel enum; raise ValidationError if invalid."""
+    if raw is None or raw == "":
+        return default
+    try:
+        return UrgencyLevel[str(raw).strip().upper()]
+    except KeyError:
+        allowed = [u.value for u in UrgencyLevel]
+        raise ValidationError(f"urgency_level ไม่ถูกต้อง ต้องเป็นหนึ่งใน {allowed}")
 
 def search_sales_order(data, branch_id=None):
     try:
@@ -38,7 +49,20 @@ def get_all_sales_orders(data, branch_id=None):
         end_date = data.get("end_date")
         start_date = convert_start_date(start_date) if start_date else None
         end_date = convert_end_date(end_date) if end_date else None
-        result = sales_order_repository.get_all_sales_orders(page, per_page, search, branch_id=branch_id, start_date=start_date, end_date=end_date)
+        urgency_level = _parse_urgency(data.get("urgency_level"))
+        sort_by = data.get("sort_by") or None
+        sort_order = (data.get("sort_order") or "desc").lower()
+        if sort_order not in ("asc", "desc"):
+            sort_order = "desc"
+        result = sales_order_repository.get_all_sales_orders(
+            page, per_page, search,
+            branch_id=branch_id,
+            start_date=start_date,
+            end_date=end_date,
+            urgency_level=urgency_level,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
         items_data = []
         for row in result.items:
             so = row.SalesOrder
@@ -66,6 +90,7 @@ def get_all_sales_orders(data, branch_id=None):
                 "test_total": row.test_total,
                 "test_has_qcworkorder": row.test_has_qcworkorder,
                 "status" : so.status.name,
+                "urgency_level" : so.urgency_level.name if so.urgency_level else None,
                 "branch_code" : branch.branch_code if branch else None,
                 "branch_name" : branch.branch_name if branch else None
             })
@@ -141,6 +166,7 @@ def create_sales_order_routine(data):
 def create_sales_order(data):
     try:
         branch = branch_service.get_branch_by_code(data.get("pms_branch_code", None))
+        urgency_level = _parse_urgency(data.get("urgency_level"))
         sales_order = SalesOrder(
             doc_entry = data.get("doc_entry"),
             doc_num = data.get("doc_num"),
@@ -152,6 +178,7 @@ def create_sales_order(data):
             bpl_name = data.get("bpl_name"),
             group_code = data.get("group_code"),
             group_name = data.get("group_name"),
+            urgency_level = urgency_level,
             branch_id = branch.branch_id
         )
 

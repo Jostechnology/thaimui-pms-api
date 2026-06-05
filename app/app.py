@@ -109,6 +109,7 @@ from .controllers import all_branch_controller
 from .controllers import shift_controller
 from .controllers import employee_shift_controller
 from .controllers import holiday_controller
+from .controllers import report_controller
 
 from app.cli import register_cli
 register_cli(app)

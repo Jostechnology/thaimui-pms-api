@@ -32,7 +32,7 @@ def allocate_fifo(candidates, needed_qty):
         if remaining <= 0:
             break
         committed = picking_request_repository.get_total_committed_qty(pri.picking_request_item_id)
-        available = pri.quantity - committed
+        available = pri.effective_quantity - committed
         if available <= 0:
             continue
         take = min(available, remaining)
@@ -79,7 +79,7 @@ def allocate_manual(manual_sources, needed_qty):
             raise ValidationError(f"ไม่พบ Picking Request Item {pri_id}")
 
         committed = picking_request_repository.get_total_committed_qty(pri_id)
-        available = pri.quantity - committed
+        available = pri.effective_quantity - committed
         if qty > available:
             raise ValidationError(
                 f"Picking Item {pri_id} ({pri.item_code}) มีเหลือ {available} แต่ระบุ {qty}"

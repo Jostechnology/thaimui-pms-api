@@ -9,7 +9,6 @@ services:
       - thaimui
 
   thaimui-pms-api:
-    build : .
     platform: linux/amd64
     image: registry.gitlab.com/jostechnology/thaimui-pms-api-dev:${TAG}
     container_name: thaimui-pms-api

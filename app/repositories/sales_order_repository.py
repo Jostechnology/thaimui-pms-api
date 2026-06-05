@@ -1,7 +1,26 @@
-from app.con_sqlalchemy import Branch, SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList, ItemComponent, ComponentMaterialUsage, PickingRequest
+from app.con_sqlalchemy import Branch, SalesOrder, SalesItem, WorkOrder, WorkRun, TestResult, TestResultStatus, QCWorkOrder, QCCertification, QCCheckItem, MaterialList, ItemComponent, ComponentMaterialUsage, PickingRequest, UrgencyLevel
 from app.app import db
-from sqlalchemy import desc, func, or_
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import selectinload
+
+
+URGENCY_RANK = {
+    UrgencyLevel.LOW: 1,
+    UrgencyLevel.NORMAL: 2,
+    UrgencyLevel.HIGH: 3,
+    UrgencyLevel.URGENT: 4,
+}
+
+
+def _urgency_rank_expr():
+    """Numeric rank for urgency ordering. NULL rows sort as 0 (lowest)."""
+    return case(
+        (SalesOrder.urgency_level == UrgencyLevel.LOW, 1),
+        (SalesOrder.urgency_level == UrgencyLevel.NORMAL, 2),
+        (SalesOrder.urgency_level == UrgencyLevel.HIGH, 3),
+        (SalesOrder.urgency_level == UrgencyLevel.URGENT, 4),
+        else_=0,
+    )
 
 from app.exception import NotFoundError, ValidationError
 
@@ -96,7 +115,7 @@ def assign_branch(doc_entry, branch_id):
     return sales_order, old_branch_id
 
 
-def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, end_date=None):
+def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, end_date=None, urgency_level=None, sort_by=None, sort_order="desc"):
     try:
         items_total_subq = (
             db.session.query(func.count(SalesItem.sales_item_id))
@@ -238,7 +257,15 @@ def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, e
         if end_date is not None:
             query = query.filter(SalesOrder.created_date <= end_date)
 
-        query = query.order_by(SalesOrder.created_date.desc())
+        if urgency_level is not None:
+            query = query.filter(SalesOrder.urgency_level == urgency_level)
+
+        if sort_by == "urgency_level":
+            urgency_expr = _urgency_rank_expr()
+            primary = urgency_expr.desc() if sort_order == "desc" else urgency_expr.asc()
+            query = query.order_by(primary, SalesOrder.created_date.desc())
+        else:
+            query = query.order_by(SalesOrder.created_date.desc())
         return query.paginate(page=page, per_page=limit, error_out=False)
     except Exception:
         raise

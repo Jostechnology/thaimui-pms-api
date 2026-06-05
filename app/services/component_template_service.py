@@ -26,7 +26,7 @@ def _upload_single_image(option):
         raise MissingFieldsError("ไม่พบ field imageBase64")
 
     image_bytes, content_type = _decode_data_url(image_base64)
-    key = f"/component_template/image_select/{option.get('key')}"
+    key = f"component_template/image_select/{option.get('key')}"
     object_key = upload_image(image_bytes, key, content_type=content_type)
     return option, object_key
 

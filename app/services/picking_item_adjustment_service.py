@@ -30,7 +30,7 @@ def create_adjustment(picking_request_item_id, data):
         # current available = quantity + existing_adj_sum - committed
         # after this adj:   = quantity + (existing_adj_sum + delta_qty) - committed
         # = current_available + delta_qty
-        current_available = pri.quantity - committed
+        current_available = pri.effective_quantity - committed
         if current_available + delta_qty < 0:
             raise ValidationError(
                 f"ปรับได้สูงสุด -{current_available} (ปัจจุบันคงเหลือ {current_available})"
@@ -188,7 +188,7 @@ def reallocate(source_pri_id, data):
             raise ValidationError("Source PickingRequest ต้องเป็น SUCCESS")
 
         source_committed = picking_request_repository.get_total_committed_qty(source_pri_id)
-        source_available = source_pri.quantity - source_committed
+        source_available = source_pri.effective_quantity - source_committed
         if qty > source_available:
             raise ValidationError(
                 f"Source คงเหลือ {source_available} แต่ขอโอน {qty}"

@@ -397,7 +397,7 @@ def start_work_run(work_run_id, data=None):
                 all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
             except ValidationError:
                 available_qty = sum(
-                    max(0, pri.quantity - picking_request_repository.get_total_committed_qty(pri.picking_request_item_id))
+                    max(0, pri.effective_quantity - picking_request_repository.get_total_committed_qty(pri.picking_request_item_id))
                     for pri in candidates
                 )
                 shortages.append(f"\n{req.item_name} ({req.item_code}) ต้องการ {req.quantity} มีในคลัง {available_qty} \n")

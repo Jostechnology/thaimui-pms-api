@@ -976,12 +976,19 @@ class SalesOrderStatus(enum.Enum):
     INPROGRESS = 'INPROGRESS'
     COMPLETED = 'COMPLETED'
 
+class UrgencyLevel(enum.Enum):
+    LOW = 'LOW'
+    NORMAL = 'NORMAL'
+    HIGH = 'HIGH'
+    URGENT = 'URGENT'
+
 class SalesOrder(AuditMixin):
     __tablename__ = "t_sales_order"
     doc_entry = db.Column(db.Integer, primary_key=True)
     center_sales_order_id = db.Column(db.Integer, nullable=True)
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
     status = db.Column(db.Enum(SalesOrderStatus), nullable=False, default=SalesOrderStatus.INPROGRESS)
+    urgency_level = db.Column(db.Enum(UrgencyLevel), nullable=True)
     card_code = db.Column(db.String(20), nullable=False)
     card_name = db.Column(db.String(200), nullable=False)
     po_number = db.Column(db.String(100), nullable=True)
@@ -1083,6 +1090,7 @@ class PickingRequestItem(AuditMixin, BranchScopedMixin):
     item_code               = db.Column(db.String(100), nullable=False)
     item_name               = db.Column(db.String(255), nullable=False)
     quantity                = db.Column(db.Integer, nullable=False)
+    qty_received_actual     = db.Column(db.Integer, nullable=True)
     unit                    = db.Column(db.String(50), nullable=True)
     remark                  = db.Column(db.String(500), nullable=True)
 
@@ -1092,6 +1100,11 @@ class PickingRequestItem(AuditMixin, BranchScopedMixin):
     test_result_consumptions = db.relationship('TestResultPickingItem', back_populates='picking_request_item', cascade='all, delete-orphan')
     work_run_consumptions    = db.relationship('WorkRunPickingItem', back_populates='picking_request_item', cascade='all, delete-orphan')
     adjustments              = db.relationship('PickingItemAdjustment', back_populates='picking_request_item', foreign_keys='PickingItemAdjustment.picking_request_item_id', cascade='all, delete-orphan', lazy='noload')
+
+    @property
+    def effective_quantity(self):
+        # qty_received_actual set after verify step; falls back to requested qty when not yet verified
+        return self.qty_received_actual if self.qty_received_actual is not None else self.quantity
 
 
 class PickingItemAdjustmentReason(enum.Enum):

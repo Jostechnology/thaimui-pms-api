@@ -23,7 +23,7 @@ def _resolve_presigned_urls(template_dict: dict) -> dict:
         if sec.get("type") == "image_select":
             for opt in sec.get("options") or []:
                 if opt.get("imageUrl"):
-                    opt["imageUrl"] = get_presigned_url(opt["imageUrl"])
+                    opt["imageUrl"] = get_presigned_url(opt["imageUrl"].lstrip("/"))
     return template_dict
 
 
