@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak
+from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck
 from app.app import db
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload, selectinload
 def _test_result_options():
     """Eager-load what TestResultSchema needs."""
     return [
-        selectinload(TestResult.test_result_items),
+        selectinload(TestResult.test_result_items).selectinload(TestResultItem.checks),
         joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
         selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
         selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
