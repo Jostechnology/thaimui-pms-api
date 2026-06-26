@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
@@ -460,16 +460,72 @@ class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
         return obj.sales_item.item_name if obj.sales_item else None
 
 
+class TestResultCheckSchema(Schema):
+    check_id            = fields.Integer(dump_only=True)
+    test_result_item_id = fields.Integer(dump_only=True)
+    check_name          = fields.String()
+    status              = fields.Enum(CheckStatus)
+    note                = fields.String(allow_none=True)
+    sequence            = fields.Integer()
+    created_date        = fields.DateTime(dump_only=True)
+    updated_date        = fields.DateTime(dump_only=True)
+    created_by          = fields.String(dump_only=True)
+    updated_by          = fields.String(dump_only=True)
+
+
+class TestResultPhotoSchema(Schema):
+    photo_id     = fields.Integer(dump_only=True)
+    caption      = fields.String(allow_none=True)
+    sequence     = fields.Integer()
+    url          = fields.Method("get_url", dump_only=True)
+    created_date = fields.DateTime(dump_only=True)
+    created_by   = fields.String(dump_only=True)
+
+    def get_url(self, obj):
+        from app.services.storage_service import get_presigned_url
+        try:
+            return get_presigned_url(obj.object_key)
+        except Exception:
+            return None
+
+
+class TestResultSpecSchema(Schema):
+    spec_id          = fields.Integer(dump_only=True)
+    construction     = fields.String(allow_none=True)
+    grade            = fields.String(allow_none=True)
+    coating          = fields.String(allow_none=True)
+    diameter         = fields.Float(allow_none=True)
+    nominal_length   = fields.Float(allow_none=True)
+    tensile_strength = fields.Float(allow_none=True)
+    manufacturer     = fields.String(allow_none=True)
+    batch_no         = fields.String(allow_none=True)
+    termination      = fields.String(allow_none=True)
+
+
 class TestResultItemSchema(Schema):
     test_result_item_id = fields.Integer(dump_only=True)
     test_result_id      = fields.Integer()
     unit_number         = fields.Integer()
     serial_no           = fields.String()
-    wll_measured        = fields.Float()
-    load_test_value     = fields.Float()
+    wll_measured        = fields.Float(allow_none=True)
+    load_test_value     = fields.Float(allow_none=True)
     description         = fields.String()
     result              = fields.Enum(TestResultStatus)
     remark              = fields.String()
+    # Proof load
+    required_load       = fields.Float(allow_none=True)
+    hold_time_sec       = fields.Integer(allow_none=True)
+    length_before       = fields.Float(allow_none=True)
+    length_after        = fields.Float(allow_none=True)
+    permanent_set       = fields.Float(dump_only=True)
+    # Breaking
+    breaking_force      = fields.Float(allow_none=True)
+    min_breaking_load   = fields.Float(allow_none=True)
+    efficiency          = fields.Float(dump_only=True)
+    # Verdict
+    fail_reason         = fields.String(allow_none=True)
+    load_curve          = fields.Raw(allow_none=True)   # JSON array [{t, load}, ...]
+    checks              = fields.List(fields.Nested(lambda: TestResultCheckSchema()), dump_only=True)
     created_date        = fields.DateTime(dump_only=True)
     updated_date        = fields.DateTime(dump_only=True)
     created_by          = fields.String(dump_only=True)
@@ -758,6 +814,7 @@ class TestResultSchema(Schema):
     session_status          = fields.Enum(TestSessionStatus, dump_only=True)
     started_at              = fields.DateTime(allow_none=True, dump_only=True)
     test_method             = fields.String(allow_none=True)
+    test_type               = fields.Enum(TestType, allow_none=True)
     standard_reference      = fields.String(allow_none=True)
     overall_status          = fields.Enum(TestResultStatus, allow_none=True)
     remark                  = fields.String(allow_none=True)
@@ -765,6 +822,8 @@ class TestResultSchema(Schema):
     reworked_qty            = fields.Integer(dump_only=True)
     outstanding_failed_qty  = fields.Integer(dump_only=True)
     test_result_items       = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
+    photos                  = fields.List(fields.Nested(TestResultPhotoSchema()), dump_only=True)
+    spec                    = fields.Nested(TestResultSpecSchema(), allow_none=True)
     work_run_sources        = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
     picking_item_sources    = fields.List(fields.Nested(TestResultPickingItemSchema()), dump_only=True)
     required_items          = fields.List(fields.Nested(TestResultRequiredItemSchema()), dump_only=True)

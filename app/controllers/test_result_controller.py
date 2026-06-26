@@ -14,6 +14,9 @@ from app.services.test_result_service import (
     delete_test_result,
     add_required_item,
     get_required_items_for_test_result,
+    get_inspection_checklist,
+    add_test_result_photos,
+    delete_test_result_photo,
     delete_required_item,
     get_pick_requests_for_test_result,
     assign_employee,
@@ -23,6 +26,33 @@ from app.services.test_result_service import (
     pause_test_result,
     resume_test_result,
 )
+
+
+@app.route("/api/test_result/<int:test_result_id>/photo", methods=["POST"])
+@verify_required
+def api_add_test_result_photos(test_result_id):
+    data = request.get_json()
+    result = add_test_result_photos(test_result_id, data)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 201
+
+
+@app.route("/api/test_result/photo/<int:photo_id>", methods=["DELETE"])
+@verify_required
+def api_delete_test_result_photo(photo_id):
+    result = delete_test_result_photo(photo_id)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200
+
+
+@app.route("/api/test_result/checklist", methods=["GET"])
+@verify_required
+def api_get_inspection_checklist():
+    try:
+        item_group = request.args.get("item_group", None, type=str)
+        test_type = request.args.get("test_type", None, type=str)
+        checks = get_inspection_checklist(item_group, test_type)
+        return jsonify({"data": checks, "success": True}), 200
+    except Exception:
+        raise
 
 
 @app.route("/api/qc_work_order/<int:qc_work_order_id>/test_result/create", methods=["POST"])

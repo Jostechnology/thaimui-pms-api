@@ -2,16 +2,19 @@ from app.con_sqlalchemy import (
     TestResult, TestResultItem, TestResultStatus, TestSessionStatus,
     TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem,
     TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak,
+    TestResultCheck, TestResultPhoto, TestResultSpec, TestType, CheckStatus,
     Machine, MaterialList, BreakType,
     WorkRunStatus, WorkRunTransactionType, QCWorkOrder, QCWorkOrderStatus,
     AllocationMode, bangkok_now,
 )
+import uuid
+import base64
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import (
     test_result_repository, qc_work_order_repository,
     work_run_repository, picking_request_repository,
 )
-from app.services import transaction_service, document_code_service, picking_allocation_service, labor_cost_service
+from app.services import transaction_service, document_code_service, picking_allocation_service, labor_cost_service, inspection_checklist, storage_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
 from sqlalchemy.orm import joinedload
@@ -31,6 +34,37 @@ def _resolve_status(val):
         return TestResultStatus[val.strip().upper()]
     except KeyError:
         return TestResultStatus.PASSED
+
+
+def _resolve_test_type(val):
+    """Map an incoming test_type string to the enum; None if absent/unknown."""
+    if not val:
+        return None
+    if isinstance(val, TestType):
+        return val
+    try:
+        return TestType[val.strip().upper()]
+    except KeyError:
+        return None
+
+
+def _resolve_check_status(val):
+    if not val:
+        return CheckStatus.NA
+    if isinstance(val, CheckStatus):
+        return val
+    try:
+        return CheckStatus[val.strip().upper()]
+    except KeyError:
+        return CheckStatus.NA
+
+
+def _to_float(val):
+    return float(val) if val is not None and val != "" else None
+
+
+def _to_int(val):
+    return int(val) if val is not None and val != "" else None
 
 
 def _validate_work_run_sources(qc, sales_item, claimed_qty, data):
@@ -318,19 +352,51 @@ def finalize_test_result(test_result_id, data):
             raise ValidationError("ไม่พบ TestItem กรุณาตรวจสอบอีกครั้ง")
 
         test_result.test_method = data.get("test_method")
+        test_result.test_type = _resolve_test_type(data.get("test_type"))
         test_result.standard_reference = data.get("standard_reference")
         test_result.remark = data.get("remark", test_result.remark)
+
+        # Per-session product spec snapshot (1:1). Finalize is one-shot, so create fresh.
+        spec_data = data.get("spec")
+        if spec_data:
+            db.session.add(TestResultSpec(
+                test_result_id=test_result_id,
+                construction=spec_data.get("construction"),
+                grade=spec_data.get("grade"),
+                coating=spec_data.get("coating"),
+                diameter=_to_float(spec_data.get("diameter")),
+                nominal_length=_to_float(spec_data.get("nominal_length")),
+                tensile_strength=_to_float(spec_data.get("tensile_strength")),
+                manufacturer=spec_data.get("manufacturer"),
+                batch_no=spec_data.get("batch_no"),
+                termination=spec_data.get("termination"),
+            ))
 
         for it in items_data:
             item = TestResultItem(
                 unit_number=it.get("unit_number"),
                 serial_no=it.get("serial_no"),
-                wll_measured=float(it.get("wll_measured")) if it.get("wll_measured") is not None else None,
-                load_test_value=float(it.get("load_test_value")) if it.get("load_test_value") is not None else None,
+                wll_measured=_to_float(it.get("wll_measured")),
+                load_test_value=_to_float(it.get("load_test_value")),
                 description=it.get("description"),
                 result=_resolve_status(it.get("result")),
                 remark=it.get("remark"),
+                required_load=_to_float(it.get("required_load")),
+                hold_time_sec=_to_int(it.get("hold_time_sec")),
+                length_before=_to_float(it.get("length_before")),
+                length_after=_to_float(it.get("length_after")),
+                breaking_force=_to_float(it.get("breaking_force")),
+                min_breaking_load=_to_float(it.get("min_breaking_load")),
+                fail_reason=it.get("fail_reason"),
+                load_curve=it.get("load_curve"),
             )
+            for idx, chk in enumerate(it.get("checks", [])):
+                item.checks.append(TestResultCheck(
+                    check_name=chk.get("check_name"),
+                    status=_resolve_check_status(chk.get("status")),
+                    note=chk.get("note"),
+                    sequence=chk.get("sequence", idx),
+                ))
             test_result.test_result_items.append(item)
 
         overall = _resolve_status(data.get("overall_status"))
@@ -586,6 +652,69 @@ def add_required_item(test_result_id, items):
 
     db.session.commit()
     return test_result_repository.get_required_items(test_result_id)
+
+
+def get_inspection_checklist(item_group, test_type):
+    """Return the default check-name list for an (item_group, test_type) pair."""
+    return inspection_checklist.get_checklist(item_group, test_type)
+
+
+def _decode_data_url(data_url):
+    """Parse a base64 data URL into (bytes, content_type). Raises ValidationError on bad format."""
+    if not data_url or not data_url.startswith("data:"):
+        raise ValidationError("รูปภาพต้องเป็น base64 data URL (data:<type>;base64,...)")
+    try:
+        header, encoded = data_url.split(",", 1)
+        content_type = header.split(";")[0][5:]  # strip "data:"
+        return base64.b64decode(encoded), content_type
+    except Exception:
+        raise ValidationError("รูปแบบ base64 data URL ไม่ถูกต้อง")
+
+
+def add_test_result_photos(test_result_id, data):
+    """Attach one or more evidence photos to a non-COMPLETED test session."""
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
+    if test_result.session_status == TestSessionStatus.COMPLETED:
+        raise ValidationError("ไม่สามารถแก้ไขรูปของเทสที่จบแล้ว")
+
+    photos_in = data.get("photos") or []
+    if not photos_in:
+        raise ValidationError("ไม่พบรูปภาพ")
+
+    start_seq = (test_result_repository.get_max_photo_sequence(test_result_id) or -1) + 1
+    try:
+        for i, p in enumerate(photos_in):
+            image_bytes, content_type = _decode_data_url(p.get("image_base64"))
+            object_key = f"test_result/{test_result_id}/photo/{uuid.uuid4().hex}"
+            storage_service.upload_image(image_bytes, object_key, content_type=content_type)
+            db.session.add(TestResultPhoto(
+                test_result_id=test_result_id,
+                object_key=object_key,
+                caption=p.get("caption"),
+                sequence=start_seq + i,
+            ))
+        db.session.commit()
+        return test_result_repository.get_test_result_by_id(test_result_id)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_test_result_photo(photo_id):
+    """Remove a photo (storage cleanup is best-effort; DB row always removed)."""
+    photo = test_result_repository.get_photo_by_id(photo_id)
+    if not photo:
+        raise NotFoundError("ไม่พบรูปภาพ")
+    test_result_id = photo.test_result_id
+    try:
+        storage_service.delete_image(photo.object_key)
+    except Exception:
+        pass  # do not block DB cleanup on a storage miss
+    db.session.delete(photo)
+    db.session.commit()
+    return test_result_repository.get_test_result_by_id(test_result_id)
 
 
 def get_required_items_for_test_result(test_result_id):

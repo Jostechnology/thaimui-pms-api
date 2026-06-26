@@ -698,6 +698,19 @@ class TestResultStatus(enum.Enum):
     FAILED = 'FAILED'
 
 
+class TestType(enum.Enum):
+    PROOF_LOAD  = 'PROOF_LOAD'
+    BREAKING    = 'BREAKING'
+    VISUAL      = 'VISUAL'
+    DIMENSIONAL = 'DIMENSIONAL'
+
+
+class CheckStatus(enum.Enum):
+    PASS = 'PASS'
+    FAIL = 'FAIL'
+    NA   = 'NA'
+
+
 class TestSessionStatus(enum.Enum):
     PENDING    = 'PENDING'
     INPROGRESS = 'INPROGRESS'
@@ -718,11 +731,14 @@ class TestResult(AuditMixin, BranchScopedMixin):
     claimed_qty        = db.Column(db.Integer, nullable=False)
     session_status     = db.Column(db.Enum(TestSessionStatus), nullable=False, default=TestSessionStatus.INPROGRESS)
     started_at         = db.Column(db.DateTime, nullable=True)
-    test_method        = db.Column(db.String(255), nullable=True)
+    test_method        = db.Column(db.String(255), nullable=True)   # printed label (free text)
+    test_type          = db.Column(db.Enum(TestType), nullable=True) # controlled type for logic / checklist
     standard_reference = db.Column(db.String(255), nullable=True)
     overall_status     = db.Column(db.Enum(TestResultStatus), nullable=True)
     remark             = db.Column(db.String(500), nullable=True)
     test_result_items       = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
+    photos                  = db.relationship('TestResultPhoto', back_populates='test_result', cascade='all, delete-orphan', order_by='TestResultPhoto.sequence', lazy='noload')
+    spec                    = db.relationship('TestResultSpec', back_populates='test_result', uselist=False, cascade='all, delete-orphan', lazy='noload')
     work_run_sources        = db.relationship('TestResultWorkRun', back_populates='test_result', cascade='all, delete-orphan')
     picking_item_sources    = db.relationship('TestResultPickingItem', back_populates='test_result', cascade='all, delete-orphan')
     required_items          = db.relationship('TestResultRequiredItem', back_populates='test_result', cascade='all, delete-orphan', lazy='noload')
@@ -754,11 +770,87 @@ class TestResultItem(AuditMixin, BranchScopedMixin):
     unit_number         = db.Column(db.Integer, nullable=False)  # ลำดับชิ้น เช่น 1, 2, ...
     serial_no           = db.Column(db.String(200), nullable=True)
     wll_measured        = db.Column(db.Float, nullable=True)
-    load_test_value     = db.Column(db.Float, nullable=True)
+    load_test_value     = db.Column(db.Float, nullable=True)   # applied peak load
     description         = db.Column(db.Text, nullable=True)
     result              = db.Column(db.Enum(TestResultStatus), nullable=False, default=TestResultStatus.PASSED)
     remark              = db.Column(db.String(500), nullable=True)
+
+    # --- Proof load test parameters/measurements ---
+    required_load       = db.Column(db.Float, nullable=True)   # target load (WLL × factor per standard)
+    hold_time_sec       = db.Column(db.Integer, nullable=True)
+    length_before       = db.Column(db.Float, nullable=True)
+    length_after        = db.Column(db.Float, nullable=True)
+
+    # --- Breaking test ---
+    breaking_force      = db.Column(db.Float, nullable=True)
+    min_breaking_load   = db.Column(db.Float, nullable=True)
+
+    # --- Verdict ---
+    fail_reason         = db.Column(db.String(255), nullable=True)
+
+    # --- Breaking test load curve (sampled series, stored whole) ---
+    load_curve          = db.Column(db.JSON, nullable=True)   # [{"t": <sec>, "load": <value>}, ...]
+
     test_result = db.relationship('TestResult', back_populates='test_result_items', lazy='noload')
+    checks = db.relationship('TestResultCheck', back_populates='test_result_item',
+                             cascade='all, delete-orphan', order_by='TestResultCheck.sequence')
+
+    @property
+    def permanent_set(self):
+        """Proof-load acceptance criterion: permanent elongation after load removed."""
+        if self.length_before is not None and self.length_after is not None:
+            return round(self.length_after - self.length_before, 4)
+        return None
+
+    @property
+    def efficiency(self):
+        """Breaking test: actual breaking force as % of minimum breaking load."""
+        if self.breaking_force is not None and self.min_breaking_load:
+            return round(self.breaking_force / self.min_breaking_load * 100, 1)
+        return None
+
+
+class TestResultCheck(AuditMixin, BranchScopedMixin):
+    """Per-unit visual/inspection checklist row (e.g. 'Broken wires', 'Mechanism function')."""
+    __tablename__ = "t_test_result_check"
+    check_id = db.Column(db.Integer, primary_key=True)
+    test_result_item_id = db.Column(db.Integer,
+        db.ForeignKey('t_test_result_item.test_result_item_id', ondelete='CASCADE'), nullable=False)
+    check_name = db.Column(db.String(255), nullable=False)
+    status     = db.Column(db.Enum(CheckStatus), nullable=False, default=CheckStatus.NA)
+    note       = db.Column(db.String(500), nullable=True)
+    sequence   = db.Column(db.Integer, nullable=False, default=0)
+    test_result_item = db.relationship('TestResultItem', back_populates='checks', lazy='noload')
+
+
+class TestResultPhoto(AuditMixin, BranchScopedMixin):
+    """Session-level test evidence photos (stored in MinIO; DB holds the object_key)."""
+    __tablename__ = "t_test_result_photo"
+    photo_id       = db.Column(db.Integer, primary_key=True)
+    test_result_id = db.Column(db.Integer,
+        db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    object_key     = db.Column(db.String(500), nullable=False)
+    caption        = db.Column(db.String(255), nullable=True)
+    sequence       = db.Column(db.Integer, nullable=False, default=0)
+    test_result    = db.relationship('TestResult', back_populates='photos', lazy='noload')
+
+
+class TestResultSpec(AuditMixin, BranchScopedMixin):
+    """Per-session product spec snapshot (NOT item master — captured as-tested)."""
+    __tablename__ = "t_test_result_spec"
+    spec_id          = db.Column(db.Integer, primary_key=True)
+    test_result_id   = db.Column(db.Integer,
+        db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False, unique=True)
+    construction     = db.Column(db.String(100), nullable=True)   # "6x36 IWRC"
+    grade            = db.Column(db.String(50),  nullable=True)   # "1960 N/mm²"
+    coating          = db.Column(db.String(50),  nullable=True)   # "GAL"
+    diameter         = db.Column(db.Float,       nullable=True)   # mm
+    nominal_length   = db.Column(db.Float,       nullable=True)   # m
+    tensile_strength = db.Column(db.Float,       nullable=True)   # N/mm²
+    manufacturer     = db.Column(db.String(255), nullable=True)
+    batch_no         = db.Column(db.String(100), nullable=True)
+    termination      = db.Column(db.String(255), nullable=True)  # "Ordinary Thimble + Ferrule"
+    test_result      = db.relationship('TestResult', back_populates='spec', lazy='noload')
 
 
 class TestResultWorkRun(BaseModel):
