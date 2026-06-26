@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck
+from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck, TestResultPhoto, TestResultSpec
 from app.app import db
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -7,6 +7,8 @@ def _test_result_options():
     """Eager-load what TestResultSchema needs."""
     return [
         selectinload(TestResult.test_result_items).selectinload(TestResultItem.checks),
+        selectinload(TestResult.photos),
+        joinedload(TestResult.spec),
         joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
         selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
         selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
@@ -83,6 +85,19 @@ def get_test_result_for_finalize(test_result_id):
         )
     except Exception:
         raise
+
+
+def get_photo_by_id(photo_id):
+    query = db.session.query(TestResultPhoto).filter(TestResultPhoto.photo_id == photo_id)
+    return query.first()
+
+
+def get_max_photo_sequence(test_result_id):
+    query = (
+        db.session.query(db.func.max(TestResultPhoto.sequence))
+        .filter(TestResultPhoto.test_result_id == test_result_id)
+    )
+    return query.scalar()
 
 
 def get_sales_item_by_test_result(test_result_id):

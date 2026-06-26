@@ -737,6 +737,8 @@ class TestResult(AuditMixin, BranchScopedMixin):
     overall_status     = db.Column(db.Enum(TestResultStatus), nullable=True)
     remark             = db.Column(db.String(500), nullable=True)
     test_result_items       = db.relationship('TestResultItem', back_populates='test_result', cascade='all, delete-orphan')
+    photos                  = db.relationship('TestResultPhoto', back_populates='test_result', cascade='all, delete-orphan', order_by='TestResultPhoto.sequence', lazy='noload')
+    spec                    = db.relationship('TestResultSpec', back_populates='test_result', uselist=False, cascade='all, delete-orphan', lazy='noload')
     work_run_sources        = db.relationship('TestResultWorkRun', back_populates='test_result', cascade='all, delete-orphan')
     picking_item_sources    = db.relationship('TestResultPickingItem', back_populates='test_result', cascade='all, delete-orphan')
     required_items          = db.relationship('TestResultRequiredItem', back_populates='test_result', cascade='all, delete-orphan', lazy='noload')
@@ -786,6 +788,9 @@ class TestResultItem(AuditMixin, BranchScopedMixin):
     # --- Verdict ---
     fail_reason         = db.Column(db.String(255), nullable=True)
 
+    # --- Breaking test load curve (sampled series, stored whole) ---
+    load_curve          = db.Column(db.JSON, nullable=True)   # [{"t": <sec>, "load": <value>}, ...]
+
     test_result = db.relationship('TestResult', back_populates='test_result_items', lazy='noload')
     checks = db.relationship('TestResultCheck', back_populates='test_result_item',
                              cascade='all, delete-orphan', order_by='TestResultCheck.sequence')
@@ -816,6 +821,36 @@ class TestResultCheck(AuditMixin, BranchScopedMixin):
     note       = db.Column(db.String(500), nullable=True)
     sequence   = db.Column(db.Integer, nullable=False, default=0)
     test_result_item = db.relationship('TestResultItem', back_populates='checks', lazy='noload')
+
+
+class TestResultPhoto(AuditMixin, BranchScopedMixin):
+    """Session-level test evidence photos (stored in MinIO; DB holds the object_key)."""
+    __tablename__ = "t_test_result_photo"
+    photo_id       = db.Column(db.Integer, primary_key=True)
+    test_result_id = db.Column(db.Integer,
+        db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
+    object_key     = db.Column(db.String(500), nullable=False)
+    caption        = db.Column(db.String(255), nullable=True)
+    sequence       = db.Column(db.Integer, nullable=False, default=0)
+    test_result    = db.relationship('TestResult', back_populates='photos', lazy='noload')
+
+
+class TestResultSpec(AuditMixin, BranchScopedMixin):
+    """Per-session product spec snapshot (NOT item master — captured as-tested)."""
+    __tablename__ = "t_test_result_spec"
+    spec_id          = db.Column(db.Integer, primary_key=True)
+    test_result_id   = db.Column(db.Integer,
+        db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False, unique=True)
+    construction     = db.Column(db.String(100), nullable=True)   # "6x36 IWRC"
+    grade            = db.Column(db.String(50),  nullable=True)   # "1960 N/mm²"
+    coating          = db.Column(db.String(50),  nullable=True)   # "GAL"
+    diameter         = db.Column(db.Float,       nullable=True)   # mm
+    nominal_length   = db.Column(db.Float,       nullable=True)   # m
+    tensile_strength = db.Column(db.Float,       nullable=True)   # N/mm²
+    manufacturer     = db.Column(db.String(255), nullable=True)
+    batch_no         = db.Column(db.String(100), nullable=True)
+    termination      = db.Column(db.String(255), nullable=True)  # "Ordinary Thimble + Ferrule"
+    test_result      = db.relationship('TestResult', back_populates='spec', lazy='noload')
 
 
 class TestResultWorkRun(BaseModel):

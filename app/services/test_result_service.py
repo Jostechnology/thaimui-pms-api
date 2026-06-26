@@ -2,17 +2,19 @@ from app.con_sqlalchemy import (
     TestResult, TestResultItem, TestResultStatus, TestSessionStatus,
     TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem,
     TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak,
-    TestResultCheck, TestType, CheckStatus,
+    TestResultCheck, TestResultPhoto, TestResultSpec, TestType, CheckStatus,
     Machine, MaterialList, BreakType,
     WorkRunStatus, WorkRunTransactionType, QCWorkOrder, QCWorkOrderStatus,
     AllocationMode, bangkok_now,
 )
+import uuid
+import base64
 from app.ma_sqlalchemy import TestResultSchema
 from app.repositories import (
     test_result_repository, qc_work_order_repository,
     work_run_repository, picking_request_repository,
 )
-from app.services import transaction_service, document_code_service, picking_allocation_service, labor_cost_service, inspection_checklist
+from app.services import transaction_service, document_code_service, picking_allocation_service, labor_cost_service, inspection_checklist, storage_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
 from sqlalchemy.orm import joinedload
@@ -354,6 +356,22 @@ def finalize_test_result(test_result_id, data):
         test_result.standard_reference = data.get("standard_reference")
         test_result.remark = data.get("remark", test_result.remark)
 
+        # Per-session product spec snapshot (1:1). Finalize is one-shot, so create fresh.
+        spec_data = data.get("spec")
+        if spec_data:
+            db.session.add(TestResultSpec(
+                test_result_id=test_result_id,
+                construction=spec_data.get("construction"),
+                grade=spec_data.get("grade"),
+                coating=spec_data.get("coating"),
+                diameter=_to_float(spec_data.get("diameter")),
+                nominal_length=_to_float(spec_data.get("nominal_length")),
+                tensile_strength=_to_float(spec_data.get("tensile_strength")),
+                manufacturer=spec_data.get("manufacturer"),
+                batch_no=spec_data.get("batch_no"),
+                termination=spec_data.get("termination"),
+            ))
+
         for it in items_data:
             item = TestResultItem(
                 unit_number=it.get("unit_number"),
@@ -370,6 +388,7 @@ def finalize_test_result(test_result_id, data):
                 breaking_force=_to_float(it.get("breaking_force")),
                 min_breaking_load=_to_float(it.get("min_breaking_load")),
                 fail_reason=it.get("fail_reason"),
+                load_curve=it.get("load_curve"),
             )
             for idx, chk in enumerate(it.get("checks", [])):
                 item.checks.append(TestResultCheck(
@@ -638,6 +657,64 @@ def add_required_item(test_result_id, items):
 def get_inspection_checklist(item_group, test_type):
     """Return the default check-name list for an (item_group, test_type) pair."""
     return inspection_checklist.get_checklist(item_group, test_type)
+
+
+def _decode_data_url(data_url):
+    """Parse a base64 data URL into (bytes, content_type). Raises ValidationError on bad format."""
+    if not data_url or not data_url.startswith("data:"):
+        raise ValidationError("รูปภาพต้องเป็น base64 data URL (data:<type>;base64,...)")
+    try:
+        header, encoded = data_url.split(",", 1)
+        content_type = header.split(";")[0][5:]  # strip "data:"
+        return base64.b64decode(encoded), content_type
+    except Exception:
+        raise ValidationError("รูปแบบ base64 data URL ไม่ถูกต้อง")
+
+
+def add_test_result_photos(test_result_id, data):
+    """Attach one or more evidence photos to a non-COMPLETED test session."""
+    test_result = test_result_repository.get_test_result_by_id(test_result_id)
+    if not test_result:
+        raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
+    if test_result.session_status == TestSessionStatus.COMPLETED:
+        raise ValidationError("ไม่สามารถแก้ไขรูปของเทสที่จบแล้ว")
+
+    photos_in = data.get("photos") or []
+    if not photos_in:
+        raise ValidationError("ไม่พบรูปภาพ")
+
+    start_seq = (test_result_repository.get_max_photo_sequence(test_result_id) or -1) + 1
+    try:
+        for i, p in enumerate(photos_in):
+            image_bytes, content_type = _decode_data_url(p.get("image_base64"))
+            object_key = f"test_result/{test_result_id}/photo/{uuid.uuid4().hex}"
+            storage_service.upload_image(image_bytes, object_key, content_type=content_type)
+            db.session.add(TestResultPhoto(
+                test_result_id=test_result_id,
+                object_key=object_key,
+                caption=p.get("caption"),
+                sequence=start_seq + i,
+            ))
+        db.session.commit()
+        return test_result_repository.get_test_result_by_id(test_result_id)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def delete_test_result_photo(photo_id):
+    """Remove a photo (storage cleanup is best-effort; DB row always removed)."""
+    photo = test_result_repository.get_photo_by_id(photo_id)
+    if not photo:
+        raise NotFoundError("ไม่พบรูปภาพ")
+    test_result_id = photo.test_result_id
+    try:
+        storage_service.delete_image(photo.object_key)
+    except Exception:
+        pass  # do not block DB cleanup on a storage miss
+    db.session.delete(photo)
+    db.session.commit()
+    return test_result_repository.get_test_result_by_id(test_result_id)
 
 
 def get_required_items_for_test_result(test_result_id):

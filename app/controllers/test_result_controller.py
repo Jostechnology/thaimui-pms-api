@@ -15,6 +15,8 @@ from app.services.test_result_service import (
     add_required_item,
     get_required_items_for_test_result,
     get_inspection_checklist,
+    add_test_result_photos,
+    delete_test_result_photo,
     delete_required_item,
     get_pick_requests_for_test_result,
     assign_employee,
@@ -24,6 +26,21 @@ from app.services.test_result_service import (
     pause_test_result,
     resume_test_result,
 )
+
+
+@app.route("/api/test_result/<int:test_result_id>/photo", methods=["POST"])
+@verify_required
+def api_add_test_result_photos(test_result_id):
+    data = request.get_json()
+    result = add_test_result_photos(test_result_id, data)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 201
+
+
+@app.route("/api/test_result/photo/<int:photo_id>", methods=["DELETE"])
+@verify_required
+def api_delete_test_result_photo(photo_id):
+    result = delete_test_result_photo(photo_id)
+    return jsonify({"data": TestResultSchema().dump(result), "success": True}), 200
 
 
 @app.route("/api/test_result/checklist", methods=["GET"])

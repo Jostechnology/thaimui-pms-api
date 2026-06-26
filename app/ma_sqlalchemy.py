@@ -473,6 +473,35 @@ class TestResultCheckSchema(Schema):
     updated_by          = fields.String(dump_only=True)
 
 
+class TestResultPhotoSchema(Schema):
+    photo_id     = fields.Integer(dump_only=True)
+    caption      = fields.String(allow_none=True)
+    sequence     = fields.Integer()
+    url          = fields.Method("get_url", dump_only=True)
+    created_date = fields.DateTime(dump_only=True)
+    created_by   = fields.String(dump_only=True)
+
+    def get_url(self, obj):
+        from app.services.storage_service import get_presigned_url
+        try:
+            return get_presigned_url(obj.object_key)
+        except Exception:
+            return None
+
+
+class TestResultSpecSchema(Schema):
+    spec_id          = fields.Integer(dump_only=True)
+    construction     = fields.String(allow_none=True)
+    grade            = fields.String(allow_none=True)
+    coating          = fields.String(allow_none=True)
+    diameter         = fields.Float(allow_none=True)
+    nominal_length   = fields.Float(allow_none=True)
+    tensile_strength = fields.Float(allow_none=True)
+    manufacturer     = fields.String(allow_none=True)
+    batch_no         = fields.String(allow_none=True)
+    termination      = fields.String(allow_none=True)
+
+
 class TestResultItemSchema(Schema):
     test_result_item_id = fields.Integer(dump_only=True)
     test_result_id      = fields.Integer()
@@ -495,6 +524,7 @@ class TestResultItemSchema(Schema):
     efficiency          = fields.Float(dump_only=True)
     # Verdict
     fail_reason         = fields.String(allow_none=True)
+    load_curve          = fields.Raw(allow_none=True)   # JSON array [{t, load}, ...]
     checks              = fields.List(fields.Nested(lambda: TestResultCheckSchema()), dump_only=True)
     created_date        = fields.DateTime(dump_only=True)
     updated_date        = fields.DateTime(dump_only=True)
@@ -792,6 +822,8 @@ class TestResultSchema(Schema):
     reworked_qty            = fields.Integer(dump_only=True)
     outstanding_failed_qty  = fields.Integer(dump_only=True)
     test_result_items       = fields.List(fields.Nested(TestResultItemSchema()), dump_only=True)
+    photos                  = fields.List(fields.Nested(TestResultPhotoSchema()), dump_only=True)
+    spec                    = fields.Nested(TestResultSpecSchema(), allow_none=True)
     work_run_sources        = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
     picking_item_sources    = fields.List(fields.Nested(TestResultPickingItemSchema()), dump_only=True)
     required_items          = fields.List(fields.Nested(TestResultRequiredItemSchema()), dump_only=True)
