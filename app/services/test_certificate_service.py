@@ -1,5 +1,5 @@
-from app.con_sqlalchemy import CertificationStatus, QCCertification, QCCheckItem, SalesOrder
-from app.repositories import test_certificate_repository
+from app.con_sqlalchemy import CertificationStatus, QCCertification, QCCheckItem
+from app.repositories import test_certificate_repository, sales_order_repository
 from app.app import db
 import datetime
 from app.exception import NotFoundError
@@ -9,9 +9,7 @@ def create_test_certificate(data):
     try:
         doc_entry = data.get("sales_order_doc_entry")
 
-        sales_order = db.session.query(SalesOrder).filter(SalesOrder.doc_entry == doc_entry).first()
-        if not sales_order:
-            raise Exception("ไม่พบ Sales Order ที่ระบุ")
+        sales_order_repository.get_sales_order_by_doc_entry(doc_entry)  # raises NotFoundError if missing
 
         status_map = {"acceptable": CertificationStatus.PASSED, "not_acceptable": CertificationStatus.FAILED}
 
@@ -117,6 +115,6 @@ def update_test_certificate(qc_certification_id, data):
         db.session.commit()
 
         return cert
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        raise Exception(str(e))
+        raise
