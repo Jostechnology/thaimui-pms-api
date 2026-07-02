@@ -42,6 +42,22 @@ def upload_image(file_bytes: bytes, object_key: str, content_type: str = "image/
         raise OuterServicesError(f"Failed to upload image: {e}")
 
 
+def upload_object(file_bytes: bytes, object_key: str, content_type: str = "application/octet-stream") -> str:
+    """Generic byte upload to MinIO (reports, exports). Returns object_key."""
+    _require_client()
+    try:
+        _client.put_object(
+            _bucket,
+            object_key,
+            io.BytesIO(file_bytes),
+            length=len(file_bytes),
+            content_type=content_type,
+        )
+        return object_key
+    except S3Error as e:
+        raise OuterServicesError(f"Failed to upload object: {e}")
+
+
 def get_presigned_url(object_key: str, expires_seconds: int = PRESIGNED_URL_TTL) -> str:
     """
     Generate a presigned GET URL valid for `expires_seconds`.

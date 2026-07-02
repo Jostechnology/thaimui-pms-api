@@ -89,7 +89,7 @@ def select_branch_service(data):
             "role_name": user.role.role_name,
             "role_id": user.role.role_id,
             "role_code": user.role.role_code,
-            "permissions": user.role.get_permissions(),
+            # permissions are NOT embedded — resolved server-side from role_id via Redis
             "branch_id": branch_id,
         }
 
@@ -131,7 +131,6 @@ def select_all_branch_service(data):
         if not user or not user.is_active:
             raise NotFoundError("ไม่พบผู้ใช้งานหรือถูกระงับการใช้งาน")
 
-        permissions = user.role.get_permissions()
         if not check_user_permission(user.user_id, "ALL_BRANCH", "view"):
             raise AuthenticationError("คุณไม่มีสิทธิ์เข้าถึงโหมด All Branch")
 
@@ -141,7 +140,7 @@ def select_all_branch_service(data):
             "role_name": user.role.role_name,
             "role_id": user.role.role_id,
             "role_code": user.role.role_code,
-            "permissions": permissions,
+            # permissions are NOT embedded — resolved server-side from role_id via Redis
             "all_branch_mode": True,
         }
 
@@ -250,7 +249,7 @@ def refresh_token_service(refresh_token):
             "role_name": user.role.role_name,
             "role_id": user.role.role_id,
             "role_code": user.role.role_code,
-            "permissions": user.role.get_permissions(),
+            # permissions are NOT embedded — resolved server-side from role_id via Redis
             "branch_id": branch_id,
         }
         new_access_token = create_token(token_data, "access")

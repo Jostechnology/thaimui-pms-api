@@ -1,11 +1,57 @@
-import base64
-import json
 from app.app import db
 from app.exception import AppException, MissingFieldsError, NotFoundError, UniqueError
 from app.con_sqlalchemy import Role
 from app.repositories import module_repository, role_repository, user_repository, branch_repository
 from app.ma_sqlalchemy import GetPermissionSchema, GetRolePremissionSchema, ModuleSchema, RolePermissionSchema, RoleSchema
-from app.utils import encode_jwt , hash_bcrypt, verify_bcrypt
+from app.services import cache_service
+from app.utils import hash_bcrypt, verify_bcrypt
+
+
+# Redis-cached permission tree. The token no longer carries permissions
+# (ADR: role_id in the JWT resolves the tree server-side). Cache is
+# rebuilt-on-miss from MySQL and busted whenever a role's grants change.
+PERM_TREE_TTL = 3600
+
+
+def _perm_cache_key(role_id) -> str:
+    return f"perm:{role_id}"
+
+
+def build_permission_tree(role_id):
+    """Build the flat permission list ["MODULE_CODE.method", ...] for a role.
+
+    Admin returns the wildcard ["*"]. Reads MySQL directly (no cache)."""
+    role = role_repository.get_role_by_id(role_id)
+    if not role:
+        return []
+    if role.role_name == "Admin":
+        return ["*"]
+
+    role_permission = role_repository.get_active_permissions_by_role(role_id) or []
+    result = GetRolePremissionSchema(many=True).dump(role_permission)
+    module_code_map = module_repository.get_module_id_code_map()
+
+    return [
+        f"{module_code_map[r['module_id']]}.{r['method']}"
+        for r in result
+        if r.get("module_id") in module_code_map and r.get("method")
+    ]
+
+
+def load_permission_tree(role_id):
+    """Cache-first permission tree lookup. Rebuilds from MySQL on miss."""
+    key = _perm_cache_key(role_id)
+    cached = cache_service.get(key)
+    if cached is not None:
+        return cached
+    tree = build_permission_tree(role_id)
+    cache_service.set(key, tree, ttl=PERM_TREE_TTL)
+    return tree
+
+
+def bust_permission_tree(role_id):
+    """Invalidate a role's cached permission tree after its grants change."""
+    cache_service.delete(_perm_cache_key(role_id))
 
 
 def check_user_permission(user_id: int, module_code: str, action: str) -> bool:
@@ -92,43 +138,13 @@ def get_module_tree():
     except Exception as e:
         raise e
 
-def get_role_permission(username, role_id):
+def get_role_permission(role_id):
+    """Return the role's flat permission list ["MODULE_CODE.method", ...].
+
+    Consumed by the FE (via /get_role_permission) for UI rendering only —
+    server-side gating resolves the same list independently by role_id."""
     try:
-
-        role_permission = role_repository.get_active_permissions_by_role(role_id)
-        if not role_permission:
-            role_permission = []
-
-        schema = GetRolePremissionSchema(many=True)
-        result = schema.dump(role_permission)
-        module_code_map = module_repository.get_module_id_code_map()
-
-        # Flat list of granted permissions: ["MODULE_CODE.method", ...]
-        flat_permissions = [
-            f"{module_code_map[r['module_id']]}.{r['method']}"
-            for r in result
-            if r.get("module_id") in module_code_map and r.get("method")
-        ]
-        
-        data_bytes = json.dumps(flat_permissions).encode("utf-8")
-        permission_tree_b64 = base64.b64encode(data_bytes).decode("utf-8")
-
-        payload = {
-            "signed_permission_tree": permission_tree_b64
-        }
-
-        token = encode_jwt(payload)
-
-        # signature = private_key.sign(
-        #     data_bytes,
-        #     asym_padding.PSS(mgf=asym_padding.MGF1(hashes.SHA256()), salt_length=asym_padding.PSS.MAX_LENGTH),
-        #     hashes.SHA256()
-        # )
-        return (
-            base64.b64encode(data_bytes).decode("utf-8"),
-            token
-        )
-
+        return load_permission_tree(role_id)
     except Exception as e:
         raise e
     
@@ -396,6 +412,7 @@ def upsert_role_permission(data):
                 db.session.add(new_rp)
 
         db.session.commit()
+        bust_permission_tree(role_id)
 
         updated = module_repository.get_all_modules()
         return RolePermissionSchema(many=True).dump(updated)

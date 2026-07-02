@@ -3,7 +3,7 @@ from app.app import app
 from flask import request, jsonify, g
 from app.exception import DisabledAction
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
-from app.services import cache_service
+from app.services import cache_service, user_service
 from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order, get_sales_items_and_material_lists, delete_sales_order_by_doc_num
 from app.services.storage_service import PRESIGNED_CACHE_TTL
 from app.utils import decode_token, check_true_permissions
@@ -19,33 +19,24 @@ def _sales_order_detail_cache(doc_entry, branch_id):
 PAGE_CACHE_TTL = 3600
 SALES_ORDER_CACHE_TTL = 4800
 
-def _has_unassigned_sales_order_view_permission(permission_token: str) -> bool:
-    decoded = decode_token(permission_token)
-    if not decoded:
-        return False
+def _has_unassigned_so_permission(method: str) -> bool:
+    """Resolve the caller's permission tree from Redis (by g.role_id, set by
+    verify_required) and check UNASSIGNED_SO.<method>."""
     try:
-        signed = decoded.get("signed_permission_tree")
-        if not signed:
+        role_id = getattr(g, "role_id", None)
+        if role_id is None:
             return False
-        permission_list = json.loads(base64.b64decode(signed).decode("utf-8"))
-        check_true_permissions([{"module_code": "UNASSIGNED_SO", "method": "create"}], permission_list)
+        permission_list = user_service.load_permission_tree(role_id)
+        check_true_permissions([{"module_code": "UNASSIGNED_SO", "method": method}], permission_list)
         return True
     except Exception:
         return False
 
-def _has_unassigned_sales_order_create_permission(permission_token: str) -> bool:
-    decoded = decode_token(permission_token)
-    if not decoded:
-        return False
-    try:
-        signed = decoded.get("signed_permission_tree")
-        if not signed:
-            return False
-        permission_list = json.loads(base64.b64decode(signed).decode("utf-8"))
-        check_true_permissions([{"module_code": "UNASSIGNED_SO", "method": "create"}], permission_list)
-        return True
-    except Exception:
-        return False
+def _has_unassigned_sales_order_view_permission() -> bool:
+    return _has_unassigned_so_permission("view")
+
+def _has_unassigned_sales_order_create_permission() -> bool:
+    return _has_unassigned_so_permission("create")
 
 @app.route("/api/sales_order/get_all", methods=["GET"])
 @verify_required

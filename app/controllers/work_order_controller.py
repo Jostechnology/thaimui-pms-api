@@ -53,7 +53,7 @@ def api_get_work_order_by_center_sales_item_id(center_sales_item_id):
 def api_create_work_order():
     try:
         data = request.get_json()
-        unassigned_permission = _has_unassigned_sales_order_create_permission(get_requests_permission(request))
+        unassigned_permission = _has_unassigned_sales_order_create_permission()
         result = create_work_order(data, unassigned_permission)
         return jsonify({"data": {"item": WorkOrderSchemaDetail().dump(result)}, "success": True}), 200
     except Exception:

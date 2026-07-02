@@ -1,6 +1,41 @@
 from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
+from app.con_sqlalchemy import ReportRunStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
+
+
+class ReportDefinitionSchema(Schema):
+    code = fields.String(dump_only=True)
+    name = fields.String()
+    description = fields.String(allow_none=True)
+    category = fields.String(allow_none=True)
+    params_schema_json = fields.Raw()
+    supported_formats = fields.List(fields.String())
+    definition_version = fields.Integer()
+
+
+class ReportRunSchema(Schema):
+    """List view — no file URLs, no inline JSON payload."""
+    run_id = fields.String(dump_only=True)
+    definition_code = fields.String()
+    definition_version = fields.Integer()
+    params_json = fields.Raw()
+    requested_by = fields.String(dump_only=True)
+    requested_at = fields.DateTime(dump_only=True)
+    status = fields.Enum(ReportRunStatus, by_value=True)
+    completed_at = fields.DateTime(dump_only=True, allow_none=True)
+    row_count = fields.Integer(allow_none=True)
+    runtime_ms = fields.Integer(allow_none=True)
+    error_message = fields.String(allow_none=True)
+
+
+class ReportRunDetailSchema(ReportRunSchema):
+    """Detail — adds inline JSON and the format→object_key map.
+    `file_urls` is computed in the service via storage_service.get_presigned_url."""
+    file_object_keys = fields.Raw(allow_none=True)
+    file_size_bytes = fields.Integer(allow_none=True)
+    result_json = fields.Raw(allow_none=True)
+    file_urls = fields.Raw(dump_only=True)
 
 
 class UserSchema(Schema):

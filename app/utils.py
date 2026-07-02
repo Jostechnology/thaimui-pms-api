@@ -80,6 +80,10 @@ def check_true_permissions(authorizes, permission_list):
 
     permission_set = set(permission_list)
 
+    # Admin wildcard: ["*"] satisfies every check.
+    if "*" in permission_set:
+        return
+
     for auth in authorizes:
         module_code = auth.get("module_code")
         method = auth.get("method")

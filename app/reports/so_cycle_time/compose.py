@@ -25,26 +25,32 @@ def _cycle_bucket(days):
     return "30+"
 
 
-def _parse_status(raw):
+def _parse_statuses(raw):
+    """Accept a single status or a comma-separated list. Returns a list of
+    enums (for `.in_()`) or None when empty."""
     if not raw:
         return None
-    try:
-        return SalesOrderStatus[str(raw).strip().upper()]
-    except KeyError:
-        allowed = [s.value for s in SalesOrderStatus]
-        raise ValidationError(f"status ไม่ถูกต้อง ต้องเป็นหนึ่งใน {allowed}")
+    values = [v.strip() for v in str(raw).split(",") if v.strip()]
+    result = []
+    for v in values:
+        try:
+            result.append(SalesOrderStatus[v.upper()])
+        except KeyError:
+            allowed = [s.value for s in SalesOrderStatus]
+            raise ValidationError(f"status ไม่ถูกต้อง ต้องเป็นหนึ่งใน {allowed}")
+    return result or None
 
 
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
-    status = _parse_status(params.get("status"))
+    statuses = _parse_statuses(params.get("status"))
 
     q = db.session.query(SalesOrder).filter(
         SalesOrder.created_date >= start, SalesOrder.created_date <= end,
     )
-    if status is not None:
-        q = q.filter(SalesOrder.status == status)
+    if statuses is not None:
+        q = q.filter(SalesOrder.status.in_(statuses))
     q = q.order_by(SalesOrder.created_date.desc())
 
     now = datetime.now()

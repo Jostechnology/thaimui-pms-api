@@ -214,6 +214,7 @@ def verify_required_center(f):
 
         g.username = decoded.get("username")
         g.branch_id = branch_id
+        g.role_id = decoded.get("role_id")
         _log_timer("verify_required_center", (time.perf_counter() - _start) * 1000, f"user: {g.username}, branch: {g.branch_id}")
         return f(*args, **kwargs)
     return decorated
@@ -253,63 +254,49 @@ def verify_required_center_only(f):
     return decorated
 
 def get_requests_permission(request):
-    data = request.get_json(silent=True) or {}
-    if "X-Permission-Token" in request.headers:
-        permission_token = request.headers["X-Permission-Token"]
-    else:
-        permission_token = data.get("permission_token") or request.args.get("permission_token")
-    
-    return permission_token
+    """Legacy shim. The permission token was removed — authorization now
+    resolves from the JWT's role_id via Redis. Kept so existing imports work."""
+    return None
 
 
-def decode_and_verify_permission_jwt(authorizes=[]):
+def verify_permission(authorizes=[]):
+    """Resolve the caller's permission tree from Redis by role_id (set by a
+    preceding verify_required*), then enforce `authorizes`. No permission
+    token is read from the request anymore."""
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
             _start = time.perf_counter()
-            label = f"decode_and_verify_permission_jwt ({f.__name__})"
+            label = f"verify_permission ({f.__name__})"
 
-            permission_token = get_requests_permission(request)
-
-            if not permission_token:
-                if authorizes:
-                    _log_timer(label, (time.perf_counter() - _start) * 1000, "early exit: missing token")
-                    return jsonify({"error": "Missing permission token"}), 401
-                g.permission_tree = None
-                _log_timer(label, (time.perf_counter() - _start) * 1000, "no token, no authorizes")
+            # Trusted system-to-system caller (CENTER_ACCESS_KEY) has no role — bypass.
+            if getattr(g, "username", None) == "SYSTEM_CENTER":
+                g.permission_tree = ["*"]
+                _log_timer(label, (time.perf_counter() - _start) * 1000, "SYSTEM_CENTER bypass")
                 return f(*args, **kwargs)
 
-            decoded_payload = decode_token(permission_token)
-            if not decoded_payload:
-                _log_timer(label, (time.perf_counter() - _start) * 1000, "early exit: invalid token")
-                return jsonify({"error": "Invalid or expired permission token"}), 401
+            role_id = getattr(g, "role_id", None)
+            if role_id is None:
+                _log_timer(label, (time.perf_counter() - _start) * 1000, "early exit: missing role_id (decorator order)")
+                return jsonify({"error": "Authentication context missing"}), 401
 
-            try:
-                signed_permission_tree = decoded_payload.get("signed_permission_tree")
-                if not signed_permission_tree:
-                    _log_timer(label, (time.perf_counter() - _start) * 1000, "early exit: missing signed_permission_tree")
-                    return jsonify({"error": "Missing signed_permission_tree in token"}), 400
+            # Lazy import avoids an import cycle at module load time.
+            from app.services.user_service import load_permission_tree
+            permission_tree = load_permission_tree(role_id)
+            g.permission_tree = permission_tree
 
-                permission_tree_bytes = base64.b64decode(signed_permission_tree)
-                permission_tree = json.loads(permission_tree_bytes.decode("utf-8"))
-
-                print(f"[permission-debug] Decoded permission tree from JWT")
-
-                if authorizes:
-                    try:
-                        check_true_permissions(authorizes, permission_tree)
-                    except ValueError as ve:
-                        _log_timer(label, (time.perf_counter() - _start) * 1000, "early exit: permission denied")
-                        return jsonify({"error": "Permission denied", "details": str(ve)}), 403
-
-                g.permission_tree = permission_tree
-
-            except Exception as e:
-                print(f"[permission-error] Failed to decode permission tree: {e}")
-                _log_timer(label, (time.perf_counter() - _start) * 1000, "early exit: decode error")
-                return jsonify({"error": "Failed to decode permission token", "details": str(e)}), 400
+            if authorizes:
+                try:
+                    check_true_permissions(authorizes, permission_tree)
+                except ValueError as ve:
+                    _log_timer(label, (time.perf_counter() - _start) * 1000, "early exit: permission denied")
+                    return jsonify({"error": "Permission denied", "details": str(ve)}), 403
 
             _log_timer(label, (time.perf_counter() - _start) * 1000, "success")
             return f(*args, **kwargs)
         return wrapper
     return decorator
+
+
+# Backward-compatible alias for existing route decorators.
+decode_and_verify_permission_jwt = verify_permission

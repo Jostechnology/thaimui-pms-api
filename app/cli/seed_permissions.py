@@ -6,7 +6,7 @@ import yaml
 from flask.cli import with_appcontext
 
 from app.app import db
-from app.con_sqlalchemy import Module, Permission, Role, RolePermission, User
+from app.con_sqlalchemy import Module, Permission, Role, RolePermission, User, DocumentCodeList
 from app.utils import hash_bcrypt
 
 
@@ -108,6 +108,21 @@ def _apply_from_dict(payload, prune=False):
             p.permission_code = perm.get("code") or f"{module.module_code}.{method}"
             p.description = perm.get("description")
 
+    # document_codes — catalogue of generatable document number types
+    # (m_document_code_list). Natural key: gen_number_type.
+    document_codes = payload.get("document_codes", []) or []
+    yml_doc_types = {d["gen_number_type"] for d in document_codes}
+    existing_docs = {
+        d.gen_number_type: d for d in db.session.query(DocumentCodeList).all()
+    }
+    for entry in document_codes:
+        gen_type = entry["gen_number_type"]
+        d = existing_docs.get(gen_type)
+        if d is None:
+            d = DocumentCodeList(gen_number_type=gen_type)
+            db.session.add(d)
+        d.description = entry.get("description")
+
     if prune:
         for m in db.session.query(Module).all():
             if m.module_code in yml_module_codes:
@@ -116,6 +131,9 @@ def _apply_from_dict(payload, prune=False):
         for p in db.session.query(Permission).all():
             if (p.module_id, p.method) not in yml_pairs:
                 db.session.delete(p)
+        for d in db.session.query(DocumentCodeList).all():
+            if d.gen_number_type not in yml_doc_types:
+                db.session.delete(d)
 
     db.session.commit()
 

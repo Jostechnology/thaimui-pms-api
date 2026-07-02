@@ -1306,3 +1306,62 @@ class PhaseTemplateItem(AuditMixin):
     machine_type_id = db.Column(db.Integer, db.ForeignKey('m_machine_type.machine_type_id'), nullable=True)
     phase_template = db.relationship('PhaseTemplate', back_populates='items', lazy='noload')
     machine_type = db.relationship('MachineType', lazy='noload')
+
+
+# ---------------------------------------------------------------------------
+# Reports (mirrors tms-2 ADR-069). Definitions are code-defined and seeded;
+# every execution is recorded as a ReportRun with file artefacts in MinIO.
+# ---------------------------------------------------------------------------
+
+class ReportRunStatus(enum.Enum):
+    PENDING = 'pending'
+    RUNNING = 'running'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+
+
+class ReportDefinition(AuditMixin):
+    """Reports catalogue. Each row mirrors a Python module under app/reports/{code}/.
+    Seeded from REPORT_REGISTRY (see report_service.sync_definitions)."""
+    __tablename__ = "m_report_definition"
+    code = db.Column(db.String(80), primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    category = db.Column(db.String(80), nullable=True)
+    params_schema_json = db.Column(db.JSON, nullable=False)
+    supported_formats = db.Column(db.JSON, nullable=False)
+    definition_version = db.Column(db.Integer, nullable=False, default=1)
+
+
+class ReportRun(BaseModel):
+    """Audit record per report execution. File artefacts live in MinIO;
+    presigned URLs are generated fresh at fetch time, never persisted."""
+    __tablename__ = "t_report_run"
+    run_id = db.Column(db.String(36), primary_key=True)
+    definition_code = db.Column(
+        db.String(80),
+        db.ForeignKey('m_report_definition.code', ondelete='RESTRICT'),
+        nullable=False,
+    )
+    definition_version = db.Column(db.Integer, nullable=False)
+    params_json = db.Column(db.JSON, nullable=False)
+    requested_by = db.Column(db.String(80), nullable=False)
+    requested_at = db.Column(db.DateTime, nullable=False, default=bangkok_now)
+    status = db.Column(
+        db.Enum(ReportRunStatus, values_callable=lambda x: [m.value for m in x]),
+        nullable=False,
+        default=ReportRunStatus.PENDING,
+    )
+    completed_at = db.Column(db.DateTime, nullable=True)
+    file_object_keys = db.Column(db.JSON, nullable=True)
+    file_size_bytes = db.Column(db.Integer, nullable=True)
+    result_json = db.Column(db.JSON, nullable=True)
+    row_count = db.Column(db.Integer, nullable=True)
+    runtime_ms = db.Column(db.Integer, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+
+    __table_args__ = (
+        db.Index('ix_report_run_definition', 'definition_code'),
+        db.Index('ix_report_run_requested', 'requested_at'),
+        db.Index('ix_report_run_status', 'status'),
+    )

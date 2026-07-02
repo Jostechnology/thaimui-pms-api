@@ -111,3 +111,19 @@ def render_xlsx_report(
 def render_json_default(data):
     """Default JSON shape: {meta: summary, rows: rows}."""
     return {"meta": data.get("summary") or {}, "rows": data.get("rows") or []}
+
+
+def render_csv_rows(rows) -> bytes:
+    """Render a list of flat dict rows to CSV bytes (UTF-8 BOM for Excel/Thai)."""
+    import csv
+    from io import StringIO
+
+    rows = rows or []
+    buf = StringIO()
+    if rows:
+        fieldnames = list(rows[0].keys())
+        writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+    return ("﻿" + buf.getvalue()).encode("utf-8")

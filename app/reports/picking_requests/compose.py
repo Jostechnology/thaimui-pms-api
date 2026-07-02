@@ -10,20 +10,26 @@ from app.exception import ValidationError
 from app.utils import convert_start_date, convert_end_date
 
 
-def _parse_status(raw):
+def _parse_statuses(raw):
+    """Accept a single status or a comma-separated list. Returns a list of
+    enums (for `.in_()`) or None when empty."""
     if not raw:
         return None
-    try:
-        return PickingRequestStatus[str(raw).strip().upper()]
-    except KeyError:
-        allowed = [s.value for s in PickingRequestStatus]
-        raise ValidationError(f"status ไม่ถูกต้อง ต้องเป็นหนึ่งใน {allowed}")
+    values = [v.strip() for v in str(raw).split(",") if v.strip()]
+    result = []
+    for v in values:
+        try:
+            result.append(PickingRequestStatus[v.upper()])
+        except KeyError:
+            allowed = [s.value for s in PickingRequestStatus]
+            raise ValidationError(f"status ไม่ถูกต้อง ต้องเป็นหนึ่งใน {allowed}")
+    return result or None
 
 
 def compose(params):
     start = convert_start_date(params["from"]) if params.get("from") else None
     end = convert_end_date(params["to"]) if params.get("to") else None
-    status = _parse_status(params.get("status"))
+    statuses = _parse_statuses(params.get("status"))
 
     query = (
         db.session.query(PickingRequest)
@@ -36,8 +42,8 @@ def compose(params):
         query = query.filter(PickingRequest.created_date >= start)
     if end is not None:
         query = query.filter(PickingRequest.created_date <= end)
-    if status is not None:
-        query = query.filter(PickingRequest.status == status)
+    if statuses is not None:
+        query = query.filter(PickingRequest.status.in_(statuses))
 
     prs = query.order_by(PickingRequest.picking_request_id.desc()).all()
 
@@ -119,5 +125,16 @@ def compose(params):
     ]
     by_day.sort(key=lambda d: d["day"])
 
-    breakdown = {"by_status": by_status, "by_day": by_day}
+    # Top SOs by absolute receive-vs-request delta (signed) for a diverging bar.
+    delta_top = sorted(
+        [
+            {"name": r["doc_num"] or f"#{r['picking_request_id']}", "value": r["qty_delta"]}
+            for r in rows
+            if r["qty_delta"]
+        ],
+        key=lambda d: abs(d["value"]),
+        reverse=True,
+    )[:15]
+
+    breakdown = {"by_status": by_status, "by_day": by_day, "delta_top": delta_top}
     return {"summary": summary, "rows": rows, "breakdown": breakdown}

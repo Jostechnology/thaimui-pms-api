@@ -103,6 +103,17 @@ def compose(params):
         for day, total in sorted(day_totals.items())
     ]
 
+    # Cost-efficiency scatter over the FULL row set: produced qty vs unit cost.
+    cost_scatter = [
+        {
+            "name": r["lot_number"] or f"WR#{r['work_run_id']}",
+            "qty": r["usable_qty"],
+            "unit_cost": r["unit_cost"],
+        }
+        for r in rows
+        if (r["usable_qty"] or 0) > 0
+    ]
+
     breakdown = {
         "cost_mix": [
             {"name": "วัตถุดิบ", "value": summary["total_material_cost"]},
@@ -111,5 +122,6 @@ def compose(params):
         ],
         "by_workrun": by_workrun,
         "by_day": by_day,
+        "cost_scatter": cost_scatter,
     }
     return {"summary": summary, "rows": rows, "breakdown": breakdown}

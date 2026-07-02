@@ -10,20 +10,26 @@ from app.exception import ValidationError
 from app.utils import convert_start_date, convert_end_date
 
 
-def _parse_reason(raw):
+def _parse_reasons(raw):
+    """Accept a single reason or a comma-separated list. Returns a list of
+    enums (for `.in_()`) or None when empty."""
     if not raw:
         return None
-    try:
-        return PickingItemAdjustmentReason[str(raw).strip().upper()]
-    except KeyError:
-        allowed = [r.value for r in PickingItemAdjustmentReason]
-        raise ValidationError(f"reason ไม่ถูกต้อง ต้องเป็นหนึ่งใน {allowed}")
+    values = [v.strip() for v in str(raw).split(",") if v.strip()]
+    result = []
+    for v in values:
+        try:
+            result.append(PickingItemAdjustmentReason[v.upper()])
+        except KeyError:
+            allowed = [r.value for r in PickingItemAdjustmentReason]
+            raise ValidationError(f"reason ไม่ถูกต้อง ต้องเป็นหนึ่งใน {allowed}")
+    return result or None
 
 
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
-    reason = _parse_reason(params.get("reason"))
+    reasons = _parse_reasons(params.get("reason"))
 
     q = (
         db.session.query(PickingItemAdjustment, PickingRequestItem, PickingRequest)
@@ -31,8 +37,8 @@ def compose(params):
         .outerjoin(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
         .filter(PickingItemAdjustment.created_date >= start, PickingItemAdjustment.created_date <= end)
     )
-    if reason is not None:
-        q = q.filter(PickingItemAdjustment.reason == reason)
+    if reasons is not None:
+        q = q.filter(PickingItemAdjustment.reason.in_(reasons))
     q = q.order_by(PickingItemAdjustment.id.desc())
 
     rows = []

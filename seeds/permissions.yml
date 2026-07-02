@@ -728,6 +728,17 @@ modules:
   - method: view
     code: view.REPORT_LIST
     description: View รายการรายงาน
+document_codes:
+- gen_number_type: CERT
+  description: ใบรับรองผลทดสอบ
+- gen_number_type: CERT_ITEM
+  description: รายการทดสอบในใบรับรอง
+- gen_number_type: TR
+  description: ผลการทดสอบ
+- gen_number_type: PR
+  description: ใบเบิกสินค้า
+- gen_number_type: LOT
+  description: หมายเลขล็อตการผลิต
 bootstrap:
   roles:
   - role_code: ADMIN
