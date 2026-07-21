@@ -8,6 +8,7 @@ PARAMS_SCHEMA = {
     "params": {
         "from": {"type": "string", "required": True},
         "to":   {"type": "string", "required": True},
-        "status": {"type": "string", "required": False},  # INPROGRESS|COMPLETED
+        "status": {"type": "string", "required": False},  # INPROGRESS|COMPLETED (comma-list)
+        "urgency_level": {"type": "string", "required": False},  # LOW|NORMAL|HIGH|URGENT (comma-list)
     }
 }

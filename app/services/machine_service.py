@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, time, date
 
 from app.app import db
@@ -5,6 +6,7 @@ from app.con_sqlalchemy import Machine, MachineStatus
 from app.exception import NotFoundError, MissingFieldsError
 from app.ma_sqlalchemy import MachineSchema
 from app.repositories import machine_repository
+from app.services import storage_service
 
 
 def _normalize_search(val):
@@ -196,3 +198,42 @@ def delete_machine(machine_id):
     except Exception:
         db.session.rollback()
         raise
+
+
+def set_machine_photo(machine_id, data):
+    """Upload/replace the machine photo (base64 data URL → MinIO)."""
+    machine = machine_repository.get_machine_by_id(machine_id)
+    if not machine:
+        raise NotFoundError(f"Machine id {machine_id} not found")
+
+    image_bytes, content_type = storage_service.decode_data_url(data.get("image_base64"))
+    object_key = f"machine/{machine_id}/photo/{uuid.uuid4().hex}"
+    try:
+        storage_service.upload_image(image_bytes, object_key, content_type=content_type)
+        old_key = machine.photo_key
+        machine.photo_key = object_key
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    if old_key:
+        try:
+            storage_service.delete_image(old_key)
+        except Exception:
+            pass  # best-effort cleanup; DB already points to the new photo
+    return MachineSchema().dump(machine)
+
+
+def delete_machine_photo(machine_id):
+    """Remove the machine photo (storage cleanup is best-effort)."""
+    machine = machine_repository.get_machine_by_id(machine_id)
+    if not machine:
+        raise NotFoundError(f"Machine id {machine_id} not found")
+    if machine.photo_key:
+        try:
+            storage_service.delete_image(machine.photo_key)
+        except Exception:
+            pass
+        machine.photo_key = None
+        db.session.commit()
+    return MachineSchema().dump(machine)

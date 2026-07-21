@@ -44,7 +44,6 @@ def search_sales_order(page, limit, search, branch_id=None):
                     SalesOrder.po_number.ilike(f"%{search}%"),
                 )
             )
-            .distinct()
             .order_by(desc(SalesOrder.created_date))
         )
 

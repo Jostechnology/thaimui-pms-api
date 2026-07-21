@@ -7,8 +7,9 @@ from sqlalchemy.orm import joinedload
 
 from app.app import db
 from app.con_sqlalchemy import (
-    Employee, WorkRun, WorkRunAssignment, WorkRunBreak,
+    Employee, WorkRun, WorkRunAssignment, WorkRunBreak, WorkRunStatus,
 )
+from app.reports._filters import parse_bool, parse_enum_list, parse_int
 from app.utils import convert_start_date, convert_end_date
 
 
@@ -31,7 +32,10 @@ def _overlap_seconds(a_start, a_end, b_start, b_end):
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
-    employee_id = params.get("employee_id")
+    employee_id = parse_int(params.get("employee_id"))
+    work_order_id = parse_int(params.get("work_order_id"))
+    workrun_statuses = parse_enum_list(params.get("workrun_status"), WorkRunStatus, "workrun_status")
+    open_only = parse_bool(params.get("open_only"))
 
     a_query = (
         db.session.query(WorkRunAssignment)
@@ -40,6 +44,13 @@ def compose(params):
     )
     if employee_id:
         a_query = a_query.filter(WorkRunAssignment.employee_id == employee_id)
+    # WorkRun-side filters via EXISTS (avoids clashing with the joinedload).
+    if work_order_id:
+        a_query = a_query.filter(WorkRunAssignment.work_run.has(WorkRun.work_order_id == work_order_id))
+    if workrun_statuses:
+        a_query = a_query.filter(WorkRunAssignment.work_run.has(WorkRun.status.in_(workrun_statuses)))
+    if open_only:
+        a_query = a_query.filter(WorkRunAssignment.to_time.is_(None))
 
     assignments = a_query.order_by(WorkRunAssignment.from_time.asc()).all()
     if not assignments:

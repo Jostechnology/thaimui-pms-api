@@ -4,8 +4,9 @@ from collections import defaultdict
 from datetime import datetime
 
 from app.app import db
-from app.con_sqlalchemy import SalesOrder, SalesOrderStatus
+from app.con_sqlalchemy import SalesOrder, SalesOrderStatus, UrgencyLevel
 from app.exception import ValidationError
+from app.reports._filters import parse_enum_list
 from app.utils import convert_start_date, convert_end_date
 
 _CYCLE_BUCKETS = ["0-1", "1-3", "3-7", "7-14", "14-30", "30+"]
@@ -45,12 +46,15 @@ def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
     statuses = _parse_statuses(params.get("status"))
+    urgencies = parse_enum_list(params.get("urgency_level"), UrgencyLevel, "urgency_level")
 
     q = db.session.query(SalesOrder).filter(
         SalesOrder.created_date >= start, SalesOrder.created_date <= end,
     )
     if statuses is not None:
         q = q.filter(SalesOrder.status.in_(statuses))
+    if urgencies is not None:
+        q = q.filter(SalesOrder.urgency_level.in_(urgencies))
     q = q.order_by(SalesOrder.created_date.desc())
 
     now = datetime.now()

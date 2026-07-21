@@ -9,5 +9,7 @@ PARAMS_SCHEMA = {
         "from": {"type": "string", "required": True},
         "to":   {"type": "string", "required": True},
         "machine_id": {"type": "number", "required": False},
+        "machine_type_id": {"type": "number", "required": False},
+        "machine_status": {"type": "string", "required": False},  # RUNNING|DOWN|IDLE|OFFLINE (comma-list)
     }
 }

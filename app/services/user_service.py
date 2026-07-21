@@ -18,15 +18,12 @@ def _perm_cache_key(role_id) -> str:
 
 
 def build_permission_tree(role_id):
-    """Build the flat permission list ["MODULE_CODE.method", ...] for a role.
+    """Build the flat permission list ["MODULE_CODE.method", ...] for a role
+    from its explicitly-granted, active permissions. Reads MySQL (no cache).
 
-    Admin returns the wildcard ["*"]. Reads MySQL directly (no cache)."""
-    role = role_repository.get_role_by_id(role_id)
-    if not role:
-        return []
-    if role.role_name == "Admin":
-        return ["*"]
-
+    Note: no Admin ["*"] wildcard — the tree must be the concrete granted list
+    so the FE can expand it into menu items. Grant Admin every permission at the
+    role level (seed) if full access is wanted."""
     role_permission = role_repository.get_active_permissions_by_role(role_id) or []
     result = GetRolePremissionSchema(many=True).dump(role_permission)
     module_code_map = module_repository.get_module_id_code_map()

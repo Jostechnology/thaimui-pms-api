@@ -5,13 +5,17 @@ from sqlalchemy.orm import selectinload
 from app.app import db
 from app.con_sqlalchemy import (
     QCWorkOrder, SalesItem, TestResult, TestResultItem, TestResultStatus,
+    TestSessionStatus, TestType,
 )
+from app.reports._filters import parse_enum_list
 from app.utils import convert_start_date, convert_end_date
 
 
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
+    session_statuses = parse_enum_list(params.get("session_status"), TestSessionStatus, "session_status")
+    test_types = parse_enum_list(params.get("test_type"), TestType, "test_type")
 
     q = (
         db.session.query(TestResult, QCWorkOrder, SalesItem)
@@ -23,8 +27,12 @@ def compose(params):
             TestResult.created_date <= end,
             TestResult.overall_status == TestResultStatus.FAILED,
         )
-        .order_by(TestResult.test_result_id.desc())
     )
+    if session_statuses:
+        q = q.filter(TestResult.session_status.in_(session_statuses))
+    if test_types:
+        q = q.filter(TestResult.test_type.in_(test_types))
+    q = q.order_by(TestResult.test_result_id.desc())
 
     rows = []
     total_claimed = 0

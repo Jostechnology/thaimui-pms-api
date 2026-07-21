@@ -106,6 +106,15 @@ def has_incomplete_items_for_sales_order(doc_entry, exclude_sales_item_id):
     return query.first() is not None
 
 
+def has_incomplete_items(doc_entry):
+    """Return True if any SalesItem for this order is not yet COMPLETED."""
+    query = db.session.query(SalesItem).filter(
+        SalesItem.doc_entry == doc_entry,
+        SalesItem.status != SalesItemStatus.COMPLETED,
+    )
+    return query.first() is not None
+
+
 def get_sales_items_by_doc_entry(doc_entry):
     try:
         return (

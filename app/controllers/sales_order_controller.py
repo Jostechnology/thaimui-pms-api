@@ -4,7 +4,7 @@ from flask import request, jsonify, g
 from app.exception import DisabledAction
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
 from app.services import cache_service, user_service
-from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order, get_sales_items_and_material_lists, delete_sales_order_by_doc_num
+from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order, get_sales_items_and_material_lists, delete_sales_order_by_doc_num, close_sales_order
 from app.services.storage_service import PRESIGNED_CACHE_TTL
 from app.utils import decode_token, check_true_permissions
 import base64, json
@@ -232,6 +232,17 @@ def api_delete_sales_order_cascade(doc_num):
         for p in range(1, 4):
             cache_service.delete(_sales_order_page_cache(p, 10, g.branch_id))
         return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/sales_order/<int:doc_entry>/finish", methods=["POST"])
+@verify_required
+def api_finish_sales_order(doc_entry):
+    try:
+        result = close_sales_order(doc_entry)
+        cache_service.delete(_sales_order_detail_cache(doc_entry, g.branch_id))
+        return jsonify({"data": SalesOrderSchema().dump(result), "success": True}), 200
     except Exception:
         raise
 

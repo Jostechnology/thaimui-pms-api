@@ -1,7 +1,11 @@
 """Testing cost report — TestResultCost per TestResult."""
 
 from app.app import db
-from app.con_sqlalchemy import QCWorkOrder, SalesItem, TestResult, TestResultCost
+from app.con_sqlalchemy import (
+    QCWorkOrder, SalesItem, TestResult, TestResultCost,
+    TestResultStatus, TestSessionStatus, TestType,
+)
+from app.reports._filters import parse_enum_list
 from app.utils import convert_start_date, convert_end_date
 
 
@@ -11,6 +15,9 @@ def _z(v): return float(v) if v is not None else 0.0
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
+    overall_statuses = parse_enum_list(params.get("overall_status"), TestResultStatus, "overall_status")
+    session_statuses = parse_enum_list(params.get("session_status"), TestSessionStatus, "session_status")
+    test_types = parse_enum_list(params.get("test_type"), TestType, "test_type")
 
     q = (
         db.session.query(TestResult, TestResultCost, QCWorkOrder, SalesItem)
@@ -18,8 +25,14 @@ def compose(params):
         .outerjoin(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
         .outerjoin(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
         .filter(TestResult.created_date >= start, TestResult.created_date <= end)
-        .order_by(TestResult.test_result_id.desc())
     )
+    if overall_statuses:
+        q = q.filter(TestResult.overall_status.in_(overall_statuses))
+    if session_statuses:
+        q = q.filter(TestResult.session_status.in_(session_statuses))
+    if test_types:
+        q = q.filter(TestResult.test_type.in_(test_types))
+    q = q.order_by(TestResult.test_result_id.desc())
 
     rows = []
     totals = {"material": 0.0, "machine": 0.0, "labor": 0.0, "total": 0.0}

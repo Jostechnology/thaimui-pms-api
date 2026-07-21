@@ -1,7 +1,15 @@
 from app.api_auth import verify_required
 from app.app import app
 from flask import request, jsonify
-from app.services.employee_service import delete_employee, get_all_employees, create_employee, get_employee_by_id, update_employee
+from app.services.employee_service import (
+    delete_employee,
+    get_all_employees,
+    create_employee,
+    get_employee_by_id,
+    update_employee,
+    set_employee_photo,
+    delete_employee_photo,
+)
 
 
 @app.route("/api/get_employee_list", methods=["GET"])
@@ -50,6 +58,27 @@ def api_update_employee(employee_id):
     try:
         data = request.get_json() or {}
         result = update_employee(employee_id, data)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/employee/<int:employee_id>/photo", methods=["POST"])
+@verify_required
+def api_set_employee_photo(employee_id):
+    try:
+        data = request.get_json() or {}
+        result = set_employee_photo(employee_id, data)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/employee/<int:employee_id>/photo", methods=["DELETE"])
+@verify_required
+def api_delete_employee_photo(employee_id):
+    try:
+        result = delete_employee_photo(employee_id)
         return jsonify({"data": result, "success": True}), 200
     except Exception:
         raise

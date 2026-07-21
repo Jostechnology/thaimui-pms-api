@@ -4,7 +4,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from app.app import db
-from app.con_sqlalchemy import Machine, TestResultMachine, WorkRunMachine
+from app.con_sqlalchemy import Machine, MachineStatus, TestResultMachine, WorkRunMachine
+from app.reports._filters import parse_enum_list, parse_int
 from app.utils import convert_start_date, convert_end_date
 
 
@@ -22,14 +23,22 @@ def _overlap_seconds(a_start, a_end, p_start, p_end):
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
-    machine_id = params.get("machine_id")
+    machine_id = parse_int(params.get("machine_id"))
+    machine_type_id = parse_int(params.get("machine_type_id"))
+    machine_statuses = parse_enum_list(params.get("machine_status"), MachineStatus, "machine_status")
 
     period_seconds = max(0, int((end - start).total_seconds()))
     period_days = period_seconds / 86400.0
 
+    # `machines` is the authoritative filtered set — usage for machines outside
+    # it is dropped below, so machine_type/status filters actually restrict rows.
     m_query = db.session.query(Machine)
     if machine_id:
         m_query = m_query.filter(Machine.machine_id == machine_id)
+    if machine_type_id:
+        m_query = m_query.filter(Machine.machine_type_id == machine_type_id)
+    if machine_statuses:
+        m_query = m_query.filter(Machine.status.in_(machine_statuses))
     machines = {m.machine_id: m for m in m_query.all()}
 
     wq = (
@@ -50,14 +59,14 @@ def compose(params):
     used_by_machine = defaultdict(lambda: {"workrun_seconds": 0, "test_seconds": 0})
 
     for wrm in wq.all():
-        if machine_id and wrm.machine_id != machine_id:
+        if wrm.machine_id not in machines:
             continue
         used_by_machine[wrm.machine_id]["workrun_seconds"] += _overlap_seconds(
             wrm.from_time, wrm.to_time, start, end
         )
 
     for trm in tq.all():
-        if machine_id and trm.machine_id != machine_id:
+        if trm.machine_id not in machines:
             continue
         used_by_machine[trm.machine_id]["test_seconds"] += _overlap_seconds(
             trm.from_time, trm.to_time, start, end
@@ -68,10 +77,8 @@ def compose(params):
     total_available = 0
     for mid, used in used_by_machine.items():
         m = machines.get(mid)
-        if not m and machine_id is None:
-            # machine might not be in current query (e.g. deleted) — still include with placeholder
-            pass
-        if machine_id and mid != machine_id:
+        if m is None:
+            # outside the filtered machine set — skip.
             continue
         whpd = (m.working_hours_per_day if m and m.working_hours_per_day else 0) or 0
         available_hours = round(whpd * period_days, 2)
@@ -81,7 +88,7 @@ def compose(params):
             "machine_id": mid,
             "machine_code": m.machine_code if m else None,
             "machine_name": m.machine_name if m else None,
-            "machine_type": m.machine_type.machine_type_name if (m and m.machine_type and hasattr(m.machine_type, "machine_type_name")) else None,
+            "machine_type": m.machine_type.type_name if (m and m.machine_type) else None,
             "working_hours_per_day": whpd,
             "available_hours": available_hours,
             "workrun_hours": round(used["workrun_seconds"] / 3600.0, 2),

@@ -3,7 +3,7 @@ from app.repositories import material_repository, sales_item_repository, sales_o
 from app.extensions import center_service
 from app.app import db
 from app.services import branch_service, cache_service, work_order_service, transaction_service
-from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesOrderStatus, UrgencyLevel
+from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesItemStatus, SalesOrderStatus, UrgencyLevel
 from app.extensions import wms_service
 from app.utils import convert_start_date, convert_end_date
 
@@ -222,10 +222,28 @@ def create_sales_order(data):
                 sales_item.material_list.append(material_list)
 
         db.session.add(sales_order)
+        _finish_if_no_work(sales_order)
         return sales_order
     except Exception:
         db.session.rollback()
         raise
+
+
+def _finish_if_no_work(sales_order):
+    """No item needs produce/test (or order has no items) -> nothing to work on.
+    Mark those no-work items COMPLETED and finish the order through the same
+    funnel (sales_order_finish -> WMS). Returns True if the order was finished.
+
+    Raises OuterServicesError if WMS finish fails; the caller rolls back, so the
+    order is never left COMPLETED on our side while WMS is not — center resends.
+    """
+    items = sales_order.sales_items
+    if any(si.produce or si.test for si in items):
+        return False
+    for si in items:
+        si.status = SalesItemStatus.COMPLETED
+    sales_order_finish(sales_order)
+    return True
 
 def delete_sales_order_by_doc_num(doc_num, branch_id=None):
     try:
@@ -247,8 +265,38 @@ def sales_order_finish(sales_order : SalesOrder):
         print(f'{res.get("success", "LMAOOO")}')
         if res.get("success", False) == False:
             raise OuterServicesError(f"WMS ไม่สามารถจบ Order ได้ : {res.get('error')}")
-        
+
     except Exception:
+        raise
+
+
+def close_sales_order(doc_entry):
+    """Manual close / retry lever for an order stuck at INPROGRESS.
+
+    Marks no-work items (produce=False and test=False) COMPLETED, then requires
+    every remaining item to be COMPLETED before finishing through the same funnel
+    (sales_order_finish -> WMS). Raises if real work is still pending, or if WMS
+    finish fails (rolled back -> caller can retry once WMS has caught up).
+    """
+    try:
+        sales_order = sales_order_repository.get_sales_order_by_doc_entry(doc_entry)
+        if sales_order.status == SalesOrderStatus.COMPLETED:
+            raise ValidationError("Order นี้ถูกปิดไปแล้ว")
+
+        items = sales_item_repository.get_sales_items_by_doc_entry(doc_entry)
+        for si in items:
+            if not (si.produce or si.test):
+                si.status = SalesItemStatus.COMPLETED
+        db.session.flush()
+
+        if sales_item_repository.has_incomplete_items(doc_entry):
+            raise ValidationError("ยังมีรายการที่ต้องผลิต/เทสยังไม่เสร็จ ปิด Order ไม่ได้")
+
+        sales_order_finish(sales_order)
+        db.session.commit()
+        return sales_order
+    except Exception:
+        db.session.rollback()
         raise
         
     

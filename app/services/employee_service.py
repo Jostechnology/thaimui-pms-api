@@ -1,6 +1,10 @@
+import uuid
+
 from app.con_sqlalchemy import Employee, User, EmployeeStatus
+from app.exception import NotFoundError
 from app.ma_sqlalchemy import EmployeeSchema
 from app.repositories import employee_repository
+from app.services import storage_service
 from app.app import db
 from flask import g
 
@@ -119,6 +123,8 @@ def update_employee(employee_id, data):
             except Exception:
                 pass
         employee.user_id = data.get("user_id", employee.user_id)
+        if "is_active" in data:
+            employee.is_active = bool(data.get("is_active"))
         db.session.flush()
         db.session.refresh(employee)
         db.session.commit()
@@ -129,13 +135,57 @@ def update_employee(employee_id, data):
 
 
 def delete_employee(employee_id):
+    """Soft delete — mark inactive so assignment/salary history stays intact."""
     try:
         employee = Employee.query.get(employee_id)
         if not employee:
-            raise Exception(f"Employee id {employee_id} not found")
-        db.session.delete(employee)
+            raise NotFoundError(f"Employee id {employee_id} not found")
+        employee.is_active = False
         db.session.commit()
-        return {"message": f"Deleted employee id {employee_id} successfully"}
+        return {
+            "employee_id": employee.employee_id,
+            "message": f"Employee id {employee_id} marked inactive successfully",
+            "is_active": employee.is_active,
+        }
     except Exception:
         db.session.rollback()
         raise
+
+
+def set_employee_photo(employee_id, data):
+    """Upload/replace the employee profile photo (base64 data URL → MinIO)."""
+    employee = Employee.query.get(employee_id)
+    if not employee:
+        raise NotFoundError(f"Employee id {employee_id} not found")
+
+    image_bytes, content_type = storage_service.decode_data_url(data.get("image_base64"))
+    object_key = f"employee/{employee_id}/photo/{uuid.uuid4().hex}"
+    try:
+        storage_service.upload_image(image_bytes, object_key, content_type=content_type)
+        old_key = employee.photo_key
+        employee.photo_key = object_key
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    if old_key:
+        try:
+            storage_service.delete_image(old_key)
+        except Exception:
+            pass  # best-effort cleanup; DB already points to the new photo
+    return EmployeeSchema().dump(employee)
+
+
+def delete_employee_photo(employee_id):
+    """Remove the employee profile photo (storage cleanup is best-effort)."""
+    employee = Employee.query.get(employee_id)
+    if not employee:
+        raise NotFoundError(f"Employee id {employee_id} not found")
+    if employee.photo_key:
+        try:
+            storage_service.delete_image(employee.photo_key)
+        except Exception:
+            pass
+        employee.photo_key = None
+        db.session.commit()
+    return EmployeeSchema().dump(employee)

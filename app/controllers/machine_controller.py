@@ -7,6 +7,8 @@ from app.services.machine_service import (
     create_machine,
     update_machine,
     delete_machine,
+    set_machine_photo,
+    delete_machine_photo,
 )
 
 
@@ -67,6 +69,27 @@ def api_update_machine(machine_id):
     try:
         data = request.get_json() or {}
         result = update_machine(machine_id, data)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/machine/<int:machine_id>/photo", methods=["POST"])
+@verify_required
+def api_set_machine_photo(machine_id):
+    try:
+        data = request.get_json() or {}
+        result = set_machine_photo(machine_id, data)
+        return jsonify({"data": result, "success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/machine/<int:machine_id>/photo", methods=["DELETE"])
+@verify_required
+def api_delete_machine_photo(machine_id):
+    try:
+        result = delete_machine_photo(machine_id)
         return jsonify({"data": result, "success": True}), 200
     except Exception:
         raise

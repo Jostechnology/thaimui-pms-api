@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from app.app import db
 from app.con_sqlalchemy import Employee, WorkRun, WorkRunAssignment, WorkRunStatus
+from app.reports._filters import parse_int
 from app.utils import convert_start_date, convert_end_date
 
 
@@ -19,6 +20,8 @@ def _hours_between(a, b):
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
+    employee_id = parse_int(params.get("employee_id"))
+    work_order_id = parse_int(params.get("work_order_id"))
 
     # All assignments in window
     a_query = (
@@ -26,6 +29,10 @@ def compose(params):
         .options(joinedload(WorkRunAssignment.employee), joinedload(WorkRunAssignment.work_run))
         .filter(WorkRunAssignment.from_time >= start, WorkRunAssignment.from_time <= end)
     )
+    if employee_id:
+        a_query = a_query.filter(WorkRunAssignment.employee_id == employee_id)
+    if work_order_id:
+        a_query = a_query.filter(WorkRunAssignment.work_run.has(WorkRun.work_order_id == work_order_id))
     assignments = a_query.all()
 
     # Group hours per (work_run, employee) + per work_run total hours

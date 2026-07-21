@@ -8,5 +8,7 @@ PARAMS_SCHEMA = {
     "params": {
         "from": {"type": "string", "required": True},
         "to":   {"type": "string", "required": True},
+        "employee_id": {"type": "number", "required": False},
+        "work_order_id": {"type": "number", "required": False},
     }
 }

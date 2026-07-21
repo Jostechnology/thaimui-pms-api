@@ -12,6 +12,9 @@ PARAMS_SCHEMA = {
         "from": {"type": "string", "required": True},
         "to":   {"type": "string", "required": True},
         "employee_id": {"type": "number", "required": False},
+        "work_order_id": {"type": "number", "required": False},
+        "workrun_status": {"type": "string", "required": False},  # PENDING|INPROGRESS|PAUSED|COMPLETED (comma-list)
+        "open_only": {"type": "boolean", "required": False},
     }
 }
 

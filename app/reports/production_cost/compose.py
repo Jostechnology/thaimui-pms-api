@@ -3,7 +3,8 @@
 from sqlalchemy.orm import joinedload
 
 from app.app import db
-from app.con_sqlalchemy import WorkRun, WorkRunCost, WorkOrder, SalesItem
+from app.con_sqlalchemy import WorkRun, WorkRunCost, WorkOrder, SalesItem, WorkRunStatus
+from app.reports._filters import parse_enum_list, parse_int
 from app.utils import convert_start_date, convert_end_date
 
 
@@ -14,7 +15,8 @@ def _cost_or_zero(v):
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
-    work_order_id = params.get("work_order_id")
+    work_order_id = parse_int(params.get("work_order_id"))
+    workrun_statuses = parse_enum_list(params.get("workrun_status"), WorkRunStatus, "workrun_status")
 
     q = (
         db.session.query(WorkRun, WorkRunCost, WorkOrder, SalesItem)
@@ -25,6 +27,8 @@ def compose(params):
     )
     if work_order_id:
         q = q.filter(WorkRun.work_order_id == work_order_id)
+    if workrun_statuses:
+        q = q.filter(WorkRun.status.in_(workrun_statuses))
     q = q.order_by(WorkRun.work_run_id.desc())
 
     rows = []

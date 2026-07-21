@@ -7,12 +7,15 @@ from app.app import db
 from app.con_sqlalchemy import (
     SalesItem, WorkOrder, WorkRun, WorkRunReworkSource, WorkRunStatus,
 )
+from app.reports._filters import parse_bool, parse_int
 from app.utils import convert_start_date, convert_end_date
 
 
 def compose(params):
     start = convert_start_date(params["from"])
     end = convert_end_date(params["to"])
+    work_order_id = parse_int(params.get("work_order_id"))
+    has_outstanding = parse_bool(params.get("has_outstanding"))
 
     # Sub: how much of this WR's defect has been consumed by rework runs
     consumed_subq = (
@@ -36,8 +39,15 @@ def compose(params):
             WorkRun.usable_qty.isnot(None),
             WorkRun.usable_qty < WorkRun.quantity,
         )
-        .order_by(WorkRun.work_run_id.desc())
     )
+    if work_order_id:
+        q = q.filter(WorkRun.work_order_id == work_order_id)
+    if has_outstanding:
+        # defect (quantity - usable) not yet consumed by rework
+        q = q.filter(
+            (WorkRun.quantity - WorkRun.usable_qty) - func.coalesce(consumed_subq.c.consumed, 0) > 0
+        )
+    q = q.order_by(WorkRun.work_run_id.desc())
 
     rows = []
     total_planned = 0

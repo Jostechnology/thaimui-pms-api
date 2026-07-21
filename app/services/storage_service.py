@@ -26,6 +26,19 @@ def _require_client():
         raise OuterServicesError("Storage service is not initialised")
 
 
+def decode_data_url(data_url):
+    """Parse a base64 data URL into (bytes, content_type). Raises ValidationError on bad format."""
+    from app.exception import ValidationError
+    if not data_url or not data_url.startswith("data:"):
+        raise ValidationError("รูปภาพต้องเป็น base64 data URL (data:<type>;base64,...)")
+    try:
+        header, encoded = data_url.split(",", 1)
+        content_type = header.split(";")[0][5:]  # strip "data:"
+        return base64.b64decode(encoded), content_type
+    except Exception:
+        raise ValidationError("รูปแบบ base64 data URL ไม่ถูกต้อง")
+
+
 def upload_image(file_bytes: bytes, object_key: str, content_type: str = "image/jpeg") -> str:
     """Upload bytes to MinIO. Returns object_key — store this in the DB."""
     _require_client()
