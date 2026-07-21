@@ -1,7 +1,7 @@
 import logging
-from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem, WorkRunPickingItem, AllocationMode
+from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem
 from app.repositories import work_run_repository, work_order_repository, test_result_repository, picking_request_repository, material_list_repository
-from app.services import transaction_service, document_code_service, picking_allocation_service, work_order_service
+from app.services import transaction_service, document_code_service, work_order_service
 from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, MissingFieldsError
@@ -139,27 +139,6 @@ def _compute_and_save_work_run_cost(work_run, breaks):
             ot_labor_cost=round(ot_labor_cost, 6),
             total_cost=total_cost,
         ))
-
-
-def _apply_actuals_reverse_fifo(allocation_rows, qty_used_actual):
-    """
-    Distribute qty_used_actual across FIFO-ordered allocation rows.
-    Releases leftover from the LAST rows first (reverse FIFO).
-    Sets qty_consumed on each row.
-    """
-    total_allocated = sum(r.qty_allocated for r in allocation_rows)
-    if qty_used_actual > total_allocated:
-        for r in allocation_rows:
-            r.qty_consumed = r.qty_allocated
-        return
-    to_release = total_allocated - qty_used_actual
-    for r in reversed(allocation_rows):
-        if to_release <= 0:
-            r.qty_consumed = r.qty_allocated
-        else:
-            release_this = min(r.qty_allocated, to_release)
-            r.qty_consumed = r.qty_allocated - release_this
-            to_release -= release_this
 
 
 def get_work_run_by_id(work_run_id):
@@ -351,76 +330,31 @@ def _seed_required_items(work_run, work_order, rework_is_from_test=False, rework
 def start_work_run(work_run_id, data=None):
     """
     PENDING → INPROGRESS.
-    Allocates picking items either by FIFO (auto) or operator-chosen (manual).
-
-    data (optional):
-        allocation_mode: "auto" (default) or "manual"
-        material_sources: [{required_item_id, sources: [{picking_request_item_id, qty}]}]  — manual only
+    WMS owns actual stock — no qty allocation here. Gate: if the run has
+    material requirements, at least one SUCCESS PickingRequest must exist
+    on the SalesOrder.
     """
-    if data is None:
-        data = {}
-
-    allocation_mode_str = data.get("allocation_mode", "auto").upper()
-    if allocation_mode_str not in ("AUTO", "MANUAL"):
-        raise ValidationError(f"allocation_mode ไม่ถูกต้อง: {allocation_mode_str}")
-    is_manual = allocation_mode_str == "MANUAL"
-    mode_enum = AllocationMode.MANUAL if is_manual else AllocationMode.AUTO
-
     work_run = work_run_repository.get_work_run_by_id(work_run_id)
     if not work_run:
         raise NotFoundError(f"Work Run {work_run_id} not found")
     if work_run.status != WorkRunStatus.PENDING:
         raise ValidationError(f"Work Run must be PENDING to start (current: {work_run.status.value})")
 
+    work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id)
+
     required = work_run_repository.get_required_items(work_run_id)
-
-    shortages = []
-    all_allocations = []  # [(req, pri_id, qty)]
-
-    if is_manual:
-        manual_mat_sources = data.get("material_sources", [])
-        mat_source_map = {ms["required_item_id"]: ms["sources"] for ms in manual_mat_sources}
-
-    for req in required:
-        if not req.material_list_id:
-            continue
-        if is_manual:
-            sources = mat_source_map.get(req.id, [])
-            if not sources:
-                raise ValidationError(f"manual mode ต้องระบุ sources สำหรับ required item {req.id} ({req.item_code})")
-            allocs = picking_allocation_service.allocate_manual(sources, req.quantity)
-            all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
-        else:
-            candidates = picking_request_repository.get_available_picking_items_for_material(req.material_list_id)
-            try:
-                allocs = picking_allocation_service.allocate_fifo(candidates, req.quantity)
-                all_allocations.extend((req, pri_id, qty) for pri_id, qty in allocs)
-            except ValidationError:
-                available_qty = sum(
-                    max(0, pri.effective_quantity - picking_request_repository.get_total_committed_qty(pri.picking_request_item_id))
-                    for pri in candidates
-                )
-                shortages.append(f"\n{req.item_name} ({req.item_code}) ต้องการ {req.quantity} มีในคลัง {available_qty} \n")
-
-    if shortages:
-        raise ValidationError(
-            f"วัตถุดิบในคลังไม่พอสำหรับการเริ่มผลิต: \n {', '.join(shortages)}"
-        )
-
-    for req, pri_id, qty in all_allocations:
-        work_run_repository.create_picking_consumption(WorkRunPickingItem(
-            work_run_id=work_run_id,
-            picking_request_item_id=pri_id,
-            work_run_required_item_id=req.id,
-            qty_allocated=qty,
-            allocation_mode=mode_enum,
-        ))
+    needs_material = any(req.material_list_id for req in required)
+    if needs_material:
+        doc_entry = work_order.doc_entry if work_order else None
+        if not doc_entry or not picking_request_repository.has_success_picking_request(doc_entry):
+            raise ValidationError(
+                "ยังไม่มีคำขอเบิกที่สำเร็จ (SUCCESS) สำหรับ Sales Order นี้ — ไม่สามารถเริ่มผลิตได้"
+            )
 
     now = bangkok_now()
     work_run.status = WorkRunStatus.INPROGRESS
     work_run.start_date = now
 
-    work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id)
     if work_order and work_order.status != WorkOrderStatus.INPROGRESS:
         work_order.status = WorkOrderStatus.INPROGRESS
 
@@ -521,9 +455,8 @@ def complete_work_run(work_run_id, data):
     work_run.status = WorkRunStatus.COMPLETED
     work_run.end_date = now
 
-    # Apply material actuals — release leftover back to pool via reverse-FIFO
+    # Record material actuals (informational only — WMS owns real stock)
     material_actuals = data.get("material_actuals", [])
-    reported_req_ids = set()
     for actual in material_actuals:
         req_id = actual.get("work_run_required_item_id")
         if req_id is None:
@@ -537,17 +470,6 @@ def complete_work_run(work_run_id, data):
             raise ValidationError(f"required_item {req_id} ไม่ได้อยู่ใน WorkRun นี้")
 
         req.qty_consumed_actual = qty_used
-        allocation_rows = work_run_repository.get_wrpi_rows_for_required_item(req_id)
-        _apply_actuals_reverse_fifo(allocation_rows, qty_used)
-        reported_req_ids.add(req_id)
-
-    # Rows not reported → default full consumption
-    all_required = work_run_repository.get_required_items(work_run_id)
-    for req in all_required:
-        if req.id not in reported_req_ids:
-            allocation_rows = work_run_repository.get_wrpi_rows_for_required_item(req.id)
-            for r in allocation_rows:
-                r.qty_consumed = r.qty_allocated
 
     # Flush first, then expire all session objects so that identity map cache
     # (populated by get_open_assignments / get_open_machines / get_required_items
@@ -572,6 +494,14 @@ def assign_employee(work_run_id, employee_id):
         raise NotFoundError(f"Work Run {work_run_id} not found")
     if work_run.status not in (WorkRunStatus.INPROGRESS, WorkRunStatus.PAUSED):
         raise ValidationError("Can only assign employees to an active work run (INPROGRESS or PAUSED)")
+
+    from app.con_sqlalchemy import Employee
+    employee_query = db.session.query(Employee).filter(Employee.employee_id == employee_id)
+    employee = employee_query.first()
+    if not employee:
+        raise NotFoundError(f"Employee {employee_id} not found")
+    if not employee.is_active:
+        raise ValidationError(f"Employee {employee_id} is disabled and cannot be assigned")
 
     existing = work_run_repository.get_open_assignment(work_run_id, employee_id)
     if existing:
@@ -611,6 +541,14 @@ def assign_machine(work_run_id, machine_id):
     if work_run.status not in (WorkRunStatus.INPROGRESS, WorkRunStatus.PAUSED):
         raise ValidationError("Can only assign machines to an active work run (INPROGRESS or PAUSED)")
 
+    from app.con_sqlalchemy import Machine
+    machine_query = db.session.query(Machine).filter(Machine.machine_id == machine_id)
+    machine = machine_query.first()
+    if not machine:
+        raise NotFoundError(f"Machine {machine_id} not found")
+    if not machine.is_active:
+        raise ValidationError(f"Machine {machine_id} is disabled and cannot be assigned")
+
     existing = work_run_repository.get_open_machine(work_run_id, machine_id)
     if existing:
         raise ValidationError(f"Machine {machine_id} is already assigned to this work run")
@@ -622,10 +560,7 @@ def assign_machine(work_run_id, machine_id):
     work_run_repository.save_machine_entry(machine_entry)
     db.session.flush()
 
-    from app.con_sqlalchemy import Machine
-    machine = db.session.query(Machine).filter(Machine.machine_id == machine_id).first()
-    if machine:
-        _create_machine_cost_record(machine_entry, machine)
+    _create_machine_cost_record(machine_entry, machine)
 
     db.session.commit()
     return work_run_repository.get_work_run_display(work_run_id)
@@ -850,17 +785,6 @@ def delete_required_item(required_item_id):
         raise NotFoundError(f"Required item {required_item_id} not found")
     db.session.delete(req)
     db.session.commit()
-
-
-def get_pick_requests_for_work_run(work_run_id):
-    work_run = work_run_repository.get_work_run_by_id(work_run_id)
-    if not work_run:
-        raise NotFoundError(f"Work Run {work_run_id} not found")
-    required = work_run_repository.get_required_items(work_run_id)
-    material_list_ids = [r.material_list_id for r in required if r.material_list_id]
-    if not material_list_ids:
-        return []
-    return picking_request_repository.get_available_pick_requests_for_work_run(material_list_ids)
 
 
 def get_material_using_in_work_order_of_work_run(work_run_id):

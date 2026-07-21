@@ -1,7 +1,7 @@
 import time
 
 from app.api_auth import _log_timer
-from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem, WorkRunPickingItem
+from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem
 from app.app import db
 from sqlalchemy.orm import selectinload, joinedload
 
@@ -154,21 +154,6 @@ def get_required_item_by_id(required_item_id):
         .filter(WorkRunRequiredItem.id == required_item_id)
     )
     return query.first()
-
-
-def create_picking_consumption(work_run_picking_item):
-    db.session.add(work_run_picking_item)
-    return work_run_picking_item
-
-
-def get_wrpi_rows_for_required_item(work_run_required_item_id):
-    """WRPI rows allocated for a specific required item, ordered FIFO ascending."""
-    query = (
-        db.session.query(WorkRunPickingItem)
-        .filter(WorkRunPickingItem.work_run_required_item_id == work_run_required_item_id)
-        .order_by(WorkRunPickingItem.picking_request_item_id.asc())
-    )
-    return query.all()
 
 
 # --- Assignment management ---

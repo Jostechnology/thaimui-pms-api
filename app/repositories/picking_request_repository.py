@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus, TestResultPickingItem, WorkRunPickingItem, PickingItemAdjustment, TestResult, WorkRun, SalesOrder
+from app.con_sqlalchemy import PickingRequest, PickingRequestItem, PickingRequestStatus, SalesOrder
 from app.app import db
 from sqlalchemy import or_, cast, String
 from sqlalchemy.orm import joinedload, selectinload, contains_eager
@@ -26,14 +26,10 @@ def get_picking_request_detail_by_id(picking_request_id):
 
 
 def get_picking_request_full_detail_by_id(picking_request_id):
-    """Full detail: items + each item's test_result/work_run consumptions + adjustments (with reallocate counterparty)."""
+    """Full detail: sales_order + items."""
     query = db.session.query(PickingRequest).options(
         joinedload(PickingRequest.sales_order),
-        selectinload(PickingRequest.items).selectinload(PickingRequestItem.test_result_consumptions).selectinload(TestResultPickingItem.test_result),
-        selectinload(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions).selectinload(WorkRunPickingItem.work_run),
-        selectinload(PickingRequest.items).selectinload(PickingRequestItem.adjustments).selectinload(PickingItemAdjustment.counterparty).joinedload(PickingRequestItem.picking_request),
-        selectinload(PickingRequest.items).selectinload(PickingRequestItem.adjustments).selectinload(PickingItemAdjustment.counterparty).joinedload(PickingRequestItem.sales_item),
-        selectinload(PickingRequest.items).selectinload(PickingRequestItem.adjustments).selectinload(PickingItemAdjustment.counterparty).joinedload(PickingRequestItem.material_list),
+        selectinload(PickingRequest.items),
     ).filter(PickingRequest.picking_request_id == picking_request_id)
     return query.first()
 
@@ -52,189 +48,13 @@ def get_picking_request_item_by_id(picking_request_item_id):
     return query.first()
 
 
-def get_available_picking_items_for_sales_item(sales_item_id):
-    """PickingRequestItems where sales_item_id matches and parent PR is SUCCESS, ordered FIFO."""
-    query = (
-        db.session.query(PickingRequestItem)
-        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
-        .filter(
-            PickingRequestItem.sales_item_id == sales_item_id,
-            PickingRequest.status == PickingRequestStatus.SUCCESS,
-        )
-        .order_by(PickingRequestItem.picking_request_item_id.asc())
+def has_success_picking_request(doc_entry):
+    """True if at least one SUCCESS PickingRequest exists for the SalesOrder."""
+    query = db.session.query(PickingRequest.picking_request_id).filter(
+        PickingRequest.doc_entry == doc_entry,
+        PickingRequest.status == PickingRequestStatus.SUCCESS,
     )
-    return query.all()
-
-
-def get_available_picking_items_for_material(material_list_id):
-    """PickingRequestItems where material_list_id matches and parent PR is SUCCESS, ordered FIFO."""
-    query = (
-        db.session.query(PickingRequestItem)
-        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
-        .filter(
-            PickingRequestItem.material_list_id == material_list_id,
-            PickingRequest.status == PickingRequestStatus.SUCCESS,
-        )
-        .order_by(PickingRequestItem.picking_request_item_id.asc())
-    )
-    return query.all()
-
-
-def get_success_pris_for_line(doc_entry, sales_item_id=None, material_list_id=None):
-    """SUCCESS PRIs in a SO matching the given line FK (exactly one of the two FK args must be set)."""
-    query = (
-        db.session.query(PickingRequestItem)
-        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
-        .filter(
-            PickingRequest.doc_entry == doc_entry,
-            PickingRequest.status == PickingRequestStatus.SUCCESS,
-        )
-    )
-    if sales_item_id is not None:
-        query = query.filter(PickingRequestItem.sales_item_id == sales_item_id)
-    elif material_list_id is not None:
-        query = query.filter(PickingRequestItem.material_list_id == material_list_id)
-    else:
-        return []
-    return query.order_by(PickingRequestItem.picking_request_item_id.asc()).all()
-
-
-def get_reallocate_options(source_pri, doc_entry):
-    """Candidate targets for reallocate: SUCCESS PRIs, SalesItems, MaterialLists
-    in the same SO with matching item_code. Source PRI excluded."""
-    from app.con_sqlalchemy import SalesItem, MaterialList
-
-    item_code = source_pri.item_code
-
-    pris_query = (
-        db.session.query(PickingRequestItem)
-        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
-        .options(
-            contains_eager(PickingRequestItem.picking_request),
-            joinedload(PickingRequestItem.sales_item),
-            joinedload(PickingRequestItem.material_list),
-        )
-        .filter(
-            PickingRequest.doc_entry == doc_entry,
-            PickingRequest.status == PickingRequestStatus.SUCCESS,
-            PickingRequestItem.item_code == item_code,
-            PickingRequestItem.picking_request_item_id != source_pri.picking_request_item_id,
-        )
-        .order_by(PickingRequestItem.picking_request_item_id.asc())
-    )
-    pris = pris_query.all()
-
-    si_query = (
-        db.session.query(SalesItem)
-        .filter(SalesItem.doc_entry == doc_entry, SalesItem.item_code == item_code)
-        .order_by(SalesItem.sales_item_id.asc())
-    )
-    sales_items = si_query.all()
-
-    ml_query = (
-        db.session.query(MaterialList)
-        .join(SalesItem, SalesItem.sales_item_id == MaterialList.sales_item_id)
-        .filter(SalesItem.doc_entry == doc_entry, MaterialList.item_code == item_code)
-        .order_by(MaterialList.material_list_id.asc())
-    )
-    material_lists = ml_query.all()
-
-    return {
-        "picking_request_items": pris,
-        "sales_items": sales_items,
-        "material_lists": material_lists,
-    }
-
-
-def get_total_committed_qty(picking_request_item_id):
-    """
-    Total committed qty from a PickingRequestItem across ALL consumers.
-    Active rows (qty_consumed IS NULL) count full qty_allocated.
-    Finished rows count actual qty_consumed (releases leftover to pool).
-    """
-    from sqlalchemy import func, case
-
-    trpi_sum = db.session.query(
-        func.coalesce(
-            func.sum(
-                case(
-                    (TestResultPickingItem.qty_consumed.isnot(None), TestResultPickingItem.qty_consumed),
-                    else_=TestResultPickingItem.qty_allocated,
-                )
-            ), 0
-        )
-    ).filter(
-        TestResultPickingItem.picking_request_item_id == picking_request_item_id
-    ).scalar()
-
-    wrpi_sum = db.session.query(
-        func.coalesce(
-            func.sum(
-                case(
-                    (WorkRunPickingItem.qty_consumed.isnot(None), WorkRunPickingItem.qty_consumed),
-                    else_=WorkRunPickingItem.qty_allocated,
-                )
-            ), 0
-        )
-    ).filter(
-        WorkRunPickingItem.picking_request_item_id == picking_request_item_id
-    ).scalar()
-
-    adj_sum = db.session.query(
-        func.coalesce(func.sum(PickingItemAdjustment.delta_qty), 0)
-    ).filter(
-        PickingItemAdjustment.picking_request_item_id == picking_request_item_id
-    ).scalar()
-
-    # adjustments reduce/increase the available pool, not committed qty directly
-    # net_committed = committed - adjustments (negative adj shrinks pool = same as more committed)
-    return trpi_sum + wrpi_sum - adj_sum
-
-
-def get_non_failed_picked_qty_for_sales_item(sales_item_id):
-    """Sum of quantities across all non-FAILED PR items for a sales_item."""
-    query = (
-        db.session.query(
-            db.func.coalesce(db.func.sum(PickingRequestItem.quantity), 0)
-        )
-        .join(PickingRequest, PickingRequest.picking_request_id == PickingRequestItem.picking_request_id)
-        .filter(
-            PickingRequestItem.sales_item_id == sales_item_id,
-            PickingRequest.status != PickingRequestStatus.FAILED,
-        )
-    )
-    return query.scalar()
-
-
-def create_picking_item_adjustment(adjustment):
-    db.session.add(adjustment)
-    return adjustment
-
-
-def get_picking_item_adjustment_by_id(adjustment_id):
-    query = db.session.query(PickingItemAdjustment).filter(
-        PickingItemAdjustment.id == adjustment_id
-    )
-    return query.first()
-
-
-def get_picking_item_adjustments_by_item(picking_request_item_id, page, per_page):
-    query = db.session.query(PickingItemAdjustment).filter(
-        PickingItemAdjustment.picking_request_item_id == picking_request_item_id
-    ).order_by(PickingItemAdjustment.id.desc())
-    result = query.paginate(page=page, per_page=per_page, error_out=False)
-    return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
-
-
-def get_picking_item_adjustments_by_picking_request(picking_request_id, page, per_page):
-    query = (
-        db.session.query(PickingItemAdjustment)
-        .join(PickingRequestItem, PickingRequestItem.picking_request_item_id == PickingItemAdjustment.picking_request_item_id)
-        .filter(PickingRequestItem.picking_request_id == picking_request_id)
-        .order_by(PickingItemAdjustment.id.desc())
-    )
-    result = query.paginate(page=page, per_page=per_page, error_out=False)
-    return {"items": result.items, "total": result.total, "page": result.page, "pages": result.pages}
+    return query.first() is not None
 
 
 def get_picking_request_list(page, per_page, search="", status=None, doc_entry=None, start_date=None, end_date=None):
@@ -277,7 +97,7 @@ def get_by_wms_reference_repo(wms_reference):
     pr = db.session.query(PickingRequest).filter(PickingRequest.wms_reference == wms_reference).first()
     if pr is None:
         raise NotFoundError(f"ไม่พบ Picking Request WMS_Reference : {wms_reference}")
-    
+
     return pr
 
 
@@ -287,58 +107,3 @@ def get_by_code_repo(picking_request_code):
         raise NotFoundError(f"ไม่พบ Picking Request Code : {picking_request_code}")
 
     return pr
-
-
-def get_available_pick_requests_for_test_result(sales_item_id=None, material_list_ids=None):
-    """SUCCESS PRs with items matching sales_item_id (non-produced) OR any material_list_id.
-    items filtered to matching rows only, with consumptions and adjustments loaded."""
-    filters = []
-    if sales_item_id:
-        filters.append(PickingRequestItem.sales_item_id == sales_item_id)
-    if material_list_ids:
-        filters.append(PickingRequestItem.material_list_id.in_(material_list_ids))
-    if not filters:
-        return []
-
-    item_filter = or_(*filters)
-    query = (
-        db.session.query(PickingRequest)
-        .join(
-            PickingRequestItem,
-            (PickingRequestItem.picking_request_id == PickingRequest.picking_request_id)
-            & item_filter
-        )
-        .filter(PickingRequest.status == PickingRequestStatus.SUCCESS)
-        .options(
-            joinedload(PickingRequest.sales_order),
-            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions),
-            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.test_result_consumptions),
-            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.adjustments),
-        )
-        .distinct()
-        .order_by(PickingRequest.picking_request_id.asc())
-    )
-    return query.all()
-
-
-def get_available_pick_requests_for_work_run(material_list_ids):
-    """SUCCESS PickingRequests that have items matching any of the given material_list_ids.
-    items filtered to matching materials only, with consumptions and adjustments loaded for availability calc."""
-    query = (
-        db.session.query(PickingRequest)
-        .join(
-            PickingRequestItem,
-            (PickingRequestItem.picking_request_id == PickingRequest.picking_request_id)
-            & (PickingRequestItem.material_list_id.in_(material_list_ids))
-        )
-        .filter(PickingRequest.status == PickingRequestStatus.SUCCESS)
-        .options(
-            joinedload(PickingRequest.sales_order),
-            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.work_run_consumptions),
-            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.test_result_consumptions),
-            contains_eager(PickingRequest.items).selectinload(PickingRequestItem.adjustments),
-        )
-        .distinct()
-        .order_by(PickingRequest.picking_request_id.asc())
-    )
-    return query.all()

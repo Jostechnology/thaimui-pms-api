@@ -92,14 +92,12 @@ from .controllers import employee_salary
 from .controllers import qc_work_order_controller
 from .controllers import test_certificate_controller
 from .controllers import test_result_controller
-from .controllers import inventory_controller
 from .controllers import item_component_controller
 from .controllers import operation_cost_monthly_controller
 from .controllers import work_run_controller
 from .controllers import machine_controller
 from .controllers import pm_machine_controller
 from .controllers import picking_request_controller
-from .controllers import picking_item_adjustment_controller
 from .controllers import document_code_controller
 from .controllers import branch_controller
 from .controllers import component_template_controller

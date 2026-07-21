@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import PickingRequestItem, QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck, TestResultPhoto, TestResultSpec
+from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck, TestResultPhoto, TestResultSpec
 from app.app import db
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -10,7 +10,6 @@ def _test_result_options():
         selectinload(TestResult.photos),
         joinedload(TestResult.spec),
         joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
-        selectinload(TestResult.picking_item_sources).selectinload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
         selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
         selectinload(TestResult.assignments).joinedload(TestResultAssignment.employee),
         selectinload(TestResult.machines).joinedload(TestResultMachine.machine),
@@ -41,7 +40,6 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
             .options(
                 selectinload(TestResult.test_result_items),
                 joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
-                joinedload(TestResult.picking_item_sources).joinedload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
                 selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list)
             )
             .filter(TestResult.qc_work_order_id == qc_work_order_id)
@@ -198,16 +196,6 @@ def get_required_item_by_id(required_item_id):
         .filter(TestResultRequiredItem.id == required_item_id)
     )
     return query.first()
-
-
-def get_trpi_rows_for_required_item(test_result_required_item_id):
-    """TRPI rows allocated for a specific required item, ordered FIFO ascending."""
-    query = (
-        db.session.query(TestResultPickingItem)
-        .filter(TestResultPickingItem.test_result_required_item_id == test_result_required_item_id)
-        .order_by(TestResultPickingItem.picking_request_item_id.asc())
-    )
-    return query.all()
 
 
 # --- Assignment management ---

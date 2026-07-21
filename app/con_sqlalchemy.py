@@ -314,6 +314,7 @@ class Employee(AuditMixin):
     base_salary = db.Column(db.Float, nullable=False, default=0.0)
     day_rate = db.Column(db.Float, nullable=False, default=0.0)
     ot_hourly_rate = db.Column(db.Float, nullable=False, default=0.0)
+    photo_key = db.Column(db.String(500), nullable=True)
     work_run_assignments = db.relationship('WorkRunAssignment', back_populates='employee', lazy='noload')
     test_result_assignments = db.relationship('TestResultAssignment', back_populates='employee', lazy='noload')
     shift_override = db.relationship('EmployeeShift', back_populates='employee', uselist=False, lazy='noload')
@@ -377,7 +378,6 @@ class WorkRun(AuditMixin, BranchScopedMixin):
     rework_source_test_result = db.relationship('TestResult', foreign_keys=[rework_source_test_result_id], back_populates='rework_work_runs', lazy='noload')
     transactions              = db.relationship('WorkRunTransaction', back_populates='work_run', cascade='all, delete-orphan')
     required_items            = db.relationship('WorkRunRequiredItem', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
-    work_run_picking_consumptions = db.relationship('WorkRunPickingItem', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
     cost                      = db.relationship('WorkRunCost', foreign_keys='WorkRunCost.work_run_id', uselist=False, lazy='noload', overlaps='work_run')
 
 
@@ -544,6 +544,7 @@ class Machine(AuditMixin,BranchScopedMixin):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     is_second_hand = db.Column(db.Boolean, nullable=False, default=False)
     accumulated_hours = db.Column(db.Float, nullable=True, default=0.0)
+    photo_key = db.Column(db.String(500), nullable=True)
     machine_type_id = db.Column(db.Integer, db.ForeignKey('m_machine_type.machine_type_id'), nullable=True)
     machine_type = db.relationship('MachineType', back_populates='machines', lazy='joined')
     maintenances = db.relationship('MachineMaintenance', back_populates='machine', lazy='noload')
@@ -740,7 +741,6 @@ class TestResult(AuditMixin, BranchScopedMixin):
     photos                  = db.relationship('TestResultPhoto', back_populates='test_result', cascade='all, delete-orphan', order_by='TestResultPhoto.sequence', lazy='noload')
     spec                    = db.relationship('TestResultSpec', back_populates='test_result', uselist=False, cascade='all, delete-orphan', lazy='noload')
     work_run_sources        = db.relationship('TestResultWorkRun', back_populates='test_result', cascade='all, delete-orphan')
-    picking_item_sources    = db.relationship('TestResultPickingItem', back_populates='test_result', cascade='all, delete-orphan')
     required_items          = db.relationship('TestResultRequiredItem', back_populates='test_result', cascade='all, delete-orphan', lazy='noload')
     qc_work_order           = db.relationship('QCWorkOrder', back_populates='test_results', lazy='noload')
     rework_work_runs        = db.relationship('WorkRun', foreign_keys='WorkRun.rework_source_test_result_id', back_populates='rework_source_test_result', lazy='noload')
@@ -865,32 +865,6 @@ class TestResultWorkRun(BaseModel):
     work_run    = db.relationship('WorkRun',    back_populates='test_result_sources', lazy='noload')
 
 
-class AllocationMode(enum.Enum):
-    AUTO   = 'AUTO'    # FIFO-allocated by system
-    MANUAL = 'MANUAL'  # operator chose specific picking items
-
-
-class TestResultPickingItem(BaseModel):
-    """
-    Association: which PickingRequestItem(s) were allocated to a TestResult.
-    Used for both sales_item allocation (produce=False) and material allocation (test materials from QCItem).
-    qty_allocated = locked at start; qty_consumed = reported at finalize (None = use full allocation).
-    test_result_required_item_id set = came from material requirement; None = came from sales_item FIFO.
-    """
-    __tablename__ = "t_test_result_picking_item"
-    id                            = db.Column(db.Integer, primary_key=True)
-    test_result_id                = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
-    picking_request_item_id       = db.Column(db.Integer, db.ForeignKey('t_picking_request_item.picking_request_item_id', ondelete='CASCADE'), nullable=False)
-    test_result_required_item_id  = db.Column(db.Integer, db.ForeignKey('t_test_result_required_item.id', ondelete='SET NULL'), nullable=True)
-    qty_allocated                 = db.Column(db.Integer, nullable=False)
-    qty_consumed                  = db.Column(db.Integer, nullable=True)   # None = still active / use full allocation
-    allocation_mode               = db.Column(db.Enum(AllocationMode), nullable=False, default=AllocationMode.AUTO)
-
-    test_result               = db.relationship('TestResult', back_populates='picking_item_sources', lazy='noload')
-    picking_request_item      = db.relationship('PickingRequestItem', back_populates='test_result_consumptions', lazy='noload')
-    test_result_required_item = db.relationship('TestResultRequiredItem', back_populates='picking_item_allocations', lazy='noload')
-
-
 class WorkRunReworkSource(BaseModel):
     """Association: which source WorkRun(s) contributed defective items to a rework WorkRun, and how many."""
     __tablename__ = "t_work_run_rework_source"
@@ -916,33 +890,12 @@ class WorkRunRequiredItem(AuditMixin, BranchScopedMixin):
 
     work_run                 = db.relationship('WorkRun', back_populates='required_items', lazy='noload')
     material_list            = db.relationship('MaterialList', lazy='noload')
-    picking_item_allocations = db.relationship('WorkRunPickingItem', back_populates='work_run_required_item', lazy='noload')
-
-
-class WorkRunPickingItem(BaseModel):
-    """
-    Association: which PickingRequestItem(s) were allocated to a WorkRun.
-    qty_allocated = locked at start; qty_consumed = reported at complete (None = use full allocation).
-    work_run_required_item_id links back to which WorkRunRequiredItem triggered this allocation.
-    """
-    __tablename__ = "t_work_run_picking_item"
-    id                         = db.Column(db.Integer, primary_key=True)
-    work_run_id                = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
-    picking_request_item_id    = db.Column(db.Integer, db.ForeignKey('t_picking_request_item.picking_request_item_id', ondelete='CASCADE'), nullable=False)
-    work_run_required_item_id  = db.Column(db.Integer, db.ForeignKey('t_work_run_required_item.id', ondelete='SET NULL'), nullable=True)
-    qty_allocated              = db.Column(db.Integer, nullable=False)
-    qty_consumed               = db.Column(db.Integer, nullable=True)   # None = still active / use full allocation
-    allocation_mode            = db.Column(db.Enum(AllocationMode), nullable=False, default=AllocationMode.AUTO)
-
-    work_run              = db.relationship('WorkRun', back_populates='work_run_picking_consumptions', lazy='noload')
-    picking_request_item  = db.relationship('PickingRequestItem', back_populates='work_run_consumptions', lazy='noload')
-    work_run_required_item = db.relationship('WorkRunRequiredItem', back_populates='picking_item_allocations', lazy='noload')
 
 
 class TestResultRequiredItem(AuditMixin, BranchScopedMixin):
     """
     Material requirement for a TestResult, seeded from QCItem at create time.
-    qty_consumed_actual reported at finalize — triggers reverse-FIFO release on picking allocations.
+    qty_consumed_actual reported at finalize (informational — WMS owns real stock).
     """
     __tablename__ = "t_test_result_required_item"
     id                   = db.Column(db.Integer, primary_key=True)
@@ -957,7 +910,6 @@ class TestResultRequiredItem(AuditMixin, BranchScopedMixin):
 
     test_result           = db.relationship('TestResult', back_populates='required_items', lazy='noload')
     material_list         = db.relationship('MaterialList', lazy='noload')
-    picking_item_allocations = db.relationship('TestResultPickingItem', back_populates='test_result_required_item', lazy='noload')
 
 
 class TestResultAssignment(AuditMixin, BranchScopedMixin):
@@ -1166,7 +1118,6 @@ class PickingRequest(AuditMixin, BranchScopedMixin):
     status               = db.Column(db.Enum(PickingRequestStatus), nullable=False, default=PickingRequestStatus.PENDING)
     wms_reference        = db.Column(db.String(100), nullable=True)
     remark               = db.Column(db.String(500), nullable=True)
-    is_reallocation      = db.Column(db.Boolean, nullable=False, default=False)
 
     items       = db.relationship('PickingRequestItem', back_populates='picking_request', cascade='all, delete-orphan')
     sales_order = db.relationship('SalesOrder', back_populates='picking_requests', lazy='noload')
@@ -1182,60 +1133,12 @@ class PickingRequestItem(AuditMixin, BranchScopedMixin):
     item_code               = db.Column(db.String(100), nullable=False)
     item_name               = db.Column(db.String(255), nullable=False)
     quantity                = db.Column(db.Integer, nullable=False)
-    qty_received_actual     = db.Column(db.Integer, nullable=True)
     unit                    = db.Column(db.String(50), nullable=True)
     remark                  = db.Column(db.String(500), nullable=True)
 
     picking_request          = db.relationship('PickingRequest', back_populates='items', lazy='noload')
     sales_item               = db.relationship('SalesItem', back_populates='picking_request_items', lazy='noload')
     material_list            = db.relationship('MaterialList', lazy='noload')
-    test_result_consumptions = db.relationship('TestResultPickingItem', back_populates='picking_request_item', cascade='all, delete-orphan')
-    work_run_consumptions    = db.relationship('WorkRunPickingItem', back_populates='picking_request_item', cascade='all, delete-orphan')
-    adjustments              = db.relationship('PickingItemAdjustment', back_populates='picking_request_item', foreign_keys='PickingItemAdjustment.picking_request_item_id', cascade='all, delete-orphan', lazy='noload')
-
-    @property
-    def effective_quantity(self):
-        # qty_received_actual set after verify step; falls back to requested qty when not yet verified
-        return self.qty_received_actual if self.qty_received_actual is not None else self.quantity
-
-
-class PickingItemAdjustmentReason(enum.Enum):
-    MISCOUNT   = 'MISCOUNT'    # physical count was wrong
-    SPILLAGE   = 'SPILLAGE'    # material wasted/damaged
-    CORRECTION = 'CORRECTION'  # admin correction of prior entry
-    REALLOCATE = 'REALLOCATE'  # qty transferred between PRIs in the same SO
-    OTHER      = 'OTHER'
-
-
-class PickingItemAdjustment(AuditMixin, BranchScopedMixin):
-    """
-    Stock correction for a PickingRequestItem after transactions have run.
-    delta_qty is signed: negative = reduce available pool, positive = increase.
-    Immutable once created — corrections must be applied as new rows.
-    """
-    __tablename__ = "t_picking_item_adjustment"
-    id                      = db.Column(db.Integer, primary_key=True)
-    picking_request_item_id = db.Column(db.Integer, db.ForeignKey('t_picking_request_item.picking_request_item_id', ondelete='CASCADE'), nullable=False)
-    delta_qty               = db.Column(db.Integer, nullable=False)  # signed, non-zero
-    reason                  = db.Column(db.Enum(PickingItemAdjustmentReason), nullable=False)
-    remark                  = db.Column(db.String(500), nullable=True)
-    counterparty_picking_request_item_id = db.Column(
-        db.Integer,
-        db.ForeignKey('t_picking_request_item.picking_request_item_id', ondelete='SET NULL'),
-        nullable=True,
-    )
-
-    picking_request_item = db.relationship(
-        'PickingRequestItem',
-        back_populates='adjustments',
-        foreign_keys=[picking_request_item_id],
-        lazy='noload',
-    )
-    counterparty = db.relationship(
-        'PickingRequestItem',
-        foreign_keys=[counterparty_picking_request_item_id],
-        lazy='noload',
-    )
 
 
 class DocumentCodeList(BaseModel):

@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCItem, QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest, TestResult, TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem
+from app.con_sqlalchemy import QCItem, QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest, TestResult, TestResultWorkRun, TestResultRequiredItem
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload, selectinload, contains_eager
@@ -13,7 +13,6 @@ def _qc_work_order_options():
         selectinload(QCWorkOrder.qc_items).joinedload(QCItem.material_list),
         selectinload(QCWorkOrder.test_results).selectinload(TestResult.test_result_items),
         selectinload(QCWorkOrder.test_results).joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
-        selectinload(QCWorkOrder.test_results).selectinload(TestResult.picking_item_sources).joinedload(TestResultPickingItem.picking_request_item).joinedload(PickingRequestItem.picking_request),
         selectinload(QCWorkOrder.test_results).selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
     ]
 

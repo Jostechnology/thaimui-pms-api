@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, TestResultPickingItem, PickingRequestStatus, WorkRunPickingItem, WorkRunRequiredItem, TestResultRequiredItem, PickingItemAdjustmentReason, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
+from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, WorkRunRequiredItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
 from app.con_sqlalchemy import ReportRunStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
@@ -128,7 +128,17 @@ class EmployeeSchema(Schema):
     base_salary = fields.Float()
     day_rate = fields.Float()
     ot_hourly_rate = fields.Float()
+    photo_url = fields.Method("get_photo_url", dump_only=True)
     shift_override = fields.Nested(EmployeeShiftSchema(), allow_none=True, dump_only=True)
+
+    def get_photo_url(self, obj):
+        if not getattr(obj, "photo_key", None):
+            return None
+        from app.services.storage_service import get_presigned_url
+        try:
+            return get_presigned_url(obj.photo_key)
+        except Exception:
+            return None
 
 class EmployeeSalaryHistorySchema(Schema):
     salary_history_id = fields.Integer()
@@ -583,7 +593,6 @@ class PickingRequestItemSchema(Schema):
     item_code               = fields.String()
     item_name               = fields.String()
     quantity                = fields.Integer()
-    qty_received_actual     = fields.Integer(allow_none=True)
     unit                    = fields.String(allow_none=True)
     remark                  = fields.String(allow_none=True)
     picking_request_code    = fields.Method("get_picking_request_code", dump_only=True)
@@ -616,20 +625,6 @@ class PickingRequestSchema(Schema):
 class PickingRequestItemDetailedSchema(PickingRequestItemSchema):
     picking_request = fields.Nested(PickingRequestSchema)
 
-class TestResultPickingItemSchema(Schema):
-    """From TestResult POV — nested inside TestResultSchema."""
-    id                           = fields.Integer(dump_only=True)
-    picking_request_item_id      = fields.Integer(dump_only=True)
-    test_result_required_item_id = fields.Integer(dump_only=True, allow_none=True)
-    qty_allocated                = fields.Integer(dump_only=True)
-    qty_consumed                 = fields.Integer(allow_none=True)
-    allocation_mode              = fields.Method("get_allocation_mode", dump_only=True)
-    picking_request_item         = fields.Nested(PickingRequestItemDetailedSchema(), dump_only=True)
-
-    def get_allocation_mode(self, obj):
-        return obj.allocation_mode.value if obj.allocation_mode else None
-
-
 class WorkRunRequiredItemSchema(Schema):
     """BOM requirement for a WorkRun."""
     id                  = fields.Integer(dump_only=True)
@@ -643,21 +638,6 @@ class WorkRunRequiredItemSchema(Schema):
     created_by          = fields.String(dump_only=True)
     created_date        = fields.DateTime(dump_only=True)
     material_list       = fields.Nested(MaterialListSchema)
-
-
-class WorkRunPickingItemSchema(Schema):
-    """Allocation from PickingRequestItem to a WorkRun."""
-    id                        = fields.Integer(dump_only=True)
-    work_run_id               = fields.Integer(dump_only=True)
-    picking_request_item_id   = fields.Integer(dump_only=True)
-    work_run_required_item_id = fields.Integer(dump_only=True, allow_none=True)
-    qty_allocated             = fields.Integer(dump_only=True)
-    qty_consumed              = fields.Integer(allow_none=True)
-    allocation_mode           = fields.Method("get_allocation_mode", dump_only=True)
-    picking_request_item      = fields.Nested(PickingRequestItemSchema(), dump_only=True)
-
-    def get_allocation_mode(self, obj):
-        return obj.allocation_mode.value if obj.allocation_mode else None
 
 
 class TestResultRequiredItemSchema(Schema):
@@ -679,20 +659,6 @@ class PickingRequestDetailSchema(PickingRequestSchema):
     items              = fields.List(fields.Nested(PickingRequestItemSchema()))
     sales_order        = fields.Nested(SalesOrderSearchSchema)
 
-class PickingItemAdjustmentSchema(Schema):
-    id                      = fields.Integer(dump_only=True)
-    picking_request_item_id = fields.Integer(dump_only=True)
-    delta_qty               = fields.Integer()
-    reason                  = fields.Enum(PickingItemAdjustmentReason)
-    remark                  = fields.String(allow_none=True)
-    created_by              = fields.String(dump_only=True)
-    created_date            = fields.DateTime(dump_only=True)
-    counterparty_picking_request_item_id = fields.Integer(allow_none=True, dump_only=True)
-    counterparty            = fields.Nested(
-        PickingRequestItemSchema, allow_none=True, dump_only=True
-    )
-
-
 class TestResultSummarySchema(Schema):
     test_result_id   = fields.Integer(dump_only=True)
     test_result_code = fields.String(allow_none=True, dump_only=True)
@@ -707,58 +673,9 @@ class WorkRunSummarySchema(Schema):
     status        = fields.Enum(WorkRunStatus, dump_only=True)
 
 
-class TestResultConsumptionFromPickingItemSchema(Schema):
-    """TRPI from PickingRequestItem POV — who consumed this item in a TestResult."""
-    id                           = fields.Integer(dump_only=True)
-    test_result_id               = fields.Integer(dump_only=True)
-    test_result_required_item_id = fields.Integer(allow_none=True, dump_only=True)
-    qty_allocated                = fields.Integer(dump_only=True)
-    qty_consumed                 = fields.Integer(allow_none=True, dump_only=True)
-    test_result                  = fields.Nested(TestResultSummarySchema(), dump_only=True)
-
-
-class WorkRunConsumptionFromPickingItemSchema(Schema):
-    """WRPI from PickingRequestItem POV — who consumed this item in a WorkRun."""
-    id                        = fields.Integer(dump_only=True)
-    work_run_id               = fields.Integer(dump_only=True)
-    work_run_required_item_id = fields.Integer(allow_none=True, dump_only=True)
-    qty_allocated             = fields.Integer(dump_only=True)
-    qty_consumed              = fields.Integer(allow_none=True, dump_only=True)
-    work_run                  = fields.Nested(WorkRunSummarySchema(), dump_only=True)
-
-
-class PickingRequestItemFullSchema(PickingRequestItemSchema):
-    """PickingRequestItem with consumption detail and computed availability."""
-    test_result_consumptions = fields.List(fields.Nested(TestResultConsumptionFromPickingItemSchema()), dump_only=True)
-    work_run_consumptions    = fields.List(fields.Nested(WorkRunConsumptionFromPickingItemSchema()), dump_only=True)
-    adjustments              = fields.List(fields.Nested(PickingItemAdjustmentSchema()), dump_only=True)
-    qty_committed            = fields.Method("get_qty_committed", dump_only=True)
-    adj_total                = fields.Method("get_adj_total", dump_only=True)
-    qty_available            = fields.Method("get_qty_available", dump_only=True)
-
-    def get_qty_committed(self, obj):
-        trpi_sum = sum(
-            (c.qty_consumed if c.qty_consumed is not None else c.qty_allocated)
-            for c in (obj.test_result_consumptions or [])
-        )
-        wrpi_sum = sum(
-            (c.qty_consumed if c.qty_consumed is not None else c.qty_allocated)
-            for c in (obj.work_run_consumptions or [])
-        )
-        return trpi_sum + wrpi_sum
-
-    def get_adj_total(self, obj):
-        return sum(a.delta_qty for a in (obj.adjustments or []))
-
-    def get_qty_available(self, obj):
-        committed = self.get_qty_committed(obj)
-        adj = self.get_adj_total(obj)
-        return obj.effective_quantity + adj - committed
-
-
 class PickingRequestFullDetailSchema(PickingRequestSchema):
-    """PickingRequest with full item consumption breakdown."""
-    items       = fields.List(fields.Nested(PickingRequestItemFullSchema()), dump_only=True)
+    """PickingRequest with sales_order + items."""
+    items       = fields.List(fields.Nested(PickingRequestItemSchema()), dump_only=True)
     sales_order = fields.Nested(SalesOrderSearchSchema, dump_only=True)
 
 class WorkRunDisplaySchema(WorkRunSchema):
@@ -860,7 +777,6 @@ class TestResultSchema(Schema):
     photos                  = fields.List(fields.Nested(TestResultPhotoSchema()), dump_only=True)
     spec                    = fields.Nested(TestResultSpecSchema(), allow_none=True)
     work_run_sources        = fields.List(fields.Nested(TestResultWorkRunSchema()), dump_only=True)
-    picking_item_sources    = fields.List(fields.Nested(TestResultPickingItemSchema()), dump_only=True)
     required_items          = fields.List(fields.Nested(TestResultRequiredItemSchema()), dump_only=True)
     assignments             = fields.List(fields.Nested(TestResultAssignmentSchema()), dump_only=True)
     machines                = fields.List(fields.Nested(TestResultMachineSchema()), dump_only=True)
@@ -1007,12 +923,22 @@ class MachineSchema(Schema):
     is_active = fields.Boolean()
     is_second_hand = fields.Boolean()
     accumulated_hours = fields.Float(allow_none=True)
+    photo_url = fields.Method("get_photo_url", dump_only=True)
     machine_type_id = fields.Integer(allow_none=True)
     machine_type = fields.Nested(MachineTypeSchema, allow_none=True)
     created_date = fields.DateTime()
     updated_date = fields.DateTime()
     created_by = fields.String(allow_none=True)
     updated_by = fields.String(allow_none=True)
+
+    def get_photo_url(self, obj):
+        if not getattr(obj, "photo_key", None):
+            return None
+        from app.services.storage_service import get_presigned_url
+        try:
+            return get_presigned_url(obj.photo_key)
+        except Exception:
+            return None
 
 class MachineMaintenanceSchema(Schema):
     maintenance_id = fields.Integer()

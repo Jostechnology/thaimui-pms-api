@@ -1,11 +1,11 @@
 from app.con_sqlalchemy import (
     TestResult, TestResultItem, TestResultStatus, TestSessionStatus,
-    TestResultWorkRun, TestResultPickingItem, TestResultRequiredItem,
+    TestResultWorkRun, TestResultRequiredItem,
     TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak,
     TestResultCheck, TestResultPhoto, TestResultSpec, TestType, CheckStatus,
     Machine, MaterialList, BreakType,
     WorkRunStatus, WorkRunTransactionType, QCWorkOrder, QCWorkOrderStatus,
-    AllocationMode, bangkok_now,
+    bangkok_now,
 )
 import uuid
 import base64
@@ -14,7 +14,7 @@ from app.repositories import (
     test_result_repository, qc_work_order_repository,
     work_run_repository, picking_request_repository,
 )
-from app.services import transaction_service, document_code_service, picking_allocation_service, labor_cost_service, inspection_checklist, storage_service
+from app.services import transaction_service, document_code_service, labor_cost_service, inspection_checklist, storage_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
 from sqlalchemy.orm import joinedload
@@ -112,30 +112,6 @@ def _validate_work_run_sources(qc, sales_item, claimed_qty, data):
     return validated_sources
 
 
-def _apply_actuals_reverse_fifo(allocation_rows, qty_used_actual):
-    """
-    Distribute qty_used_actual across FIFO-ordered allocation rows.
-    Releases leftover from the LAST rows first (reverse FIFO).
-    Sets qty_consumed on each row.
-    """
-    total_allocated = sum(r.qty_allocated for r in allocation_rows)
-
-    if qty_used_actual > total_allocated:
-        # Operator used more than allocated (over-consumption) — cap at allocated
-        for r in allocation_rows:
-            r.qty_consumed = r.qty_allocated
-        return
-
-    to_release = total_allocated - qty_used_actual
-    for r in reversed(allocation_rows):
-        if to_release <= 0:
-            r.qty_consumed = r.qty_allocated
-        else:
-            release_this = min(r.qty_allocated, to_release)
-            r.qty_consumed = r.qty_allocated - release_this
-            to_release -= release_this
-
-
 def create_test_result(qc_work_order_id, data):
     """
     Phase 1 — create TestResult in PENDING.
@@ -195,21 +171,12 @@ def create_test_result(qc_work_order_id, data):
 def start_test_result(test_result_id, data=None):
     """
     Phase 2 — PENDING → INPROGRESS.
-    Allocates picking items either by FIFO (auto) or operator-chosen (manual).
-
-    data (optional):
-        allocation_mode: "auto" (default) or "manual"
-        sales_item_sources: [{picking_request_item_id, qty}]       — manual only, for non-produced sales item
-        material_sources:   [{required_item_id, sources: [{picking_request_item_id, qty}]}]  — manual only
+    WMS owns actual stock — no qty allocation here. Gate: if the test needs
+    picked goods (non-produced sales item or required materials), at least one
+    SUCCESS PickingRequest must exist on the SalesOrder.
     """
     if data is None:
         data = {}
-
-    allocation_mode_str = data.get("allocation_mode", "auto").upper()
-    if allocation_mode_str not in ("AUTO", "MANUAL"):
-        raise ValidationError(f"allocation_mode ไม่ถูกต้อง: {allocation_mode_str}")
-    is_manual = allocation_mode_str == "MANUAL"
-    mode_enum = AllocationMode.MANUAL if is_manual else AllocationMode.AUTO
 
     try:
         test_result = test_result_repository.get_test_result_by_id(test_result_id)
@@ -225,90 +192,16 @@ def start_test_result(test_result_id, data=None):
         )
         sales_item = qc.sales_item
 
-        shortages = []
-        sales_item_allocations = []   # [(pri_id, qty)]
-        material_allocations = []     # [(req_item, [(pri_id, qty)])]
-
-        # Allocate claimed_qty for non-produced items from PR pool
-        if not sales_item.produce:
-            if is_manual:
-                manual_si_sources = data.get("sales_item_sources", [])
-                if not manual_si_sources:
-                    raise ValidationError("manual mode ต้องระบุ sales_item_sources สำหรับ non-produced item")
-                try:
-                    sales_item_allocations = picking_allocation_service.allocate_manual(
-                        manual_si_sources, test_result.claimed_qty
-                    )
-                except ValidationError:
-                    raise
-            else:
-                candidates = picking_request_repository.get_available_picking_items_for_sales_item(
-                    sales_item.sales_item_id
-                )
-                try:
-                    sales_item_allocations = picking_allocation_service.allocate_fifo(
-                        candidates, test_result.claimed_qty
-                    )
-                except ValidationError:
-                    shortages.append(
-                        f"{sales_item.item_code} ({sales_item.item_name}) "
-                        f"ต้องการ {test_result.claimed_qty} ชิ้น"
-                    )
-
-        # Allocate each required material from PR pool
         required = test_result_repository.get_required_items(test_result_id)
-
-        if is_manual:
-            manual_mat_sources = data.get("material_sources", [])
-            mat_source_map = {ms["required_item_id"]: ms["sources"] for ms in manual_mat_sources}
-
-        for req in required:
-            if not req.material_list_id:
-                continue
-            if is_manual:
-                sources = mat_source_map.get(req.id, [])
-                if not sources:
-                    raise ValidationError(f"manual mode ต้องระบุ sources สำหรับ required item {req.id} ({req.item_code})")
-                try:
-                    allocs = picking_allocation_service.allocate_manual(sources, req.required_qty)
-                    material_allocations.append((req, allocs))
-                except ValidationError:
-                    raise
-            else:
-                candidates = picking_request_repository.get_available_picking_items_for_material(
-                    req.material_list_id
+        needs_picked_goods = (not sales_item.produce) or any(
+            req.material_list_id for req in required
+        )
+        if needs_picked_goods:
+            doc_entry = sales_item.doc_entry
+            if not doc_entry or not picking_request_repository.has_success_picking_request(doc_entry):
+                raise ValidationError(
+                    "ยังไม่มีคำขอเบิกที่สำเร็จ (SUCCESS) สำหรับ Sales Order นี้ — ไม่สามารถเริ่มเทสได้"
                 )
-                try:
-                    allocs = picking_allocation_service.allocate_fifo(candidates, req.required_qty)
-                    material_allocations.append((req, allocs))
-                except ValidationError:
-                    shortages.append(f"{req.item_code} ({req.item_name})")
-
-        if shortages:
-            raise ValidationError(
-                f"วัตถุดิบในคลังไม่พอ: {', '.join(shortages)}"
-            )
-
-        # Commit sales-item allocations
-        for pri_id, qty in sales_item_allocations:
-            db.session.add(TestResultPickingItem(
-                test_result_id=test_result_id,
-                picking_request_item_id=pri_id,
-                test_result_required_item_id=None,
-                qty_allocated=qty,
-                allocation_mode=mode_enum,
-            ))
-
-        # Commit material allocations (linked to required item for reverse-FIFO release)
-        for req, allocs in material_allocations:
-            for pri_id, qty in allocs:
-                db.session.add(TestResultPickingItem(
-                    test_result_id=test_result_id,
-                    picking_request_item_id=pri_id,
-                    test_result_required_item_id=req.id,
-                    qty_allocated=qty,
-                    allocation_mode=mode_enum,
-                ))
 
         # For produced items: fire SENT_TO_TESTING transaction now (was at create before)
         if sales_item.produce:
@@ -406,9 +299,8 @@ def finalize_test_result(test_result_id, data):
         if overall == TestResultStatus.PASSED and test_result.qc_work_order:
             test_result.qc_work_order.status = QCWorkOrderStatus.PASSED
 
-        # Apply material actuals — release leftover back to pool via reverse-FIFO
+        # Record material actuals (informational only — WMS owns real stock)
         material_actuals = data.get("material_actuals", [])
-        reported_req_ids = set()
         for actual in material_actuals:
             req_id = actual.get("test_result_required_item_id")
             if req_id is None:
@@ -422,17 +314,6 @@ def finalize_test_result(test_result_id, data):
                 raise ValidationError(f"required_item {req_id} ไม่ได้อยู่ใน TestResult นี้")
 
             req.qty_consumed_actual = qty_used
-            allocation_rows = test_result_repository.get_trpi_rows_for_required_item(req_id)
-            _apply_actuals_reverse_fifo(allocation_rows, qty_used)
-            reported_req_ids.add(req_id)
-
-        # Rows not reported → default full consumption (qty_consumed = qty_allocated)
-        required = test_result_repository.get_required_items(test_result_id)
-        for req in required:
-            if req.id not in reported_req_ids:
-                allocation_rows = test_result_repository.get_trpi_rows_for_required_item(req.id)
-                for r in allocation_rows:
-                    r.qty_consumed = r.qty_allocated
 
         # Auto-close any open assignments
         now_naive = _naive(bangkok_now())
@@ -739,24 +620,6 @@ def delete_required_item(test_result_id, required_item_id):
     db.session.delete(req)
     db.session.commit()
     return test_result_repository.get_required_items(test_result_id)
-
-
-def get_pick_requests_for_test_result(test_result_id):
-    test_result = test_result_repository.get_test_result_by_id(test_result_id)
-    if not test_result:
-        raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
-
-    qc = qc_work_order_repository.get_qc_work_order_for_availability_check(test_result.qc_work_order_id)
-    sales_item = qc.sales_item
-
-    sales_item_id = None if sales_item.produce else sales_item.sales_item_id
-    required = test_result_repository.get_required_items(test_result_id)
-    material_list_ids = [r.material_list_id for r in required if r.material_list_id]
-
-    return picking_request_repository.get_available_pick_requests_for_test_result(
-        sales_item_id=sales_item_id,
-        material_list_ids=material_list_ids or None,
-    )
 
 
 def assign_employee(test_result_id, employee_id):
