@@ -238,10 +238,13 @@ def api_delete_sales_order_cascade(doc_num):
 
 @app.route("/api/sales_order/<int:doc_entry>/finish", methods=["POST"])
 @verify_required
+@decode_and_verify_permission_jwt(authorizes=[{"module_code": "SALE_ORD_LIST", "method": "edit"}])
 def api_finish_sales_order(doc_entry):
     try:
-        result = close_sales_order(doc_entry)
+        result = close_sales_order(doc_entry, branch_id=g.branch_id)
         cache_service.delete(_sales_order_detail_cache(doc_entry, g.branch_id))
+        for p in range(1, 4):
+            cache_service.delete(_sales_order_page_cache(p, 10, g.branch_id))
         return jsonify({"data": SalesOrderSchema().dump(result), "success": True}), 200
     except Exception:
         raise

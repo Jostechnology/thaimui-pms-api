@@ -116,12 +116,21 @@ def has_incomplete_items(doc_entry):
 
 
 def get_sales_items_by_doc_entry(doc_entry):
+    """Items of one order with the relationships that is_completable / production_blocker
+    read. Without these eager loads the lazy='noload' relationships read as empty and the
+    computed properties silently report wrong numbers."""
     try:
-        return (
+        query = (
             db.session.query(SalesItem)
+            .options(
+                selectinload(SalesItem.material_list),
+                selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
+            )
             .filter(SalesItem.doc_entry == doc_entry)
             .order_by(SalesItem.sales_item_id)
-            .all()
         )
+        return query.all()
     except Exception:
         raise

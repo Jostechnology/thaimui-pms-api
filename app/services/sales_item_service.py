@@ -1,7 +1,7 @@
 from app.con_sqlalchemy import SalesItem, SalesItemStatus, WorkOrderStatus, SalesOrderStatus
 from app.repositories import sales_item_repository, sales_order_repository
 from app.app import db
-from app.exception import NotFoundError, ValidationError
+from app.exception import DisabledAction, NotFoundError, ValidationError
 from app.services import sales_order_service
 
 
@@ -72,6 +72,14 @@ def complete_sales_item(sales_item_id):
 
 
 def create_sales_item(data):
+    """Disabled. Sales items only ever come from a center push via
+    sales_order_service.create_sales_order, which is the one place that sets
+    produce / test / item_group / branch_id. An item built here bypasses those,
+    so it lands with a NULL produce/test (NOT NULL) and, worse, an item_group that
+    the Z-BOM production gate would read as unmanufactured.
+    Body kept for reference until the endpoint is removed from the FE."""
+    raise DisabledAction("ปิดการใช้งานการสร้าง Sales Item ผ่าน PMS แล้ว รายการขายถูกสร้างจากระบบ Center เท่านั้น")
+
     try:
         sales_item = SalesItem(
             item_code=data.get("item_code"),

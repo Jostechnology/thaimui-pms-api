@@ -3,7 +3,7 @@ from app.repositories import material_repository, sales_item_repository, sales_o
 from app.extensions import center_service
 from app.app import db
 from app.services import branch_service, cache_service, work_order_service, transaction_service
-from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesItemStatus, SalesOrderStatus, UrgencyLevel
+from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesItemStatus, SalesOrderStatus, UrgencyLevel, WorkOrderStatus, MANUFACTURED_ITEM_GROUP
 from app.extensions import wms_service
 from app.utils import convert_start_date, convert_end_date
 
@@ -147,21 +147,32 @@ def get_test_sales_order():
         )
         data = response["json"]
         print(data)
-        for so in data:  
-            create_sales_order(so)
+        finished = []
+        for so in data:
+            sales_order, no_work = create_sales_order(so)
+            if no_work:
+                finished.append(sales_order)
         db.session.commit()
     except Exception:
         db.session.rollback()
         raise
-    
+    _finish_committed_orders(finished)
+
 def create_sales_order_routine(data):
+    """Create orders from a center push. WMS is notified only after the batch
+    commits — one failed order used to roll back siblings that had already fired
+    their WMS finish call, leaving WMS holding orders that never existed here."""
     try:
-        for so in data:  
-            create_sales_order(so)
+        finished = []
+        for so in data:
+            sales_order, no_work = create_sales_order(so)
+            if no_work:
+                finished.append(sales_order)
         db.session.commit()
     except Exception:
         db.session.rollback()
-        raise    
+        raise
+    _finish_committed_orders(finished)
 
 def create_sales_order(data):
     try:
@@ -197,7 +208,9 @@ def create_sales_order(data):
                 center_sales_item_id=item.get("sales_item_id"),
                 produce=item.get("produce", False),
                 test=item.get("test", False),
-                item_group=item.get("category_name"),
+                # column is NOT NULL and the SQLAlchemy default does not kick in for an
+                # explicit None, so fall back to the same default the column declares
+                item_group=item.get("category_name") or MANUFACTURED_ITEM_GROUP,
                 branch_id = branch.branch_id
             )
             sales_order.sales_items.append(sales_item)
@@ -214,7 +227,7 @@ def create_sales_order(data):
                     unit_id=mat.get("unit_id", 0),
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
-                    item_group=mat.get("category_name"),
+                    item_group=mat.get("category_name") or "OTHER",
                     branch_id = branch.branch_id,
                     order_line_num = mat.get("order_line_num")
                 )
@@ -222,28 +235,54 @@ def create_sales_order(data):
                 sales_item.material_list.append(material_list)
 
         db.session.add(sales_order)
-        _finish_if_no_work(sales_order)
-        return sales_order
+        no_work = _complete_no_work_items(sales_order)
+        return sales_order, no_work
     except Exception:
         db.session.rollback()
         raise
 
 
-def _finish_if_no_work(sales_order):
+def _complete_no_work_items(sales_order):
     """No item needs produce/test (or order has no items) -> nothing to work on.
-    Mark those no-work items COMPLETED and finish the order through the same
-    funnel (sales_order_finish -> WMS). Returns True if the order was finished.
+    Marks those items COMPLETED and reports back so the caller can tell WMS the
+    order is finished *after* the transaction commits. Returns True if it did.
 
-    Raises OuterServicesError if WMS finish fails; the caller rolls back, so the
-    order is never left COMPLETED on our side while WMS is not — center resends.
+    A Z-BOM item always counts as work even when center sends produce=False —
+    it is built from a BOM, so auto-closing it would tell WMS the order is done
+    while nothing was ever manufactured.
+
+    Deliberately does not call WMS: an HTTP call cannot be rolled back, so firing
+    it from inside the transaction can leave the order finished in WMS and absent
+    here. See _finish_committed_orders.
     """
     items = sales_order.sales_items
-    if any(si.produce or si.test for si in items):
+    if not items:
+        # An order with no lines is far more likely a truncated center payload than a
+        # genuine no-work order — leave it INPROGRESS for a human rather than telling
+        # WMS it is done. Escape hatch is DELETE /api/sales_order/cascade/<doc_num>.
+        return False
+    if any(si.produce or si.test or si.is_manufactured for si in items):
         return False
     for si in items:
         si.status = SalesItemStatus.COMPLETED
-    sales_order_finish(sales_order)
     return True
+
+
+def _finish_committed_orders(sales_orders):
+    """Tell WMS about no-work orders once they are safely committed.
+
+    Runs one order per transaction and never re-raises: the batch is already
+    committed, so raising would only lose the response. An order whose WMS call
+    fails stays INPROGRESS with every item COMPLETED — exactly the state
+    close_sales_order is built to retry, so the operator can finish it from the UI.
+    """
+    for sales_order in sales_orders:
+        try:
+            sales_order_finish(sales_order)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"WMS finish failed for doc_entry {sales_order.doc_entry} ({e}) — order left INPROGRESS for manual close")
 
 def delete_sales_order_by_doc_num(doc_num, branch_id=None):
     try:
@@ -270,23 +309,42 @@ def sales_order_finish(sales_order : SalesOrder):
         raise
 
 
-def close_sales_order(doc_entry):
+def close_sales_order(doc_entry, branch_id=None):
     """Manual close / retry lever for an order stuck at INPROGRESS.
 
-    Marks no-work items (produce=False and test=False) COMPLETED, then requires
-    every remaining item to be COMPLETED before finishing through the same funnel
-    (sales_order_finish -> WMS). Raises if real work is still pending, or if WMS
-    finish fails (rolled back -> caller can retry once WMS has caught up).
+    Gates, in order:
+      1. every Z-BOM item must have finished production (work order exists, no open
+         run, produced_qty >= quantity) — the produce flag is not trusted here;
+      2. no-work items (produce=False and test=False) are marked COMPLETED, but only
+         when they carry no unfinished work order / QC work order;
+      3. every remaining item must already be COMPLETED.
+    Then finishes through the same funnel as the normal path (sales_order_finish ->
+    WMS). Raises if work is still pending, or if WMS finish fails (rolled back ->
+    caller can retry once WMS has caught up).
     """
     try:
-        sales_order = sales_order_repository.get_sales_order_by_doc_entry(doc_entry)
+        sales_order = sales_order_repository.get_sales_order_by_doc_entry(doc_entry, branch_id=branch_id)
         if sales_order.status == SalesOrderStatus.COMPLETED:
             raise ValidationError("Order นี้ถูกปิดไปแล้ว")
 
         items = sales_item_repository.get_sales_items_by_doc_entry(doc_entry)
+        if not items:
+            raise ValidationError("Order นี้ไม่มีรายการขาย ปิด Order ไม่ได้")
+
+        # Checked against every item, including ones already flagged COMPLETED: an item
+        # that reached COMPLETED without production is exactly the bad state to catch.
+        blocked = [f"{si.item_code}: {reason}" for si in items if (reason := si.production_blocker)]
+        if blocked:
+            raise ValidationError("ปิด Order ไม่ได้ — " + " | ".join(blocked))
+
         for si in items:
-            if not (si.produce or si.test):
-                si.status = SalesItemStatus.COMPLETED
+            if si.status == SalesItemStatus.COMPLETED or si.produce or si.test:
+                continue
+            if si.has_open_work:
+                raise ValidationError(f"{si.item_code}: ยังมีใบสั่งผลิต/ใบสั่งเทสที่ยังไม่จบ ปิด Order ไม่ได้")
+            si.status = SalesItemStatus.COMPLETED
+            if si.work_order:
+                si.work_order.status = WorkOrderStatus.COMPLETED
         db.session.flush()
 
         if sales_item_repository.has_incomplete_items(doc_entry):

@@ -412,6 +412,11 @@ class SalesItemStatus(enum.Enum):
     INPROGRESS = 'INPROGRESS'
     COMPLETED = 'COMPLETED'
 
+# Item group that marks a made-to-order item built from a BOM. It has to be
+# manufactured in-house, so it can never be completed without production —
+# regardless of what the produce flag from center says.
+MANUFACTURED_ITEM_GROUP = "Z-BOM"
+
 class SalesItem(AuditMixin):
     __tablename__ = "t_sales_items"
     sales_item_id = db.Column(db.Integer, primary_key=True)
@@ -491,11 +496,46 @@ class SalesItem(AuditMixin):
             if tr.overall_status == TestResultStatus.FAILED
         )
 
+    # Production gate for BOM items
+    @property
+    def is_manufactured(self):
+        """Z-BOM item — built from a BOM, so it must go through production."""
+        return (self.item_group or "").strip().upper() == MANUFACTURED_ITEM_GROUP
+
+    @property
+    def production_blocker(self):
+        """Reason a Z-BOM item's production is not finished yet, else None.
+
+        Requires work_order -> work_runs to be eager-loaded (both are lazy='noload',
+        so an unloaded work_order reads as None and would wrongly report a blocker).
+        """
+        if not self.is_manufactured:
+            return None
+        if not self.work_order:
+            return "เป็นรายการ Z-BOM แต่ยังไม่มีใบสั่งผลิต"
+        open_runs = sum(1 for r in self.work_order.work_runs if r.status != WorkRunStatus.COMPLETED)
+        if open_runs:
+            return f"เป็นรายการ Z-BOM และยังมีรอบผลิตที่ยังไม่จบ {open_runs} รอบ"
+        if self.produced_qty < self.quantity:
+            return f"เป็นรายการ Z-BOM ผลิตได้ {self.produced_qty}/{self.quantity} ยังไม่ครบ"
+        return None
+
+    @property
+    def has_open_work(self):
+        """True if any production run or QC work order on this item is still unfinished."""
+        if self.work_order and any(r.status != WorkRunStatus.COMPLETED for r in self.work_order.work_runs):
+            return True
+        return (self.num_qc_work_order or 0) > (self.num_qc_successed_work_order or 0)
+
     @property
     def is_completable(self):
         if self.status == SalesItemStatus.COMPLETED:
             return (False, "งานถูกปิดไปแล้ว")
-        
+
+        blocker = self.production_blocker
+        if blocker:
+            return (False, blocker)
+
         # produced means usable items by default itself.
         if (self.produced_qty < self.quantity) and self.produce:
             return (False, "ยังผลิตไม่ครบ")
