@@ -5,6 +5,7 @@ from sqlalchemy import event, Numeric, select, func, UniqueConstraint
 from sqlalchemy.orm import column_property, with_loader_criteria, Session
 from flask import g
 from app.exception import AuthorizationError
+from app.utils import QTY_EPS
 
 def bangkok_now():
     """Return current datetime in Asia/Bangkok. If zoneinfo/tzdata is unavailable,
@@ -199,7 +200,7 @@ class WorkOrder(AuditMixin):
     work_order_code = db.Column(db.String(50), nullable=True)
     doc_entry = db.Column(db.Integer, db.ForeignKey('t_sales_order.doc_entry'))
     status = db.Column(db.Enum(WorkOrderStatus), nullable=False , default=WorkOrderStatus.READY)
-    quantity = db.Column(db.Integer, nullable=False, default=1)
+    quantity = db.Column(db.Double, nullable=False, default=1)
     sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'))
     branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='work_order')
@@ -359,15 +360,15 @@ class WorkRun(AuditMixin, BranchScopedMixin):
     work_run_id = db.Column(db.Integer, primary_key=True)
     lot_number = db.Column(db.String(100), nullable=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False, default=1)           # planned/pick qty
-    usable_qty = db.Column(db.Integer, nullable=True)                     # set at completion — good items
+    quantity = db.Column(db.Double, nullable=False, default=1)           # planned/pick qty
+    usable_qty = db.Column(db.Double, nullable=True)                     # set at completion — good items
     completion_remark = db.Column(db.String(500), nullable=True)          # required when usable_qty < quantity
     wms_pick_reference = db.Column(db.String(100), nullable=True)
     status = db.Column(db.Enum(WorkRunStatus), nullable=False, default=WorkRunStatus.PENDING)
     start_date = db.Column(db.DateTime, nullable=True)
     end_date = db.Column(db.DateTime, nullable=True)
     rework_source_test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='SET NULL'), nullable=True)
-    qty_from_failed = db.Column(db.Integer, nullable=True)
+    qty_from_failed = db.Column(db.Double, nullable=True)
     work_order = db.relationship('WorkOrder', back_populates='work_runs', lazy='noload')
     assignments = db.relationship('WorkRunAssignment', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
     machines = db.relationship('WorkRunMachine', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
@@ -423,7 +424,7 @@ class SalesItem(AuditMixin):
     center_sales_item_id = db.Column(db.Integer, nullable=True)
     status = db.Column(db.Enum(SalesItemStatus), nullable=False , default=SalesItemStatus.PENDING)
     item_code = db.Column(db.String(50), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
+    quantity = db.Column(db.Double, nullable=False)
     order_line_num = db.Column(db.Integer, nullable=True)
     unit_name = db.Column(db.String(28), nullable=False, default="Piece")
     unit_id = db.Column(db.Integer, nullable=False, default=0)
@@ -516,7 +517,7 @@ class SalesItem(AuditMixin):
         open_runs = sum(1 for r in self.work_order.work_runs if r.status != WorkRunStatus.COMPLETED)
         if open_runs:
             return f"เป็นรายการ Z-BOM และยังมีรอบผลิตที่ยังไม่จบ {open_runs} รอบ"
-        if self.produced_qty < self.quantity:
+        if self.produced_qty < self.quantity - QTY_EPS:
             return f"เป็นรายการ Z-BOM ผลิตได้ {self.produced_qty}/{self.quantity} ยังไม่ครบ"
         return None
 
@@ -537,10 +538,10 @@ class SalesItem(AuditMixin):
             return (False, blocker)
 
         # produced means usable items by default itself.
-        if (self.produced_qty < self.quantity) and self.produce:
+        if (self.produced_qty < self.quantity - QTY_EPS) and self.produce:
             return (False, "ยังผลิตไม่ครบ")
-        
-        if self.produce and self.producing_qty > 0:               
+
+        if self.produce and self.producing_qty > QTY_EPS:
             return (False, "ยังมีรายการผลิตค้างอยู่")
         
         if self.test and self.num_qc_work_order == 0:
@@ -613,7 +614,7 @@ class MaterialList(AuditMixin):
     item_code = db.Column(db.String(50), nullable=False)
     item_name = db.Column(db.String(255), nullable=False)
     item_description = db.Column(db.String(500))
-    quantity = db.Column(db.Integer, nullable=False)
+    quantity = db.Column(db.Double, nullable=False)
     unit_name = db.Column(db.String(28), nullable=False, default="Piece")
     unit_id = db.Column(db.Integer, nullable=False, default=0)
     cost_price = db.Column(db.Float, nullable=False)
@@ -649,7 +650,7 @@ class QCWorkOrder(AuditMixin):
     status = db.Column(db.Enum(QCWorkOrderStatus), nullable=False, default=QCWorkOrderStatus.PENDING)
     qc_date = db.Column(db.DateTime, nullable=True)
     qc_by = db.Column(db.String(100), nullable=True)
-    quantity = db.Column(db.Integer, nullable=False, default=1)
+    quantity = db.Column(db.Double, nullable=False, default=1)
     remark = db.Column(db.String(500), nullable=True)
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders')
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
@@ -729,7 +730,7 @@ class QCItem(AuditMixin):
     serial_no        = db.Column(db.String(200), nullable=True)
     item_remark      = db.Column(db.String(500), nullable=True)
     material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='SET NULL'), nullable=True)
-    required_qty     = db.Column(db.Integer, nullable=True)      # numeric qty for pool allocation
+    required_qty     = db.Column(db.Double, nullable=True)      # numeric qty for pool allocation
     qc_work_order    = db.relationship('QCWorkOrder', back_populates='qc_items', lazy='noload')
     material_list    = db.relationship('MaterialList', lazy='noload')
 
@@ -769,7 +770,7 @@ class TestResult(AuditMixin, BranchScopedMixin):
     test_result_id     = db.Column(db.Integer, primary_key=True)
     test_result_code   = db.Column(db.String(100), nullable=True)
     qc_work_order_id   = db.Column(db.Integer, db.ForeignKey('t_qc_work_order.qc_work_order_id', ondelete='SET NULL'), nullable=True)
-    claimed_qty        = db.Column(db.Integer, nullable=False)
+    claimed_qty        = db.Column(db.Double, nullable=False)
     session_status     = db.Column(db.Enum(TestSessionStatus), nullable=False, default=TestSessionStatus.INPROGRESS)
     started_at         = db.Column(db.DateTime, nullable=True)
     test_method        = db.Column(db.String(255), nullable=True)   # printed label (free text)
@@ -899,7 +900,7 @@ class TestResultWorkRun(BaseModel):
     id             = db.Column(db.Integer, primary_key=True)
     test_result_id = db.Column(db.Integer, db.ForeignKey('t_test_result.test_result_id', ondelete='CASCADE'), nullable=False)
     work_run_id    = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
-    qty_from_run   = db.Column(db.Integer, nullable=False)
+    qty_from_run   = db.Column(db.Double, nullable=False)
 
     test_result = db.relationship('TestResult', back_populates='work_run_sources', lazy='noload')
     work_run    = db.relationship('WorkRun',    back_populates='test_result_sources', lazy='noload')
@@ -911,7 +912,7 @@ class WorkRunReworkSource(BaseModel):
     id                  = db.Column(db.Integer, primary_key=True)
     rework_work_run_id  = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
     source_work_run_id  = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
-    qty                 = db.Column(db.Integer, nullable=False)
+    qty                 = db.Column(db.Double, nullable=False)
     rework_work_run = db.relationship('WorkRun', foreign_keys=[rework_work_run_id], back_populates='rework_sources', lazy='noload')
     source_work_run = db.relationship('WorkRun', foreign_keys=[source_work_run_id], back_populates='rework_destinations', lazy='noload')
 
@@ -924,9 +925,9 @@ class WorkRunRequiredItem(AuditMixin, BranchScopedMixin):
     material_list_id     = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='SET NULL'), nullable=True)
     item_code            = db.Column(db.String(100), nullable=False)
     item_name            = db.Column(db.String(255), nullable=False)
-    quantity             = db.Column(db.Integer, nullable=False)
+    quantity             = db.Column(db.Double, nullable=False)
     unit                 = db.Column(db.String(50), nullable=True)
-    qty_consumed_actual  = db.Column(db.Integer, nullable=True)   # None until complete
+    qty_consumed_actual  = db.Column(db.Double, nullable=True)   # None until complete
 
     work_run                 = db.relationship('WorkRun', back_populates='required_items', lazy='noload')
     material_list            = db.relationship('MaterialList', lazy='noload')
@@ -944,9 +945,9 @@ class TestResultRequiredItem(AuditMixin, BranchScopedMixin):
     material_list_id     = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='SET NULL'), nullable=True)
     item_code            = db.Column(db.String(100), nullable=False)
     item_name            = db.Column(db.String(255), nullable=False)
-    required_qty         = db.Column(db.Integer, nullable=False)
+    required_qty         = db.Column(db.Double, nullable=False)
     unit                 = db.Column(db.String(50), nullable=True)
-    qty_consumed_actual  = db.Column(db.Integer, nullable=True)   # None until finalize
+    qty_consumed_actual  = db.Column(db.Double, nullable=True)   # None until finalize
 
     test_result           = db.relationship('TestResult', back_populates='required_items', lazy='noload')
     material_list         = db.relationship('MaterialList', lazy='noload')
@@ -1012,7 +1013,7 @@ class WorkRunTransaction(AuditMixin, BranchScopedMixin):
     __tablename__ = "t_work_run_transaction"
     transaction_id        = db.Column(db.Integer, primary_key=True)
     work_run_id           = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False)
-    quantity              = db.Column(db.Integer, nullable=False)
+    quantity              = db.Column(db.Double, nullable=False)
     type                  = db.Column(db.Enum(WorkRunTransactionType), nullable=False)
     related_document_code = db.Column(db.String(128), nullable=False)
     work_run = db.relationship('WorkRun', back_populates='transactions', lazy='noload')
@@ -1115,7 +1116,7 @@ class ComponentMaterialUsage(AuditMixin):
     usage_id = db.Column(db.Integer, primary_key=True)
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
     material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='CASCADE'), nullable=False)
-    quantity_used = db.Column(db.Integer, nullable=False)
+    quantity_used = db.Column(db.Double, nullable=False)
     branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
     item_component = db.relationship("ItemComponent", back_populates="material_usages", lazy='noload')
     material_list = db.relationship("MaterialList", back_populates="component_usages")
@@ -1134,7 +1135,7 @@ class MaterialTransaction(AuditMixin):
     #ผูกกับตาราง t_material_list
     material_list_id = db.Column(db.Integer, db.ForeignKey('t_material_list.material_list_id', ondelete='CASCADE'), nullable=False)
 
-    amount = db.Column(db.Integer, nullable=False)  # positive = in, negative = out
+    amount = db.Column(db.Double, nullable=False)  # positive = in, negative = out
     type = db.Column(db.Enum(MaterialTransactionType), nullable=False)
     related_document_code = db.Column(db.String(128), nullable=False) # เอกสารที่อ้างอิง
 
@@ -1172,7 +1173,7 @@ class PickingRequestItem(AuditMixin, BranchScopedMixin):
     order_line_num          = db.Column(db.Integer)
     item_code               = db.Column(db.String(100), nullable=False)
     item_name               = db.Column(db.String(255), nullable=False)
-    quantity                = db.Column(db.Integer, nullable=False)
+    quantity                = db.Column(db.Double, nullable=False)
     unit                    = db.Column(db.String(50), nullable=True)
     remark                  = db.Column(db.String(500), nullable=True)
 

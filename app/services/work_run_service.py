@@ -5,6 +5,7 @@ from app.services import transaction_service, document_code_service, work_order_
 from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
 from app.exception import ManualRaiseToTest, NotFoundError, ValidationError, MissingFieldsError
+from app.utils import QTY_EPS, qty_equal
 from app.repositories import employee_salary_repository
 from app.services import labor_cost_service
 
@@ -209,12 +210,12 @@ def create_work_run(work_order_id, data):
                 raise ValidationError(f"WorkRun {src_run_id} ยังไม่เสร็จสิ้น (ต้องเป็น COMPLETED)")
             if src_run.work_order_id != work_order_id:
                 raise ValidationError(f"WorkRun {src_run_id} ไม่ได้อยู่ใน WorkOrder นี้")
-            if src_run.defect_qty is None or src_run.defect_qty == 0:
+            if src_run.defect_qty is None or qty_equal(src_run.defect_qty, 0):
                 raise ValidationError(f"WorkRun {src_run_id} ไม่มีของเสียที่สามารถ rework ได้")
 
             consumed = work_run_repository.get_consumed_defect_qty_for_work_run(src_run_id)
             outstanding = src_run.defect_qty - consumed
-            if src_qty > outstanding:
+            if src_qty > outstanding + QTY_EPS:
                 raise ValidationError(
                     f"WorkRun {src_run_id} มีของเสียคงเหลือ {outstanding} ชิ้น แต่ขอ rework {src_qty} ชิ้น"
                 )
@@ -222,7 +223,7 @@ def create_work_run(work_order_id, data):
             total_rework_qty += src_qty
             validated_sources.append((src_run, src_qty))
 
-        if total_rework_qty != quantity:
+        if not qty_equal(total_rework_qty, quantity):
             raise ValidationError(
                 f"ผลรวม qty ใน rework_sources ({total_rework_qty}) ต้องเท่ากับ quantity ของ WorkRun ({quantity})"
             )
@@ -255,7 +256,7 @@ def create_work_run(work_order_id, data):
         qty_from_failed = data.get("qty_from_failed")
         if not qty_from_failed or qty_from_failed <= 0:
             raise ValidationError("qty_from_failed ต้องมากกว่า 0")
-        if qty_from_failed != quantity:
+        if not qty_equal(qty_from_failed, quantity):
             raise ValidationError(
                 f"quantity ({quantity}) ต้องเท่ากับ qty_from_failed ({qty_from_failed})"
             )
@@ -424,13 +425,13 @@ def complete_work_run(work_run_id, data):
     usable_qty = data.get("usable_qty")
     if usable_qty is None:
         raise ValidationError("กรุณากรอกจำนวนที่ผลิตสำเร็จ")
-    if usable_qty < 0 or usable_qty > work_run.quantity:
+    if usable_qty < 0 or usable_qty > work_run.quantity + QTY_EPS:
         raise ValidationError(
             f"จำนวนที่ผลิตสำเร็จ ({usable_qty}) ต้องมากกว่า 0 และน้อยกว่าหรือเท่ากับจำนวนที่แพลนไว้ ({work_run.quantity})"
         )
 
     defect_qty = work_run.quantity - usable_qty
-    if defect_qty > 0 and not data.get("completion_remark", "").strip():
+    if defect_qty > QTY_EPS and not data.get("completion_remark", "").strip():
         raise ValidationError("กรุณากรอกหมายเหตุ ในกรณีที่มีสินค้าผลิตผิดพลาด")
 
     now = bangkok_now()

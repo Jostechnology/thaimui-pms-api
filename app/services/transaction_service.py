@@ -1,6 +1,7 @@
 from app.con_sqlalchemy import MaterialList, MaterialTransaction, MaterialTransactionType, WorkRun, WorkRunTransaction, WorkRunTransactionType
 from app.app import db
 from app.exception import ValidationError
+from app.utils import QTY_EPS
 
 
 def create_init_material_transaction(material_list: MaterialList, document: str):
@@ -12,7 +13,7 @@ def create_init_material_transaction(material_list: MaterialList, document: str)
     ))
 
 
-def create_material_transaction(material_list: MaterialList, document: str, transaction_type, quantity: int, **kwargs):
+def create_material_transaction(material_list: MaterialList, document: str, transaction_type, quantity: float, **kwargs):
     """
     Create a MaterialTransaction linked to the given document.
     - ADD: stores positive amount
@@ -24,7 +25,7 @@ def create_material_transaction(material_list: MaterialList, document: str, tran
             transaction_type = MaterialTransactionType[transaction_type.upper()]
         if transaction_type == MaterialTransactionType.REMOVE:
             available = material_list.remaining_num
-            if quantity > available:
+            if quantity > available + QTY_EPS:
                 raise ValidationError(
                     f"วัสดุ '{material_list.item_name}' (ID: {material_list.material_list_id}) ไม่เพียงพอ "
                     f"คงเหลือ: {available}, ต้องการ: {quantity}"
@@ -42,7 +43,7 @@ def create_material_transaction(material_list: MaterialList, document: str, tran
     except Exception:
         raise
 
-def create_work_run_transaction(work_run: WorkRun, transaction_type: WorkRunTransactionType, quantity: int, document: str):
+def create_work_run_transaction(work_run: WorkRun, transaction_type: WorkRunTransactionType, quantity: float, document: str):
     """Append an item-movement record to a WorkRun's audit log."""
     try:
         db.session.add(WorkRunTransaction(

@@ -6,7 +6,7 @@ from app.repositories import qc_work_order_repository, sales_item_repository
 from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
 from app.exception import ValidationError
-from app.utils import convert_start_date, convert_end_date
+from app.utils import convert_start_date, convert_end_date, QTY_EPS
 
 def get_all_qc_work_orders(data):
     try:
@@ -105,7 +105,7 @@ def create_qc_work_order(data):
         
         planned_qty = sales_item.quantity
         existing_qc_qty = sum(qc.quantity for qc in sales_item.qc_work_orders)                                                                
-        if existing_qc_qty + qc_quantity > planned_qty:              
+        if existing_qc_qty + qc_quantity > planned_qty + QTY_EPS:
             raise ValidationError(f"จำนวน QC รวม ({existing_qc_qty + qc_quantity}) เกินจำนวนที่วางแผนผลิต ({planned_qty})")      
                 
         material_in_sales_order = sales_order_service.get_material_list_from_sales_order(sales_item.doc_entry)
@@ -137,7 +137,7 @@ def create_qc_work_order(data):
                     raise ValidationError("ไม่พบรายการวัตถุดิบเทส")
                 material = material_map[material_list_id]
                 transaction_service.create_material_transaction(
-                    material, qc.qc_work_order_id, "REMOVE", int(usage.get("quantity"))
+                    material, qc.qc_work_order_id, "REMOVE", float(usage.get("quantity"))
                 )
 
         db.session.commit()

@@ -67,6 +67,17 @@ def convert_end_date(end_date):
     )
 
 
+# Quantities are DOUBLE (center sends fractional qty), so never compare them with
+# == / != directly — 0.1 + 0.2 != 0.3 in float. Tolerance is well below any unit
+# center actually ships.
+QTY_EPS = 1e-6
+
+
+def qty_equal(a, b, eps=QTY_EPS):
+    """True when two quantities match within float tolerance."""
+    return abs((a or 0) - (b or 0)) <= eps
+
+
 def check_true_permissions(authorizes, permission_list):
     """
     ตรวจสอบว่า permission_list มี permission ที่ต้องการทั้งหมดหรือไม่

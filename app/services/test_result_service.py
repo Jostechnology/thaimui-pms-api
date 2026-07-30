@@ -17,6 +17,7 @@ from app.repositories import (
 from app.services import transaction_service, document_code_service, labor_cost_service, inspection_checklist, storage_service
 from app.app import db
 from app.exception import NotFoundError, ValidationError
+from app.utils import QTY_EPS, qty_equal
 from sqlalchemy.orm import joinedload
 
 
@@ -96,7 +97,7 @@ def _validate_work_run_sources(qc, sales_item, claimed_qty, data):
 
         committed = test_result_repository.get_committed_qty_for_work_run(wr_id)
         remaining = (work_run.usable_qty or 0) - committed
-        if qty > remaining:
+        if qty > remaining + QTY_EPS:
             raise ValidationError(
                 f"WorkRun {wr_id} มีจำนวนที่เทสได้เหลือ {remaining} แต่ขอ {qty}"
             )
@@ -104,7 +105,7 @@ def _validate_work_run_sources(qc, sales_item, claimed_qty, data):
         total_from_runs += qty
         validated_sources.append((wr_id, qty))
 
-    if total_from_runs != claimed_qty:
+    if not qty_equal(total_from_runs, claimed_qty):
         raise ValidationError(
             f"ผลรวม qty_from_run ({total_from_runs}) ต้องเท่ากับ claimed_qty ({claimed_qty})"
         )
@@ -128,7 +129,7 @@ def create_test_result(qc_work_order_id, data):
             raise ValidationError("จำนวนที่ขอเทสต้องมากกว่า 0")
 
         available = sales_item.available_for_test_qty
-        if claimed_qty > available:
+        if claimed_qty > available + QTY_EPS:
             raise ValidationError(
                 f"จำนวนที่ขอเทส ({claimed_qty}) มีมากกว่าจำนวนสินค้าที่สามารถเทสได้ ({available})"
             )

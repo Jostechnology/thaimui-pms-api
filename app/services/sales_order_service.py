@@ -247,6 +247,8 @@ def _complete_no_work_items(sales_order):
     Marks those items COMPLETED and reports back so the caller can tell WMS the
     order is finished *after* the transaction commits. Returns True if it did.
 
+    An order with zero lines is a legitimate no-work order and closes immediately.
+
     A Z-BOM item always counts as work even when center sends produce=False —
     it is built from a BOM, so auto-closing it would tell WMS the order is done
     while nothing was ever manufactured.
@@ -256,11 +258,6 @@ def _complete_no_work_items(sales_order):
     here. See _finish_committed_orders.
     """
     items = sales_order.sales_items
-    if not items:
-        # An order with no lines is far more likely a truncated center payload than a
-        # genuine no-work order — leave it INPROGRESS for a human rather than telling
-        # WMS it is done. Escape hatch is DELETE /api/sales_order/cascade/<doc_num>.
-        return False
     if any(si.produce or si.test or si.is_manufactured for si in items):
         return False
     for si in items:
@@ -327,9 +324,9 @@ def close_sales_order(doc_entry, branch_id=None):
         if sales_order.status == SalesOrderStatus.COMPLETED:
             raise ValidationError("Order นี้ถูกปิดไปแล้ว")
 
+        # An order with no lines has nothing to gate on — it falls straight through
+        # to sales_order_finish below.
         items = sales_item_repository.get_sales_items_by_doc_entry(doc_entry)
-        if not items:
-            raise ValidationError("Order นี้ไม่มีรายการขาย ปิด Order ไม่ได้")
 
         # Checked against every item, including ones already flagged COMPLETED: an item
         # that reached COMPLETED without production is exactly the bad state to catch.
