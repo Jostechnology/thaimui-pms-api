@@ -1,7 +1,7 @@
 import time
 
 from app.api_auth import _log_timer
-from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem
+from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem, WorkRunComponentPin
 from app.app import db
 from sqlalchemy.orm import selectinload, joinedload
 
@@ -237,3 +237,68 @@ def get_active_break(work_run_id):
 def save_break(work_run_break):
     db.session.add(work_run_break)
     return work_run_break
+
+
+# --- Component version pins ---
+
+def has_started_run_for_work_order(work_order_id):
+    """A run that was ever started freezes the WorkOrder's component documents.
+    start_date is set once at PENDING -> INPROGRESS and never cleared, so this
+    stays true after the run completes."""
+    query = (
+        db.session.query(WorkRun.work_run_id)
+        .filter(
+            WorkRun.work_order_id == work_order_id,
+            WorkRun.start_date != None,
+        )
+    )
+    return query.first() is not None
+
+
+def save_component_pin(pin):
+    db.session.add(pin)
+    return pin
+
+
+def get_current_component_pins(work_run_id):
+    query = (
+        db.session.query(WorkRunComponentPin)
+        .options(
+            selectinload(WorkRunComponentPin.item_component),
+            selectinload(WorkRunComponentPin.version),
+        )
+        .filter(
+            WorkRunComponentPin.work_run_id == work_run_id,
+            WorkRunComponentPin.superseded_date == None,
+        )
+        .order_by(WorkRunComponentPin.item_component_id.asc())
+    )
+    return query.all()
+
+
+def get_current_component_pin(work_run_id, item_component_id):
+    query = (
+        db.session.query(WorkRunComponentPin)
+        .filter(
+            WorkRunComponentPin.work_run_id == work_run_id,
+            WorkRunComponentPin.item_component_id == item_component_id,
+            WorkRunComponentPin.superseded_date == None,
+        )
+    )
+    return query.first()
+
+
+def get_component_pin_history(work_run_id):
+    query = (
+        db.session.query(WorkRunComponentPin)
+        .options(
+            selectinload(WorkRunComponentPin.item_component),
+            selectinload(WorkRunComponentPin.version),
+        )
+        .filter(WorkRunComponentPin.work_run_id == work_run_id)
+        .order_by(
+            WorkRunComponentPin.item_component_id.asc(),
+            WorkRunComponentPin.pin_id.asc(),
+        )
+    )
+    return query.all()

@@ -3,10 +3,12 @@ import time
 from app.api_auth import _log_timer, verify_required
 from app.app import app
 from flask import request, jsonify
-from app.ma_sqlalchemy import MaterialListSchema, WorkRunDisplaySchema, WorkRunCostDisplaySchema, WorkRunSchema, WorkRunRequiredItemSchema
+from app.ma_sqlalchemy import MaterialListSchema, WorkRunComponentPinSchema, WorkRunDisplaySchema, WorkRunCostDisplaySchema, WorkRunSchema, WorkRunRequiredItemSchema
 from app.services.work_run_service import (
     create_work_run,
     complete_work_run,
+    get_component_pin_history,
+    get_component_pins,
     get_work_run_by_id,
     get_work_runs_by_work_order,
     get_work_runs_cost_by_work_order,
@@ -41,6 +43,21 @@ def api_get_work_run(work_run_id):
 def api_get_work_run_detail(work_run_id):
     result = get_work_run_detail(work_run_id)
     return jsonify({"data": result, "success": True}), 200
+
+
+@app.route("/api/work_run/<int:work_run_id>/component_pins", methods=["GET"])
+@verify_required
+def api_get_work_run_component_pins(work_run_id):
+    """Which component document version this run is being built against."""
+    result = get_component_pins(work_run_id)
+    return jsonify({"data": WorkRunComponentPinSchema(many=True).dump(result), "success": True}), 200
+
+
+@app.route("/api/work_run/<int:work_run_id>/component_pins/history", methods=["GET"])
+@verify_required
+def api_get_work_run_component_pin_history(work_run_id):
+    result = get_component_pin_history(work_run_id)
+    return jsonify({"data": WorkRunComponentPinSchema(many=True).dump(result), "success": True}), 200
 
 
 @app.route("/api/work_order/<int:work_order_id>/work_run/create", methods=["POST"])

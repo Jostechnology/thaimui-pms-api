@@ -2,7 +2,7 @@ from app.con_sqlalchemy import MaterialList, SalesItem, SalesOrder, WorkOrder, W
 from app.repositories import work_order_repository
 from app.app import db
 from app.repositories import sales_item_repository
-from app.services import sales_item_service, transaction_service
+from app.services import item_component_service, sales_item_service, transaction_service
 from app.exception import AuthorizationError, NotFoundError, UniqueError
 from app.utils import convert_start_date, convert_end_date
 
@@ -25,7 +25,7 @@ def get_all_work_orders(data):
 def get_work_order_by_id(work_order_id):
     try:
         work_order = work_order_repository.get_work_order_by_id(work_order_id)
-        return work_order
+        return item_component_service.decorate_work_order_components(work_order)
     except Exception:
         raise
 
@@ -89,6 +89,10 @@ def create_work_order(data, unassigned_permission=False):
                 item_component.material_usages.append(material_usage)
 
         db.session.add(work_order)
+        db.session.flush()
+
+        # v1 of every component document, so runs always have a version to pin.
+        item_component_service.create_initial_versions(work_order)
 
         db.session.commit()
         return work_order

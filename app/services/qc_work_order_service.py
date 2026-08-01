@@ -1,3 +1,4 @@
+import logging
 import time
 
 from app.api_auth import _log_timer
@@ -7,6 +8,8 @@ from app.app import db
 from app.services import sales_item_service, sales_order_service, transaction_service
 from app.exception import ValidationError
 from app.utils import convert_start_date, convert_end_date, QTY_EPS
+
+logger = logging.getLogger(__name__)
 
 def get_all_qc_work_orders(data):
     try:
@@ -88,6 +91,73 @@ def generate_qc_work_order_code(sales_item, qc_work_order_id):
         qc_work_order_id, sales_item.sales_item_id
     )
     return f"{sales_item.doc_num}-{sales_item_order}-{qc_order}"
+
+
+def sync_component_declared_qc(work_order, declared):
+    """Reconcile the component-declared (auto) QCWorkOrder for `work_order`
+    against whether any of its components currently resolve a test section.
+
+    Called by item_component_service after a component-save's version
+    snapshot is written — component saves must not construct a QCWorkOrder
+    themselves, this is that boundary. Caller owns the commit: this never
+    commits or rolls back, since it always runs inside the caller's
+    component-save transaction.
+    """
+    existing_auto = qc_work_order_repository.get_component_declared_qc(work_order.work_order_id)
+
+    if declared and not existing_auto:
+        sales_item = work_order.sales_item
+        # Only manually-created QC work orders exist at this point (we already
+        # confirmed there's no existing_auto), so this is exactly "how much of
+        # the planned test quantity manual QC already covers".
+        covered = sum(qc.quantity for qc in sales_item.qc_work_orders)
+        remaining = sales_item.quantity - covered
+        if remaining <= QTY_EPS:
+            logger.info(
+                "WorkOrder %s declared a test section but sales_item %s test "
+                "quantity is already fully covered by manual QC work orders "
+                "(%s/%s) — skipping auto QC",
+                work_order.work_order_id, sales_item.sales_item_id, covered, sales_item.quantity,
+            )
+            return None
+
+        qc = QCWorkOrder(
+            sales_item_id=sales_item.sales_item_id,
+            quantity=remaining,
+            source_work_order_id=work_order.work_order_id,
+            branch_id=sales_item.branch_id,
+        )
+        # Deliberately do NOT create a QCForm, any QCItem rows, or a
+        # MaterialTransaction:
+        #   - the component's test sections ARE the form — there is nothing
+        #     left for QC staff to fill in
+        #   - _build_qc_items hard-raises without material_list_id, which a
+        #     component-declared QC never has (it isn't testing a specific
+        #     material_list line, it's testing the component as documented)
+        #   - the component's own material_usages already account for the
+        #     material consumed, so a REMOVE MaterialTransaction here would
+        #     double-count it
+        qc = qc_work_order_repository.create_qc_work_order(qc)
+        db.session.flush()
+        qc.qc_work_order_code = generate_qc_work_order_code(sales_item, qc.qc_work_order_id)
+        return qc
+
+    if not declared and existing_auto:
+        # The last test section on this WorkOrder's components was just removed.
+        if existing_auto.test_results:
+            raise ValidationError(
+                f"ไม่สามารถลบส่วนทดสอบได้ เนื่องจากใบสั่งเทส "
+                f"{existing_auto.qc_work_order_code or existing_auto.qc_work_order_id} "
+                "มีการบันทึกผลการทดสอบไปแล้ว"
+            )
+        # Not qc_work_order_service.delete_qc_work_order — that commits and
+        # hard-deletes with no TestResult check (we've already made that
+        # check above). Caller owns the commit here.
+        qc_work_order_repository.delete_component_declared_qc(existing_auto)
+        return None
+
+    # declared and existing_auto already covers it, or neither is true.
+    return existing_auto
 
 
 def create_qc_work_order(data):

@@ -380,6 +380,7 @@ class WorkRun(AuditMixin, BranchScopedMixin):
     transactions              = db.relationship('WorkRunTransaction', back_populates='work_run', cascade='all, delete-orphan')
     required_items            = db.relationship('WorkRunRequiredItem', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
     cost                      = db.relationship('WorkRunCost', foreign_keys='WorkRunCost.work_run_id', uselist=False, lazy='noload', overlaps='work_run')
+    component_pins            = db.relationship('WorkRunComponentPin', back_populates='work_run', cascade='all, delete-orphan', lazy='noload')
 
 
     @property
@@ -652,10 +653,20 @@ class QCWorkOrder(AuditMixin):
     qc_by = db.Column(db.String(100), nullable=True)
     quantity = db.Column(db.Double, nullable=False, default=1)
     remark = db.Column(db.String(500), nullable=True)
+    # Non-null marks this QCWorkOrder as auto-created because a WorkOrder's
+    # component declared a TEST SECTION, rather than manually created by QC
+    # staff. SET NULL on WorkOrder delete: the QCWorkOrder (and any TestResult
+    # already recorded against it) must survive even if the WorkOrder is gone.
+    source_work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='SET NULL'), nullable=True, index=True)
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders')
+    source_work_order = db.relationship('WorkOrder', foreign_keys=[source_work_order_id], lazy='noload')
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
     qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
     test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='noload')
+
+    @property
+    def is_component_declared(self):
+        return self.source_work_order_id is not None
 
 
 SalesItem.num_qc_work_order = column_property(
@@ -1110,6 +1121,109 @@ class ItemComponent(AuditMixin):
     component_template_id = db.Column(db.Integer, db.ForeignKey('m_component_template.component_template_id'), nullable=True)
     component_template = db.relationship('ComponentTemplate', back_populates='item_components', lazy='noload')
     doc_version = db.Column(db.Integer, nullable=False, default=0)
+    versions = db.relationship(
+        'ItemComponentVersion',
+        back_populates='item_component',
+        cascade='all, delete-orphan',
+        order_by='ItemComponentVersion.version_no',
+        lazy='noload',
+    )
+    edit_requests = db.relationship(
+        'ComponentEditRequest',
+        back_populates='item_component',
+        cascade='all, delete-orphan',
+        lazy='noload',
+    )
+
+
+class ItemComponentVersion(AuditMixin):
+    """Immutable content snapshot of an ItemComponent, one row per real save.
+
+    `ItemComponent.doc_version` points at the newest `version_no`. The snapshot
+    columns are what the generated PDF for that version was rendered from —
+    never re-read the live rows to reproduce an old version.
+    """
+    __tablename__ = "t_item_component_version"
+    __table_args__ = (UniqueConstraint('item_component_id', 'version_no', name='uq_item_component_version_no'),)
+
+    version_id = db.Column(db.Integer, primary_key=True)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False, index=True)
+    version_no = db.Column(db.Integer, nullable=False)
+    component_name = db.Column(db.String(255), nullable=False)
+    remark = db.Column(db.String(255), nullable=True)
+    img_url = db.Column(db.String(500), nullable=True)
+    component_template_id = db.Column(db.Integer, db.ForeignKey('m_component_template.component_template_id'), nullable=True)
+    template_name = db.Column(db.String(255), nullable=True)
+    # template.sections as it stood when this version was saved — templates get edited
+    sections_snapshot = db.Column(db.JSON, nullable=False, default=list)
+    # [{"section_key":..., "section_type":..., "data":...}]
+    section_data_snapshot = db.Column(db.JSON, nullable=False, default=list)
+    # [{"material_list_id":..., "item_code":..., "item_name":..., "quantity_used":...}]
+    material_usage_snapshot = db.Column(db.JSON, nullable=False, default=list)
+    doc_ref_no = db.Column(db.String(120), nullable=True)
+    doc_path = db.Column(db.String(500), nullable=True)
+    change_reason = db.Column(db.String(500), nullable=True)
+    # use_alter: t_component_edit_request points back at this table, so the FK
+    # pair is circular and must be added after both tables exist.
+    edit_request_id = db.Column(db.Integer, db.ForeignKey('t_component_edit_request.edit_request_id', ondelete='SET NULL', use_alter=True, name='fk_component_version_edit_request'), nullable=True)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
+
+    item_component = db.relationship('ItemComponent', back_populates='versions', lazy='noload')
+    edit_request = db.relationship('ComponentEditRequest', foreign_keys=[edit_request_id], lazy='noload')
+
+
+class WorkRunComponentPin(AuditMixin, BranchScopedMixin):
+    """Which component version a WorkRun is being built against — the as-built record.
+
+    Append-only: re-pinning supersedes the previous row instead of updating it,
+    so the full pin history of a run survives. Current pin per component is the
+    row with `superseded_date IS NULL`.
+    """
+    __tablename__ = "t_work_run_component_pin"
+
+    pin_id = db.Column(db.Integer, primary_key=True)
+    work_run_id = db.Column(db.Integer, db.ForeignKey('t_work_run.work_run_id', ondelete='CASCADE'), nullable=False, index=True)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False, index=True)
+    version_id = db.Column(db.Integer, db.ForeignKey('t_item_component_version.version_id', ondelete='CASCADE'), nullable=False)
+    version_no = db.Column(db.Integer, nullable=False)
+    superseded_date = db.Column(db.DateTime, nullable=True)
+    reason = db.Column(db.String(500), nullable=True)
+
+    work_run = db.relationship('WorkRun', back_populates='component_pins', lazy='noload')
+    item_component = db.relationship('ItemComponent', lazy='noload')
+    version = db.relationship('ItemComponentVersion', lazy='noload')
+
+
+class ComponentEditRequestStatus(enum.Enum):
+    PENDING = 'PENDING'
+    APPROVED = 'APPROVED'
+    REJECTED = 'REJECTED'
+    CONSUMED = 'CONSUMED'
+    CANCELLED = 'CANCELLED'
+
+
+class ComponentEditRequest(AuditMixin):
+    """Sales asks Production for permission to edit a component whose WorkOrder
+    is already in production. An APPROVED request is single-use: the next save
+    consumes it and flips it to CONSUMED."""
+    __tablename__ = "t_component_edit_request"
+
+    edit_request_id = db.Column(db.Integer, primary_key=True)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False, index=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='CASCADE'), nullable=False, index=True)
+    base_version_no = db.Column(db.Integer, nullable=True)
+    reason = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.Enum(ComponentEditRequestStatus), nullable=False, default=ComponentEditRequestStatus.PENDING, index=True)
+    reviewed_by = db.Column(db.String(80), nullable=True)
+    reviewed_date = db.Column(db.DateTime, nullable=True)
+    review_remark = db.Column(db.String(500), nullable=True)
+    consumed_version_id = db.Column(db.Integer, db.ForeignKey('t_item_component_version.version_id', ondelete='SET NULL'), nullable=True)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
+
+    item_component = db.relationship('ItemComponent', back_populates='edit_requests', lazy='noload')
+    work_order = db.relationship('WorkOrder', lazy='noload')
+    consumed_version = db.relationship('ItemComponentVersion', foreign_keys=[consumed_version_id], lazy='noload')
+
 
 class ComponentMaterialUsage(AuditMixin):
     __tablename__ = "t_component_material_usage"
@@ -1233,6 +1347,11 @@ class ComponentTemplateSectionData(AuditMixin):
     section_key = db.Column(db.String(255), nullable=False)
     item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='CASCADE'), nullable=False)
     item_component = db.relationship('ItemComponent', back_populates='component_template_sections', lazy='noload')
+    # Per-instance override of the template's section-level "is_test_section" flag.
+    # NULL means "inherit whatever the template section says" — only an explicit
+    # True/False here overrides it. See item_component_service.resolve_test_section_keys
+    # for the single source of truth on resolving this.
+    is_test_section = db.Column(db.Boolean, nullable=True)
 
 class PhaseTemplate(AuditMixin):
     __tablename__ = "m_phase_template"

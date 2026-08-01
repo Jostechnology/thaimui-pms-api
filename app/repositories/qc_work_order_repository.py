@@ -14,6 +14,9 @@ def _qc_work_order_options():
         selectinload(QCWorkOrder.test_results).selectinload(TestResult.test_result_items),
         selectinload(QCWorkOrder.test_results).joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
         selectinload(QCWorkOrder.test_results).selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
+        # Detail-only: lets QCWorkOrderSchemaDetail.source_work_order_code
+        # resolve without a lazy load.
+        selectinload(QCWorkOrder.source_work_order),
     ]
 
 
@@ -110,6 +113,20 @@ def create_qc_work_order(qc_work_order):
         raise
 
 
+def get_component_declared_qc(work_order_id):
+    """The auto-created QCWorkOrder declared by this WorkOrder's component test
+    sections (source_work_order_id == work_order_id), if any. test_results is
+    eager-loaded so the caller can check for recorded results without a lazy
+    load (TestResult is lazy='noload' on the model)."""
+    try:
+        query = db.session.query(QCWorkOrder).options(
+            selectinload(QCWorkOrder.test_results)
+        ).filter(QCWorkOrder.source_work_order_id == work_order_id)
+        return query.first()
+    except Exception:
+        raise
+
+
 def delete_qc_work_order(qc_work_order_id):
     try:
         qc = db.session.query(QCWorkOrder).filter(
@@ -119,6 +136,18 @@ def delete_qc_work_order(qc_work_order_id):
             raise NotFoundError(f"ไม่พบ QC Work Order ID -> {qc_work_order_id}")
         db.session.delete(qc)
         return qc
+    except Exception:
+        raise
+
+
+def delete_component_declared_qc(qc_work_order):
+    """Hard-delete a component-declared (auto) QCWorkOrder. The caller
+    (qc_work_order_service.sync_component_declared_qc) has already verified
+    there are no TestResult rows against it — unlike the manual-delete path
+    (delete_qc_work_order), this performs no such check and does not commit."""
+    try:
+        db.session.delete(qc_work_order)
+        return qc_work_order
     except Exception:
         raise
 

@@ -611,6 +611,24 @@ modules:
   - method: view
     code: view.PHASE_TEMPLATE
     description: View รูปแบบ Phase
+- code: COMPONENT_EDIT
+  name: คำขอแก้ไขเอกสารส่วนประกอบ
+  parent_code: WORKORDERS
+  level: 2
+  sort_order: 5
+  permissions:
+  - method: create
+    code: create.COMPONENT_EDIT
+    description: ขออนุมัติแก้ไขเอกสารส่วนประกอบ (ฝ่ายขาย)
+  # 'edit' is the approve/reject right. The permission tree only ever surfaces
+  # create/delete/edit/view to the FE (see helpers/pageAccess.ts), so a bespoke
+  # 'approve' method would be invisible there and the buttons would never render.
+  - method: edit
+    code: edit.COMPONENT_EDIT
+    description: อนุมัติ/ปฏิเสธคำขอแก้ไขเอกสารส่วนประกอบ (ฝ่ายผลิต)
+  - method: view
+    code: view.COMPONENT_EDIT
+    description: View คำขอแก้ไขเอกสารส่วนประกอบ
 - code: MACHINE_TYPE_LIST
   name: ประเภทเครื่องจักร
   parent_code: MACHINE

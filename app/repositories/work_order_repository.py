@@ -17,6 +17,11 @@ def _work_order_options():
         selectinload(WorkOrder.item_components)
             .selectinload(ItemComponent.material_usages)
             .selectinload(ComponentMaterialUsage.material_list),
+        # component_template(+sections) so item_component_service.decorate_work_order_components
+        # can resolve has_test_section/test_section_keys on each nested component
+        # without lazy-loading.
+        selectinload(WorkOrder.item_components).selectinload(ItemComponent.component_template),
+        selectinload(WorkOrder.item_components).selectinload(ItemComponent.component_template_sections),
     ]
 
 
@@ -62,6 +67,15 @@ def get_work_order_by_id(work_order_id):
         return work_order
     except Exception:
         raise
+
+def get_work_order_light(work_order_id):
+    """No eager loading — for writes that only need the WorkOrder's own columns."""
+    try:
+        query = db.session.query(WorkOrder).filter(WorkOrder.work_order_id == work_order_id)
+        return query.first()
+    except Exception:
+        raise
+
 
 def get_work_order_by_center_sales_item_id(center_sales_item_id):
     try:

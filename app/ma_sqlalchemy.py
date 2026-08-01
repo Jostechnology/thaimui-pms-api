@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, WorkRunRequiredItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
+from app.con_sqlalchemy import BreakType, ComponentEditRequestStatus, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, WorkRunRequiredItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
 from app.con_sqlalchemy import ReportRunStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
@@ -262,6 +262,7 @@ class ComponentTemplateSectionDataSchema(Schema):
     data = fields.Raw()
     section_key = fields.String()
     item_component_id = fields.Integer()
+    is_test_section = fields.Boolean(allow_none=True)
 
 class ItemComponentSchema(Schema):
     item_component_id = fields.Integer()
@@ -274,6 +275,76 @@ class ItemComponentSchema(Schema):
     component_template_id = fields.Integer(allow_none=True)
     material_usages = fields.List(fields.Nested(ComponentMaterialUsageSchema()))
     component_template_sections = fields.List(fields.Nested(ComponentTemplateSectionDataSchema()), dump_default=[])
+    # Populated by item_component_service — not a DB column.
+    is_locked = fields.Boolean(dump_only=True)
+    lock_reason = fields.String(dump_only=True, allow_none=True)
+    active_edit_request = fields.Nested(lambda: ComponentEditRequestSchema(), dump_only=True, allow_none=True)
+    has_test_section = fields.Boolean(dump_only=True)
+    test_section_keys = fields.List(fields.String(), dump_only=True)
+
+
+class ItemComponentVersionSchema(Schema):
+    version_id = fields.Integer(dump_only=True)
+    item_component_id = fields.Integer(dump_only=True)
+    version_no = fields.Integer(dump_only=True)
+    component_name = fields.String(dump_only=True)
+    remark = fields.String(dump_only=True, allow_none=True)
+    img_url = fields.String(dump_only=True, allow_none=True)
+    component_template_id = fields.Integer(dump_only=True, allow_none=True)
+    template_name = fields.String(dump_only=True, allow_none=True)
+    sections_snapshot = fields.Raw(dump_only=True)
+    section_data_snapshot = fields.Raw(dump_only=True)
+    material_usage_snapshot = fields.Raw(dump_only=True)
+    doc_ref_no = fields.String(dump_only=True, allow_none=True)
+    doc_path = fields.String(dump_only=True, allow_none=True)
+    change_reason = fields.String(dump_only=True, allow_none=True)
+    edit_request_id = fields.Integer(dump_only=True, allow_none=True)
+    created_by = fields.String(dump_only=True, allow_none=True)
+    created_date = fields.DateTime(dump_only=True)
+
+
+class ItemComponentVersionListSchema(ItemComponentVersionSchema):
+    """History listing — drops the heavy snapshot blobs."""
+    class Meta:
+        exclude = ("sections_snapshot", "section_data_snapshot", "material_usage_snapshot")
+
+
+class ComponentEditRequestSchema(Schema):
+    edit_request_id = fields.Integer(dump_only=True)
+    item_component_id = fields.Integer(dump_only=True)
+    work_order_id = fields.Integer(dump_only=True)
+    base_version_no = fields.Integer(dump_only=True, allow_none=True)
+    reason = fields.String()
+    status = fields.Enum(ComponentEditRequestStatus, dump_only=True)
+    reviewed_by = fields.String(dump_only=True, allow_none=True)
+    reviewed_date = fields.DateTime(dump_only=True, allow_none=True)
+    review_remark = fields.String(dump_only=True, allow_none=True)
+    consumed_version_id = fields.Integer(dump_only=True, allow_none=True)
+    branch_id = fields.Integer(dump_only=True, allow_none=True)
+    created_by = fields.String(dump_only=True, allow_none=True)
+    created_date = fields.DateTime(dump_only=True)
+
+
+class ComponentEditRequestListSchema(ComponentEditRequestSchema):
+    """Inbox row — carries enough context that Production doesn't have to open the WO."""
+    component_name = fields.String(dump_only=True, allow_none=True, attribute="item_component.component_name")
+    work_order_code = fields.String(dump_only=True, allow_none=True, attribute="work_order.work_order_code")
+
+
+class WorkRunComponentPinSchema(Schema):
+    pin_id = fields.Integer(dump_only=True)
+    work_run_id = fields.Integer(dump_only=True)
+    item_component_id = fields.Integer(dump_only=True)
+    version_id = fields.Integer(dump_only=True)
+    version_no = fields.Integer(dump_only=True)
+    superseded_date = fields.DateTime(dump_only=True, allow_none=True)
+    reason = fields.String(dump_only=True, allow_none=True)
+    created_by = fields.String(dump_only=True, allow_none=True)
+    created_date = fields.DateTime(dump_only=True)
+    component_name = fields.String(dump_only=True, allow_none=True, attribute="item_component.component_name")
+    doc_ref_no = fields.String(dump_only=True, allow_none=True, attribute="version.doc_ref_no")
+    doc_path = fields.String(dump_only=True, allow_none=True, attribute="version.doc_path")
+
 
 class WorkRunReworkSourceSchema(Schema):
     id                 = fields.Integer(dump_only=True)
@@ -475,6 +546,8 @@ class QCWorkOrderSchema(Schema):
     updated_by = fields.String()
     sales_item = fields.Nested(SalesItemNoMaterialSchema)
     status = fields.Method("get_status")
+    source_work_order_id = fields.Integer(allow_none=True)
+    is_component_declared = fields.Boolean(dump_only=True)
 
     def get_status(self, obj):
         if obj.status is None:
@@ -489,6 +562,7 @@ class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
     doc_entry       = fields.Method("get_doc_entry")
     sales_item_code = fields.Method("get_sales_item_code")
     sales_item_name = fields.Method("get_sales_item_name")
+    source_work_order_code = fields.Method("get_source_work_order_code")
 
     def get_sales_order(self, obj):
         if obj.sales_item and obj.sales_item.sales_order:
@@ -503,6 +577,9 @@ class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
 
     def get_sales_item_name(self, obj):
         return obj.sales_item.item_name if obj.sales_item else None
+
+    def get_source_work_order_code(self, obj):
+        return obj.source_work_order.work_order_code if obj.source_work_order else None
 
 
 class TestResultCheckSchema(Schema):

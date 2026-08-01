@@ -1,6 +1,6 @@
 import logging
-from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem
-from app.repositories import work_run_repository, work_order_repository, test_result_repository, picking_request_repository, material_list_repository
+from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkRunReworkSource, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, BreakType, WorkOrderStatus, TestSessionStatus, TestResultStatus, bangkok_now, WorkRunRequiredItem, WorkRunComponentPin
+from app.repositories import work_run_repository, work_order_repository, test_result_repository, picking_request_repository, material_list_repository, item_component_version_repository
 from app.services import transaction_service, document_code_service, work_order_service
 from app.con_sqlalchemy import WorkRunTransactionType
 from app.app import db
@@ -359,8 +359,111 @@ def start_work_run(work_run_id, data=None):
     if work_order and work_order.status != WorkOrderStatus.INPROGRESS:
         work_order.status = WorkOrderStatus.INPROGRESS
 
+    # Freeze the document set this run is built against. Same moment the
+    # WorkOrder's components lock, so lock and pin can never disagree.
+    _pin_current_component_versions(work_run)
+
     db.session.commit()
     return work_run_repository.get_work_run_display(work_run_id)
+
+
+# --- Component version pins ---
+
+def _pin_current_component_versions(work_run):
+    """Snapshot the current version of every ItemComponent on the WorkOrder.
+
+    Rework runs pin fresh at their own start — a rework follows the corrected
+    document, not the one its source run was built against.
+    """
+    existing = {
+        pin.item_component_id
+        for pin in work_run_repository.get_current_component_pins(work_run.work_run_id)
+    }
+    versions = item_component_version_repository.get_latest_versions_for_work_order(
+        work_run.work_order_id
+    )
+    pinned = []
+    for version in versions:
+        if version.item_component_id in existing:
+            continue
+        pin = WorkRunComponentPin(
+            work_run_id=work_run.work_run_id,
+            item_component_id=version.item_component_id,
+            version_id=version.version_id,
+            version_no=version.version_no,
+            # The pin belongs to the run's branch, not the caller's.
+            branch_id=work_run.branch_id,
+        )
+        work_run_repository.save_component_pin(pin)
+        pinned.append(pin)
+
+    if not versions:
+        logger.warning(
+            "WorkRun %s started with no component versions to pin (work_order %s)",
+            work_run.work_run_id, work_run.work_order_id,
+        )
+    return pinned
+
+
+def get_component_pins(work_run_id):
+    work_run = work_run_repository.get_work_run_by_id(work_run_id)
+    if not work_run:
+        raise NotFoundError(f"Work Run {work_run_id} not found")
+    return work_run_repository.get_current_component_pins(work_run_id)
+
+
+def get_component_pin_history(work_run_id):
+    work_run = work_run_repository.get_work_run_by_id(work_run_id)
+    if not work_run:
+        raise NotFoundError(f"Work Run {work_run_id} not found")
+    return work_run_repository.get_component_pin_history(work_run_id)
+
+
+def repin_component_version(work_run_id, item_component_id, version_no, reason):
+    """Move a live run onto a newer version of one component document.
+
+    Deliberately has NO HTTP route — moving a run off its as-built document is
+    a last resort and must go through a service caller, not the UI. Appends a
+    new pin and supersedes the old one so the run's full pin history survives.
+
+    Completed runs are immutable: their pins are the as-built record.
+    """
+    if not reason or not str(reason).strip():
+        raise ValidationError("ต้องระบุเหตุผลในการเปลี่ยนเวอร์ชันเอกสารของ Work Run")
+
+    work_run = work_run_repository.get_work_run_by_id(work_run_id)
+    if not work_run:
+        raise NotFoundError(f"Work Run {work_run_id} not found")
+    if work_run.status == WorkRunStatus.COMPLETED:
+        raise ValidationError(
+            "Work Run เสร็จสิ้นแล้ว ไม่สามารถเปลี่ยนเวอร์ชันเอกสารได้ (as-built ต้องคงเดิม)"
+        )
+
+    version = item_component_version_repository.get_version_by_no(item_component_id, version_no)
+    if not version:
+        raise NotFoundError(
+            f"ไม่พบเวอร์ชัน {version_no} ของ Item Component {item_component_id}"
+        )
+
+    current = work_run_repository.get_current_component_pin(work_run_id, item_component_id)
+    if current and current.version_no == version_no:
+        raise ValidationError(
+            f"Work Run {work_run_id} ใช้เวอร์ชัน {version_no} ของส่วนประกอบนี้อยู่แล้ว"
+        )
+    if current:
+        current.superseded_date = bangkok_now()
+
+    pin = WorkRunComponentPin(
+        work_run_id=work_run_id,
+        item_component_id=item_component_id,
+        version_id=version.version_id,
+        version_no=version.version_no,
+        reason=reason,
+        branch_id=work_run.branch_id,
+    )
+    work_run_repository.save_component_pin(pin)
+    db.session.commit()
+    return pin
 
 
 def pause_work_run(work_run_id, data):
