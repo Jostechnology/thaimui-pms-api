@@ -721,6 +721,14 @@ class QCForm(AuditMixin):
     details                  = db.Column(db.Text, nullable=True)
     customer_receipt_number  = db.Column(db.String(100), nullable=True)
 
+    # วันที่ย้าย / วันที่ส่ง — split out of customer_receipt_number, which the
+    # frontend used to (mis)bind to both date inputs via one shared string
+    # state field. customer_receipt_number keeps meaning an actual receipt
+    # number; its pre-existing values are NOT backfilled into these columns
+    # since they are ambiguous (could be either date, in an unknown format).
+    transfer_date = db.Column(db.Date, nullable=True)
+    delivery_date = db.Column(db.Date, nullable=True)
+
     qc_work_order = db.relationship('QCWorkOrder', back_populates='qc_form', lazy='noload')
 
 

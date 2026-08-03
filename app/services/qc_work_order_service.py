@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import datetime
 
 from app.api_auth import _log_timer
 from app.con_sqlalchemy import QCWorkOrder, QCForm, QCItem, SalesItem
@@ -37,6 +38,21 @@ def get_qc_work_order_by_id(qc_work_order_id):
         raise
 
 
+def _parse_qc_form_date(raw):
+    """Parse transfer_date / delivery_date from the QC form payload.
+
+    Accepts 'YYYY-MM-DD' strings. None or '' means "no date" and becomes NULL
+    rather than a parse error, since both fields are optional and independent
+    of customer_receipt_number.
+    """
+    if raw is None or raw == "":
+        return None
+    try:
+        return datetime.strptime(str(raw).strip(), "%Y-%m-%d").date()
+    except ValueError:
+        raise ValidationError(f"รูปแบบวันที่ไม่ถูกต้อง ต้องเป็น YYYY-MM-DD: {raw}")
+
+
 def _build_qc_form(qc_work_order_id, data):
     return QCForm(
         qc_work_order_id=qc_work_order_id,
@@ -60,6 +76,8 @@ def _build_qc_form(qc_work_order_id, data):
         general_remark=data.get("generalRemark"),
         details=data.get("details"),
         customer_receipt_number=data.get("customerReceiptNumber"),
+        transfer_date=_parse_qc_form_date(data.get("transferDate")),
+        delivery_date=_parse_qc_form_date(data.get("deliveryDate")),
     )
 
 
@@ -254,6 +272,14 @@ def update_qc_work_order(qc_work_order_id, data):
             form.general_remark     = data.get("generalRemark", form.general_remark)
             form.details            = data.get("details", form.details)
             form.customer_receipt_number = data.get("customerReceiptNumber", form.customer_receipt_number)
+            # Dates need parsing (and an explicit empty string must clear the
+            # field to NULL), so these can't use the get-with-default idiom
+            # above: data.get("transferDate", form.transfer_date) would fail
+            # to parse the already-stored date object. Presence-check instead.
+            if "transferDate" in data:
+                form.transfer_date = _parse_qc_form_date(data.get("transferDate"))
+            if "deliveryDate" in data:
+                form.delivery_date = _parse_qc_form_date(data.get("deliveryDate"))
         else:
             db.session.add(_build_qc_form(qc_work_order_id, data))
 

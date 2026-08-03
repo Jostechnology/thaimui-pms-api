@@ -511,6 +511,8 @@ class QCFormSchema(Schema):
     general_remark          = fields.String()
     details                 = fields.String()
     customer_receipt_number = fields.String()
+    transfer_date           = fields.Date()
+    delivery_date           = fields.Date()
 
 
 class QCItemSchema(Schema):
