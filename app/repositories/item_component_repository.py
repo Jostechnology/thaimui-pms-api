@@ -100,3 +100,32 @@ def save_section_data(item_component_id, template_id, sections_data):
         return item
     except Exception:
         raise
+
+
+def replace_material_usage(item_component_id, material_usage_data):
+    """Full-replace ComponentMaterialUsage for one component: delete every
+    existing row, insert the new set. Mirrors save_section_data's
+    delete-then-insert shape. Caller owns flush/commit."""
+    try:
+        item_query = db.session.query(ItemComponent).filter(
+            ItemComponent.item_component_id == item_component_id
+        )
+        item = item_query.first()
+        if not item:
+            return None
+
+        delete_query = db.session.query(ComponentMaterialUsage).filter(
+            ComponentMaterialUsage.item_component_id == item_component_id
+        )
+        delete_query.delete(synchronize_session='fetch')
+
+        for usage in material_usage_data:
+            db.session.add(ComponentMaterialUsage(
+                item_component_id=item_component_id,
+                material_list_id=usage['material_list_id'],
+                quantity_used=usage['quantity_used'],
+            ))
+
+        return item
+    except Exception:
+        raise

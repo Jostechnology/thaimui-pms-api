@@ -14,6 +14,7 @@ from app.services.item_component_service import (
     resend_component_document,
     save_component_section_data,
     batch_save_component_section_data,
+    update_component_material_usage,
 )
 
 
@@ -55,6 +56,17 @@ def api_save_item_component_sections(item_component_id):
     try:
         data = request.get_json()
         result = save_component_section_data(item_component_id, data)
+        return jsonify({"data": ItemComponentSchema().dump(result), "success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/item_component/<int:item_component_id>/material_usage", methods=["PATCH"])
+@verify_required
+def api_update_item_component_material_usage(item_component_id):
+    try:
+        data = request.get_json()
+        result = update_component_material_usage(item_component_id, data)
         return jsonify({"data": ItemComponentSchema().dump(result), "success": True}), 200
     except Exception:
         raise
