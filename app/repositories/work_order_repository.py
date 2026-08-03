@@ -10,9 +10,20 @@ from flask import g
 
 
 def _work_order_options():
-    """Eager-load exactly what WorkOrderSchemaDetail needs — nothing more."""
+    """Eager-load exactly what WorkOrderSchemaDetail needs — nothing more.
+
+    sales_item.material_list is included here (not on the lighter
+    get_all_work_orders options) because WorkOrderSchemaDetail dumps
+    sales_item via SalesItemSchemaDetail, which carries material_list. A
+    WorkOrder maps to exactly one SalesItem (SalesItem.work_order is
+    uselist=False), so this is one selectinload of a bounded, per-order-line
+    row set — not a list-endpoint-scale cost. Without this, material_list
+    is either omitted or lazily selected outside the repository the moment
+    something touches sales_item.material_list, which is exactly what this
+    project's lazy policy forbids.
+    """
     return [
-        selectinload(WorkOrder.sales_item),
+        selectinload(WorkOrder.sales_item).selectinload(SalesItem.material_list),
         selectinload(WorkOrder.work_runs),
         selectinload(WorkOrder.item_components)
             .selectinload(ItemComponent.material_usages)

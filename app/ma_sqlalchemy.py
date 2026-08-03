@@ -399,6 +399,11 @@ class WorkOrderSchema(Schema):
     sales_item = fields.Nested(SalesItemForWorkOrderSchema())
 
 class WorkOrderSchemaDetail(WorkOrderSchema):
+    # Overrides WorkOrderSchema's sales_item (SalesItemForWorkOrderSchema,
+    # which has no material_list) with the detail schema that carries the
+    # full material_list — the component editor needs every material on the
+    # SalesItem, not just ones already assigned to some component.
+    sales_item = fields.Nested(SalesItemSchemaDetail())
     item_components = fields.List(fields.Nested(ItemComponentSchema()))
     work_runs = fields.List(fields.Nested(WorkRunSchema()))
 
