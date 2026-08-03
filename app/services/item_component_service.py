@@ -262,14 +262,110 @@ def create_initial_versions(work_order):
     return versions
 
 
+def _write_section_data(item_component_id, template_id, sections_data):
+    """Validate and persist one component's template pointer + section rows.
+
+    Pure validate-and-write: no editability check, no snapshot, no commit —
+    the caller owns the transaction and decides when to snapshot/commit so
+    this is safely shareable across every entry point that writes sections.
+    """
+    if not template_id:
+        raise ValidationError("กรุณาเลือก Template")
+
+    item = item_component_repository.save_section_data(
+        item_component_id, template_id, sections_data
+    )
+    if not item:
+        raise NotFoundError("ไม่พบข้อมูล Item Component")
+    return item
+
+
+def _write_material_usage(item_component_id, work_order, material_usage_data):
+    """Validate and full-replace one component's ComponentMaterialUsage set.
+
+    Pure validate-and-write: no editability check, no snapshot, no commit —
+    same sharing rationale as _write_section_data. `work_order` must already
+    have sales_item.material_list and item_components[*].material_usages
+    eager-loaded (work_order_repository.get_work_order_by_id's detail
+    options), since both are lazy='noload' style — never traversed via
+    implicit lazy select in this codebase.
+    """
+    material_map = {
+        m.material_list_id: m
+        for m in (work_order.sales_item.material_list if work_order.sales_item else [])
+    }
+
+    # Validate ownership, reject duplicates, coerce/validate quantities.
+    seen_material_ids = set()
+    cleaned_usage = []
+    new_usage_by_material = {}
+    for usage in material_usage_data:
+        material_list_id = usage.get("material_list_id")
+
+        if material_list_id not in material_map:
+            raise NotFoundError(f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้")
+        if material_list_id in seen_material_ids:
+            raise ValidationError(f"Material ID {material_list_id} ซ้ำกันในรายการที่ส่งมา")
+        seen_material_ids.add(material_list_id)
+
+        try:
+            quantity_used = float(usage.get("quantity_used"))
+        except (TypeError, ValueError):
+            raise ValidationError(f"จำนวนที่ใช้ของ Material ID {material_list_id} ไม่ถูกต้อง")
+        if quantity_used <= 0:
+            raise ValidationError(
+                f"จำนวนที่ใช้ของ Material ID {material_list_id} ต้องมากกว่า 0"
+            )
+
+        new_usage_by_material[material_list_id] = quantity_used
+        cleaned_usage.append({
+            "material_list_id": material_list_id,
+            "quantity_used": quantity_used,
+        })
+
+    # Over-allocation guard.
+    #
+    # We compare against MaterialList.quantity (the procured amount), not
+    # remaining_num. remaining_num nets INIT against MaterialTransaction
+    # rows, and the only REMOVE transactions ever posted against a
+    # MaterialList come from QC test consumption (qc_work_order_service) —
+    # production usage recorded here as ComponentMaterialUsage never posts
+    # a MaterialTransaction at all. So remaining_num would (a) not reflect
+    # any other component's allocation, defeating the point of this check,
+    # and (b) falsely shrink availability by whatever a QC run already
+    # consumed for testing, which has nothing to do with this correction.
+    # Summing ComponentMaterialUsage across the WorkOrder ourselves and
+    # comparing to the material's total procured quantity is the only
+    # figure the codebase actually maintains that answers "would this
+    # over-allocate the material this WorkOrder was given".
+    totals = {}
+    for comp in work_order.item_components:
+        if comp.item_component_id == item_component_id:
+            continue
+        for u in (comp.material_usages or []):
+            totals[u.material_list_id] = totals.get(u.material_list_id, 0) + u.quantity_used
+    for material_list_id, quantity_used in new_usage_by_material.items():
+        totals[material_list_id] = totals.get(material_list_id, 0) + quantity_used
+
+    for material_list_id, total_used in totals.items():
+        material = material_map.get(material_list_id)
+        if material and total_used > material.quantity + QTY_EPS:
+            raise ValidationError(
+                f"Material ID {material_list_id} ({material.item_name}) ถูกใช้เกินจำนวนที่มีในใบสั่งขายนี้ "
+                f"ต้องการรวมทั้งใบสั่งผลิต: {total_used}, มีทั้งหมด: {material.quantity}"
+            )
+
+    item = item_component_repository.replace_material_usage(item_component_id, cleaned_usage)
+    if not item:
+        raise NotFoundError("ไม่พบข้อมูล Item Component")
+    return item
+
+
 def save_component_section_data(item_component_id, data):
     try:
         template_id = data.get("component_template_id")
         sections_data = data.get("sections_data", [])
         change_reason = data.get("change_reason")
-
-        if not template_id:
-            raise ValidationError("กรุณาเลือก Template")
 
         existing = item_component_repository.get_item_component_by_id(item_component_id)
         if not existing:
@@ -277,11 +373,7 @@ def save_component_section_data(item_component_id, data):
 
         edit_request = _assert_editable(existing)
 
-        item = item_component_repository.save_section_data(
-            item_component_id, template_id, sections_data
-        )
-        if not item:
-            raise NotFoundError("ไม่พบข้อมูล Item Component")
+        _write_section_data(item_component_id, template_id, sections_data)
         db.session.flush()
 
         item = _load_for_snapshot(item_component_id)
@@ -325,78 +417,84 @@ def update_component_material_usage(item_component_id, data):
                 f"ไม่พบข้อมูล Work Order สำหรับ Item Component {item_component_id}"
             )
 
-        material_map = {
-            m.material_list_id: m
-            for m in (work_order.sales_item.material_list if work_order.sales_item else [])
-        }
-
-        # Validate ownership, reject duplicates, coerce/validate quantities.
-        seen_material_ids = set()
-        cleaned_usage = []
-        new_usage_by_material = {}
-        for usage in material_usage_data:
-            material_list_id = usage.get("material_list_id")
-
-            if material_list_id not in material_map:
-                raise NotFoundError(f"Material ID {material_list_id} ไม่ได้อยู่ใน Sales Item นี้")
-            if material_list_id in seen_material_ids:
-                raise ValidationError(f"Material ID {material_list_id} ซ้ำกันในรายการที่ส่งมา")
-            seen_material_ids.add(material_list_id)
-
-            try:
-                quantity_used = float(usage.get("quantity_used"))
-            except (TypeError, ValueError):
-                raise ValidationError(f"จำนวนที่ใช้ของ Material ID {material_list_id} ไม่ถูกต้อง")
-            if quantity_used <= 0:
-                raise ValidationError(
-                    f"จำนวนที่ใช้ของ Material ID {material_list_id} ต้องมากกว่า 0"
-                )
-
-            new_usage_by_material[material_list_id] = quantity_used
-            cleaned_usage.append({
-                "material_list_id": material_list_id,
-                "quantity_used": quantity_used,
-            })
-
-        # Over-allocation guard.
-        #
-        # We compare against MaterialList.quantity (the procured amount), not
-        # remaining_num. remaining_num nets INIT against MaterialTransaction
-        # rows, and the only REMOVE transactions ever posted against a
-        # MaterialList come from QC test consumption (qc_work_order_service) —
-        # production usage recorded here as ComponentMaterialUsage never posts
-        # a MaterialTransaction at all. So remaining_num would (a) not reflect
-        # any other component's allocation, defeating the point of this check,
-        # and (b) falsely shrink availability by whatever a QC run already
-        # consumed for testing, which has nothing to do with this correction.
-        # Summing ComponentMaterialUsage across the WorkOrder ourselves and
-        # comparing to the material's total procured quantity is the only
-        # figure the codebase actually maintains that answers "would this
-        # over-allocate the material this WorkOrder was given".
-        totals = {}
-        for comp in work_order.item_components:
-            if comp.item_component_id == item_component_id:
-                continue
-            for u in (comp.material_usages or []):
-                totals[u.material_list_id] = totals.get(u.material_list_id, 0) + u.quantity_used
-        for material_list_id, quantity_used in new_usage_by_material.items():
-            totals[material_list_id] = totals.get(material_list_id, 0) + quantity_used
-
-        for material_list_id, total_used in totals.items():
-            material = material_map.get(material_list_id)
-            if material and total_used > material.quantity + QTY_EPS:
-                raise ValidationError(
-                    f"Material ID {material_list_id} ({material.item_name}) ถูกใช้เกินจำนวนที่มีในใบสั่งขายนี้ "
-                    f"ต้องการรวมทั้งใบสั่งผลิต: {total_used}, มีทั้งหมด: {material.quantity}"
-                )
-
-        item = item_component_repository.replace_material_usage(item_component_id, cleaned_usage)
-        if not item:
-            raise NotFoundError("ไม่พบข้อมูล Item Component")
+        _write_material_usage(item_component_id, work_order, material_usage_data)
         db.session.flush()
 
         item = _load_for_snapshot(item_component_id)
         _snapshot_component(item, item.work_order, change_reason, edit_request)
+
+        db.session.commit()
+
+        return get_item_component_with_sections(item_component_id)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def save_component(item_component_id, data):
+    """Combined save: sections and/or material usage as ONE transaction, ONE
+    editability check, ONE approval consumption, ONE version row, ONE
+    document regeneration.
+
+    Sections and materials belong to the same component version — the
+    version snapshot (document_generator_service.build_component_snapshot)
+    already freezes section_data_snapshot and material_usage_snapshot
+    together, so splitting a single logical edit across two requests
+    produces two version rows for what should be one, and — while locked —
+    burns the single-use edit-request approval on the first request, 403ing
+    the second. This endpoint is what the frontend must call for a locked
+    component once both parts need to change in one edit.
+
+    Key presence, not truthiness, controls which parts are touched:
+    - "sections_data" absent  -> sections untouched (component_template_id
+      is ignored too, since it only makes sense alongside a sections write).
+    - "material_usage" absent -> material usage untouched.
+    - Either key present with an empty list ([]) is a real instruction to
+      clear that part, same as the standalone endpoints already treat it.
+    Both keys may be omitted only if you truly have nothing to save, which is
+    rejected below — a no-op combined save would otherwise still burn a
+    single-use approval on a version identical to the current one.
+    """
+    try:
+        has_sections = "sections_data" in data
+        has_materials = "material_usage" in data
+        if not has_sections and not has_materials:
+            raise ValidationError("ไม่มีข้อมูลสำหรับบันทึก")
+
+        template_id = data.get("component_template_id")
+        sections_data = data.get("sections_data", [])
+        material_usage_data = data.get("material_usage", [])
+        change_reason = data.get("change_reason")
+
+        existing = item_component_repository.get_item_component_by_id(item_component_id)
+        if not existing:
+            raise NotFoundError("ไม่พบข้อมูล Item Component")
+
+        edit_request = _assert_editable(existing)
+
+        work_order = None
+        if has_materials:
+            work_order = work_order_repository.get_work_order_by_id(existing.work_order_id)
+            if not work_order:
+                raise NotFoundError(
+                    f"ไม่พบข้อมูล Work Order สำหรับ Item Component {item_component_id}"
+                )
+
+        if has_sections:
+            _write_section_data(item_component_id, template_id, sections_data)
+        if has_materials:
+            _write_material_usage(item_component_id, work_order, material_usage_data)
+
+        db.session.flush()
+
+        item = _load_for_snapshot(item_component_id)
+        _snapshot_component(item, item.work_order, change_reason, edit_request)
+
+        # QC reconciliation only reacts to section changes — material usage
+        # doesn't affect which sections declare as test sections.
+        if has_sections:
+            declared = work_order_declares_test_section(item.work_order_id)
+            qc_work_order_service.sync_component_declared_qc(item.work_order, declared)
 
         db.session.commit()
 
