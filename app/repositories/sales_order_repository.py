@@ -114,7 +114,7 @@ def assign_branch(doc_entry, branch_id):
     return sales_order, old_branch_id
 
 
-def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, end_date=None, urgency_level=None, sort_by=None, sort_order="desc"):
+def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, end_date=None, urgency_level=None, sort_by=None, sort_order="desc", needs_action=False):
     try:
         items_total_subq = (
             db.session.query(func.count(SalesItem.sales_item_id))
@@ -258,6 +258,18 @@ def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, e
 
         if urgency_level is not None:
             query = query.filter(SalesOrder.urgency_level == urgency_level)
+
+        if needs_action:
+            # Needs action: at least one produce-flagged sales item without a work
+            # order, OR at least one test-flagged sales item without a QC work order.
+            # Reuses the same correlated subqueries already selected above rather
+            # than adding new ones.
+            query = query.filter(
+                or_(
+                    produce_total_subq > produce_has_workorder_subq,
+                    test_total_subq > test_has_qcworkorder_subq,
+                )
+            )
 
         if sort_by == "urgency_level":
             urgency_expr = _urgency_rank_expr()

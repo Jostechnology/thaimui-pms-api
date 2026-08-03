@@ -54,6 +54,9 @@ def get_all_sales_orders(data, branch_id=None):
         sort_order = (data.get("sort_order") or "desc").lower()
         if sort_order not in ("asc", "desc"):
             sort_order = "desc"
+        # Only the literal string "true" (case-insensitive) enables the filter;
+        # absent/anything else leaves existing callers unfiltered.
+        needs_action = str(data.get("needs_action") or "").strip().lower() == "true"
         result = sales_order_repository.get_all_sales_orders(
             page, per_page, search,
             branch_id=branch_id,
@@ -62,6 +65,7 @@ def get_all_sales_orders(data, branch_id=None):
             urgency_level=urgency_level,
             sort_by=sort_by,
             sort_order=sort_order,
+            needs_action=needs_action,
         )
         items_data = []
         for row in result.items:
