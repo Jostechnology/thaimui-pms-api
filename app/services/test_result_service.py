@@ -26,6 +26,70 @@ def _naive(dt):
     return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
 
 
+# --- S5: pinned component-doc resolution ---
+#
+# The QC/TestResult read path must resolve the component doc from the PINNED
+# version (the as-built record a WorkRun locked in via WorkRunComponentPin),
+# not the live/current one — see project_testspec_unification memory. These
+# are transient fields the schema dumps, not DB columns (same idiom as
+# item_component_service._stamp_test_section_state).
+
+def _resolve_pinned_component(test_result):
+    """Which ItemComponentVersion this session's COMPONENT_SECTION test spec
+    should render, and whether its work_run_sources disagree on the version.
+
+    Preference: the version(s) actually pinned by the WorkRun(s) that sourced
+    this session's items, for the TestSpec's item_component_id — the as-built
+    record. Falls back to TestSpec.item_component_version_id when no run
+    pinned that component (non-produced items, or a test not yet linked to a
+    completed run).
+
+    Returns (version_or_None, mixed_version_bool). (None, False) for a DIRECT
+    spec (no component to resolve) or when qc_work_order/test_spec isn't
+    loaded (both lazy='noload' — reads as None rather than raising, so this
+    just degrades to "nothing resolved" instead of erroring).
+    """
+    qc = test_result.qc_work_order
+    spec = qc.test_spec if qc else None
+    if not spec or spec.item_component_id is None:
+        return None, False
+
+    pinned_versions = {}
+    for src in test_result.work_run_sources:
+        work_run = src.work_run
+        if not work_run:
+            continue
+        for pin in (work_run.component_pins or []):
+            if pin.item_component_id != spec.item_component_id:
+                continue
+            if pin.superseded_date is not None:
+                continue
+            pinned_versions[pin.version_id] = pin.version
+
+    if not pinned_versions:
+        return spec.item_component_version, False
+
+    mixed = len(pinned_versions) > 1
+    # Soft warn only (mixed_version flag) — never block. When mixed, render
+    # the newest pinned version; the flag is what tells the caller to double
+    # check, not this tie-break.
+    resolved = max(pinned_versions.values(), key=lambda v: v.version_no)
+    return resolved, mixed
+
+
+def _stamp_pinned_component(test_result):
+    version, mixed = _resolve_pinned_component(test_result)
+    test_result.resolved_component_version = version
+    test_result.mixed_version = mixed
+    return test_result
+
+
+def _stamp_pinned_components(test_results):
+    for tr in test_results:
+        _stamp_pinned_component(tr)
+    return test_results
+
+
 def _resolve_status(val):
     if not val:
         return TestResultStatus.PASSED
@@ -439,6 +503,7 @@ def finalize_test_result(test_result_id, data):
 def get_test_results_by_qc_work_order(qc_work_order_id):
     try:
         results = test_result_repository.get_test_results_by_qc_work_order(qc_work_order_id)
+        _stamp_pinned_components(results)
         return TestResultSchema(many=True).dump(results)
     except Exception:
         raise
@@ -447,6 +512,7 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
 def get_test_results_cost_by_qc_work_order(qc_work_order_id):
     try:
         results = test_result_repository.get_test_results_cost_by_qc_work_order(qc_work_order_id)
+        _stamp_pinned_components(results)
         return TestResultSchema(many=True).dump(results)
     except Exception:
         raise
@@ -457,6 +523,7 @@ def get_test_result_by_id(test_result_id):
         result = test_result_repository.get_test_result_by_id(test_result_id)
         if not result:
             raise NotFoundError("ไม่พบ Test Result ที่ระบุ")
+        _stamp_pinned_component(result)
         return TestResultSchema().dump(result)
     except Exception:
         raise
@@ -484,6 +551,7 @@ def update_test_result(test_result_id, data):
 def get_test_results_by_sales_item(sales_item_id):
     try:
         results = test_result_repository.get_test_results_by_sales_item(sales_item_id)
+        _stamp_pinned_components(results)
         return TestResultSchema(many=True).dump(results)
     except Exception:
         raise
@@ -492,6 +560,7 @@ def get_test_results_by_sales_item(sales_item_id):
 def get_test_results_by_doc_entry(doc_entry):
     try:
         results = test_result_repository.get_test_results_by_doc_entry(doc_entry)
+        _stamp_pinned_components(results)
         return TestResultSchema(many=True).dump(results)
     except Exception:
         raise

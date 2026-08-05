@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import BreakType, ComponentEditRequestStatus, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, WorkRunRequiredItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
+from app.con_sqlalchemy import BreakType, ComponentEditRequestStatus, EmployeeStatus, MachineStatus, MaterialTransactionType, QCWorkOrderStatus, RolePermission, SalesOrderStatus, TestResultStatus, TestSessionStatus, TestSpecSourceType, UrgencyLevel, WorkOrderStatus, WorkRunStatus, WorkRunTransactionType, SalesItemStatus, WorkRun, TestResultWorkRun, PickingRequestStatus, WorkRunRequiredItem, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultCost, TestResultBreak, TestType, CheckStatus
 from app.con_sqlalchemy import ReportRunStatus
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
@@ -534,6 +534,18 @@ class QCItemSchema(Schema):
     required_qty     = fields.Float(allow_none=True)
     material_list         = fields.Nested(MaterialListSchema)
 
+class TestSpecSchema(Schema):
+    # Pinned contract — see thaimui-web TestSpec interface in
+    # QCWorkOrderType.ts. Only these 6 fields; do not add more without
+    # updating the FE type in lockstep.
+    test_spec_id               = fields.Integer(dump_only=True)
+    source_type                 = fields.Enum(TestSpecSourceType, by_value=True, dump_only=True)
+    item_component_id           = fields.Integer(dump_only=True, allow_none=True)
+    component_name              = fields.String(dump_only=True, allow_none=True, attribute="item_component.component_name")
+    version_no                  = fields.Integer(dump_only=True, allow_none=True, attribute="item_component_version.version_no")
+    section_keys                = fields.List(fields.String(), dump_only=True, allow_none=True)
+
+
 class search_qc_work_order_schema(Schema):
     qc_work_order_id = fields.Integer()
     qc_by = fields.String()
@@ -553,7 +565,7 @@ class QCWorkOrderSchema(Schema):
     updated_by = fields.String()
     sales_item = fields.Nested(SalesItemNoMaterialSchema)
     status = fields.Method("get_status")
-    source_work_order_id = fields.Integer(allow_none=True)
+    test_spec = fields.Nested(lambda: TestSpecSchema(), dump_only=True, allow_none=True)
     is_component_declared = fields.Boolean(dump_only=True)
 
     def get_status(self, obj):
@@ -569,7 +581,6 @@ class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
     doc_entry       = fields.Method("get_doc_entry")
     sales_item_code = fields.Method("get_sales_item_code")
     sales_item_name = fields.Method("get_sales_item_name")
-    source_work_order_code = fields.Method("get_source_work_order_code")
 
     def get_sales_order(self, obj):
         if obj.sales_item and obj.sales_item.sales_order:
@@ -584,9 +595,6 @@ class QCWorkOrderSchemaDetail(QCWorkOrderSchema):
 
     def get_sales_item_name(self, obj):
         return obj.sales_item.item_name if obj.sales_item else None
-
-    def get_source_work_order_code(self, obj):
-        return obj.source_work_order.work_order_code if obj.source_work_order else None
 
 
 class TestResultCheckSchema(Schema):
@@ -870,6 +878,16 @@ class TestResultSchema(Schema):
     updated_date            = fields.DateTime(dump_only=True)
     created_by              = fields.String(dump_only=True)
     updated_by              = fields.String(dump_only=True)
+    # S5 — resolved from the WorkRunComponentPin(s) that sourced this session
+    # (falling back to TestSpec.item_component_version_id), not the live
+    # component doc. Transient — stamped by test_result_service, not a
+    # mapped column. None for a DIRECT-spec QC (no component to resolve).
+    resolved_component_version = fields.Nested(
+        ItemComponentVersionSchema, dump_only=True, allow_none=True
+    )
+    # True when this session's work_run_sources pin more than one distinct
+    # version of the same component — soft warn only, never blocks.
+    mixed_version            = fields.Boolean(dump_only=True)
 
 
 class QCCheckItemSchema(Schema):

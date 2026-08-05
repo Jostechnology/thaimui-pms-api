@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCItem, QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest, TestResult, TestResultWorkRun, TestResultRequiredItem
+from app.con_sqlalchemy import QCItem, QCWorkOrder, SalesItem, WorkOrder, WorkRun, SalesOrder, PickingRequestItem, PickingRequest, TestResult, TestResultWorkRun, TestResultRequiredItem, TestSpec
 from app.app import db
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload, selectinload, contains_eager
@@ -14,9 +14,10 @@ def _qc_work_order_options():
         selectinload(QCWorkOrder.test_results).selectinload(TestResult.test_result_items),
         selectinload(QCWorkOrder.test_results).joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
         selectinload(QCWorkOrder.test_results).selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
-        # Detail-only: lets QCWorkOrderSchemaDetail.source_work_order_code
-        # resolve without a lazy load.
-        selectinload(QCWorkOrder.source_work_order),
+        # Detail-only: lets QCWorkOrderSchema.test_spec / is_component_declared
+        # (component_name, version_no) resolve without a lazy load.
+        selectinload(QCWorkOrder.test_spec).selectinload(TestSpec.item_component),
+        selectinload(QCWorkOrder.test_spec).selectinload(TestSpec.item_component_version),
     ]
 
 
@@ -66,7 +67,12 @@ def get_qc_work_order_by_id(qc_work_order_id):
 
 def get_qc_work_order_for_availability_check(qc_work_order_id):
     """Load QCWorkOrder → sales_item → work_order → work_runs and qc_work_orders → test_results
-    so that available_for_test_qty can be computed from relations."""
+    so that available_for_test_qty can be computed from relations.
+
+    qc_work_orders → test_spec is also eager-loaded: SalesItem.unavailable_for_test_qty
+    scopes its sum to DIRECT-sourced QCs (test_spec is lazy='noload', so leaving
+    it unloaded here would silently read every QC as DIRECT and double-count
+    COMPONENT_SECTION specs' claims)."""
     try:
         qc = (
             db.session.query(QCWorkOrder)
@@ -77,6 +83,9 @@ def get_qc_work_order_for_availability_check(qc_work_order_id):
                 selectinload(QCWorkOrder.sales_item)
                     .selectinload(SalesItem.qc_work_orders)
                     .selectinload(QCWorkOrder.test_results),
+                selectinload(QCWorkOrder.sales_item)
+                    .selectinload(SalesItem.qc_work_orders)
+                    .selectinload(QCWorkOrder.test_spec),
                 selectinload(QCWorkOrder.sales_item)
                     .selectinload(SalesItem.picking_request_items)
                     .selectinload(PickingRequestItem.picking_request),
@@ -113,15 +122,16 @@ def create_qc_work_order(qc_work_order):
         raise
 
 
-def get_component_declared_qc(work_order_id):
-    """The auto-created QCWorkOrder declared by this WorkOrder's component test
-    sections (source_work_order_id == work_order_id), if any. test_results is
-    eager-loaded so the caller can check for recorded results without a lazy
-    load (TestResult is lazy='noload' on the model)."""
+def get_qc_work_order_by_test_spec_id(test_spec_id):
+    """The auto-created QCWorkOrder fulfilling a TestSpec (test_spec_id ==
+    test_spec_id), if any. test_results is eager-loaded so the caller can
+    check for recorded results without a lazy load (TestResult is
+    lazy='noload' on the model) — used by the results-guard before a
+    COMPONENT_SECTION TestSpec (and its auto QC) is removed."""
     try:
         query = db.session.query(QCWorkOrder).options(
             selectinload(QCWorkOrder.test_results)
-        ).filter(QCWorkOrder.source_work_order_id == work_order_id)
+        ).filter(QCWorkOrder.test_spec_id == test_spec_id)
         return query.first()
     except Exception:
         raise
@@ -140,11 +150,12 @@ def delete_qc_work_order(qc_work_order_id):
         raise
 
 
-def delete_component_declared_qc(qc_work_order):
-    """Hard-delete a component-declared (auto) QCWorkOrder. The caller
-    (qc_work_order_service.sync_component_declared_qc) has already verified
-    there are no TestResult rows against it — unlike the manual-delete path
-    (delete_qc_work_order), this performs no such check and does not commit."""
+def delete_auto_qc_work_order(qc_work_order):
+    """Hard-delete an auto-created (COMPONENT_SECTION-spec) QCWorkOrder. The
+    caller (qc_work_order_service.sync_component_test_specs) has already
+    verified there are no TestResult rows against it — unlike the
+    manual-delete path (delete_qc_work_order), this performs no such check
+    and does not commit."""
     try:
         db.session.delete(qc_work_order)
         return qc_work_order

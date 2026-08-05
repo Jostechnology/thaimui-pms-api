@@ -2,6 +2,12 @@ from app.con_sqlalchemy import SalesItem, MaterialList, WorkOrder, WorkRun, QCWo
 from app.app import db
 from sqlalchemy.orm import joinedload, selectinload
 
+# QCWorkOrder.test_spec is lazy='noload' and SalesItem.unavailable_for_test_qty
+# scopes its pool to DIRECT-sourced QCs — every eager-load of
+# SalesItem.qc_work_orders below must also load test_spec, or that property
+# (and available_for_test_qty) silently misclassifies every QC as DIRECT and
+# reports the wrong number.
+
 def get_all_sales_items(page, limit, search):
     try:
         query = (
@@ -9,6 +15,7 @@ def get_all_sales_items(page, limit, search):
             .options(
                 joinedload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 joinedload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                joinedload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_spec),
                 selectinload(SalesItem.picking_request_items).joinedload(PickingRequestItem.picking_request),
             )
         )
@@ -55,6 +62,7 @@ def get_sales_item_detail_by_id(sales_item_id):
                 selectinload(SalesItem.material_list),
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_spec),
                 selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
@@ -71,6 +79,7 @@ def get_sales_item_tracking_by_id(sales_item_id):
             .options(
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_spec),
                 selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
@@ -88,6 +97,7 @@ def get_sales_item_for_complete(sales_item_id):
             .options(
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_spec),
             )
             .filter(SalesItem.sales_item_id == sales_item_id)
         )
@@ -126,6 +136,7 @@ def get_sales_items_by_doc_entry(doc_entry):
                 selectinload(SalesItem.material_list),
                 selectinload(SalesItem.work_order).selectinload(WorkOrder.work_runs),
                 selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_results),
+                selectinload(SalesItem.qc_work_orders).selectinload(QCWorkOrder.test_spec),
                 selectinload(SalesItem.picking_request_items).selectinload(PickingRequestItem.picking_request),
             )
             .filter(SalesItem.doc_entry == doc_entry)

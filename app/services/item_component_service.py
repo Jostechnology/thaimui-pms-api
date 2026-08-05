@@ -1,3 +1,4 @@
+from sqlalchemy import inspect as sa_inspect
 from app.con_sqlalchemy import (
     ComponentEditRequestStatus,
     ItemComponentVersion,
@@ -70,8 +71,25 @@ def resolve_test_section_keys(item_component) -> set:
     item_component_repository.get_item_component_for_document, or
     get_item_components_with_template_for_work_order) — both relationships are
     lazy='noload', so an unloaded one silently reads as None/[] rather than
-    querying, which would just make this function wrong instead of raising.
+    querying. Rather than let that make this function quietly WRONG (return
+    "no test section" for a component that has one — the exact class of bug
+    this whole feature exists to kill), we fail loud: a persistent instance
+    whose required relationships are unloaded raises instead of guessing.
     """
+    state = sa_inspect(item_component)
+    # Only guard persistent instances (transient/pending objects that were
+    # just built in-memory have no DB-backed relationships to "load").
+    if state.persistent:
+        unloaded = state.unloaded
+        missing = {"component_template", "component_template_sections"} & unloaded
+        if missing:
+            raise ValidationError(
+                "resolve_test_section_keys called with unloaded relationship(s) "
+                f"{sorted(missing)} on item_component {item_component.item_component_id}; "
+                "caller must fetch via a detail repository method that eager-loads "
+                "component_template + component_template_sections."
+            )
+
     template_flags = {}
     template = item_component.component_template
     if template and template.sections:
@@ -99,12 +117,39 @@ def component_has_test_section(item_component) -> bool:
 
 def work_order_declares_test_section(work_order_id):
     """True if ANY component of this WorkOrder currently resolves a test
-    section. The QC auto-creation trigger is WorkOrder-scoped
-    (QCWorkOrder.source_work_order_id points at the WorkOrder, not a single
-    component), so this must check every component, not just the one that was
-    just saved."""
+    section. Kept for callers that only need the boolean; the QC/TestSpec
+    reconcile itself needs the per-component detail — see
+    resolve_declared_test_components."""
     items = item_component_repository.get_item_components_with_template_for_work_order(work_order_id)
     return any(component_has_test_section(item) for item in items)
+
+
+def resolve_declared_test_components(work_order_id):
+    """Every component of this WorkOrder that currently declares a test
+    section, paired with its section_keys and latest version id.
+
+    Feeds qc_work_order_service.sync_component_test_specs, which must react
+    PER component (S4 fix — one TestSpec per declaring component), not just
+    "does ANY component declare" (the old work_order_declares_test_section
+    boolean that fed the pre-unification WorkOrder-level auto-QC sync).
+    """
+    items = item_component_repository.get_item_components_with_template_for_work_order(work_order_id)
+    latest_versions = {
+        v.item_component_id: v.version_id
+        for v in item_component_version_repository.get_latest_versions_for_work_order(work_order_id)
+    }
+    declared = []
+    for item in items:
+        keys = resolve_test_section_keys(item)
+        if not keys:
+            continue
+        declared.append({
+            "item_component_id": item.item_component_id,
+            "component_name": item.component_name,
+            "section_keys": sorted(keys),
+            "item_component_version_id": latest_versions.get(item.item_component_id),
+        })
+    return declared
 
 
 # --- Reads ---
@@ -254,10 +299,15 @@ def create_initial_versions(work_order):
         )
 
     # Components start without a template (see docstring above), so this is
-    # always declared=False here today — but the reconcile still runs so
+    # always declared=[] here today — but the reconcile still runs so
     # behaviour stays correct if that ever changes.
-    declared = work_order_declares_test_section(work_order.work_order_id)
-    qc_work_order_service.sync_component_declared_qc(work_order, declared)
+    declared_components = resolve_declared_test_components(work_order.work_order_id)
+    test_section_notice = qc_work_order_service.sync_component_test_specs(work_order, declared_components)
+    # Transient — mutating the caller's own work_order object lets
+    # work_order_service.create_work_order surface this in its response
+    # without changing this function's return type (still a plain list of
+    # versions, per the services-return-models convention).
+    work_order.test_section_notice = test_section_notice
 
     return versions
 
@@ -379,15 +429,20 @@ def save_component_section_data(item_component_id, data):
         item = _load_for_snapshot(item_component_id)
         _snapshot_component(item, item.work_order, change_reason, edit_request)
 
-        # Reconcile the WorkOrder's auto QCWorkOrder against the test sections
-        # this save just produced. item_component_service must not construct
-        # a QCWorkOrder itself — qc_work_order_service owns that.
-        declared = work_order_declares_test_section(item.work_order_id)
-        qc_work_order_service.sync_component_declared_qc(item.work_order, declared)
+        # Reconcile the WorkOrder's TestSpecs (+ auto QCWorkOrders) against the
+        # test sections this save just produced. item_component_service must
+        # not construct a TestSpec/QCWorkOrder itself — qc_work_order_service
+        # owns that.
+        declared_components = resolve_declared_test_components(item.work_order_id)
+        test_section_notice = qc_work_order_service.sync_component_test_specs(
+            item.work_order, declared_components
+        )
 
         db.session.commit()
 
-        return get_item_component_with_sections(item_component_id)
+        result = get_item_component_with_sections(item_component_id)
+        result.test_section_notice = test_section_notice
+        return result
     except Exception:
         db.session.rollback()
         raise
@@ -490,15 +545,20 @@ def save_component(item_component_id, data):
         item = _load_for_snapshot(item_component_id)
         _snapshot_component(item, item.work_order, change_reason, edit_request)
 
-        # QC reconciliation only reacts to section changes — material usage
-        # doesn't affect which sections declare as test sections.
+        # QC/TestSpec reconciliation only reacts to section changes — material
+        # usage doesn't affect which sections declare as test sections.
+        test_section_notice = None
         if has_sections:
-            declared = work_order_declares_test_section(item.work_order_id)
-            qc_work_order_service.sync_component_declared_qc(item.work_order, declared)
+            declared_components = resolve_declared_test_components(item.work_order_id)
+            test_section_notice = qc_work_order_service.sync_component_test_specs(
+                item.work_order, declared_components
+            )
 
         db.session.commit()
 
-        return get_item_component_with_sections(item_component_id)
+        result = get_item_component_with_sections(item_component_id)
+        result.test_section_notice = test_section_notice
+        return result
     except Exception:
         db.session.rollback()
         raise
@@ -553,26 +613,35 @@ def batch_save_component_section_data(items_data):
         db.session.flush()
 
         touched_work_orders = {}
+        component_work_order = {}
         for plan in planned:
             item = _load_for_snapshot(plan["item_component_id"])
             _snapshot_component(
                 item, item.work_order, plan["change_reason"], plan["edit_request"]
             )
             touched_work_orders[item.work_order_id] = item.work_order
+            component_work_order[plan["item_component_id"]] = item.work_order_id
 
         # Reconcile once per distinct WorkOrder touched by this batch, after
         # every sibling component's save has landed — a batch may touch more
         # than one component of the same WorkOrder in a single request.
+        notices_by_work_order = {}
         for work_order_id, work_order in touched_work_orders.items():
-            declared = work_order_declares_test_section(work_order_id)
-            qc_work_order_service.sync_component_declared_qc(work_order, declared)
+            declared_components = resolve_declared_test_components(work_order_id)
+            notices_by_work_order[work_order_id] = qc_work_order_service.sync_component_test_specs(
+                work_order, declared_components
+            )
 
         db.session.commit()
 
-        return [
-            get_item_component_with_sections(plan["item_component_id"])
-            for plan in planned
-        ]
+        results = []
+        for plan in planned:
+            result = get_item_component_with_sections(plan["item_component_id"])
+            result.test_section_notice = notices_by_work_order.get(
+                component_work_order[plan["item_component_id"]]
+            )
+            results.append(result)
+        return results
     except Exception:
         db.session.rollback()
         raise
