@@ -46,7 +46,12 @@ def api_batch_save_item_component_sections():
         data = request.get_json()
         data = data.get("data")
         result = batch_save_component_section_data(data)
-        return jsonify({"data": ItemComponentSchema(many=True).dump(result), "success": True}), 200
+        notices = [n for n in (getattr(r, "test_section_notice", None) for r in result) if n]
+        return jsonify({
+            "data": ItemComponentSchema(many=True).dump(result),
+            "test_section_notices": notices,
+            "success": True,
+        }), 200
     except Exception:
         raise
 
@@ -57,7 +62,11 @@ def api_save_item_component_sections(item_component_id):
     try:
         data = request.get_json()
         result = save_component_section_data(item_component_id, data)
-        return jsonify({"data": ItemComponentSchema().dump(result), "success": True}), 200
+        return jsonify({
+            "data": ItemComponentSchema().dump(result),
+            "test_section_notice": getattr(result, "test_section_notice", None),
+            "success": True,
+        }), 200
     except Exception:
         raise
 
@@ -79,7 +88,11 @@ def api_save_item_component(item_component_id):
     try:
         data = request.get_json()
         result = save_component(item_component_id, data)
-        return jsonify({"data": ItemComponentSchema().dump(result), "success": True}), 200
+        return jsonify({
+            "data": ItemComponentSchema().dump(result),
+            "test_section_notice": getattr(result, "test_section_notice", None),
+            "success": True,
+        }), 200
     except Exception:
         raise
 

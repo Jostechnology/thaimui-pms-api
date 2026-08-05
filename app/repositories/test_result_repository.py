@@ -1,20 +1,31 @@
-from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck, TestResultPhoto, TestResultSpec
+from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck, TestResultPhoto, TestResultSpec, TestSpec, WorkRunComponentPin
 from app.app import db
 from sqlalchemy.orm import joinedload, selectinload
 
 
 def _test_result_options():
-    """Eager-load what TestResultSchema needs."""
+    """Eager-load what TestResultSchema needs.
+
+    qc_work_order -> test_spec -> item_component_version and
+    work_run_sources -> work_run -> component_pins -> version are for S5
+    (test_result_service._resolve_pinned_component): resolving which
+    ItemComponentVersion's section_data_snapshot this session should render,
+    and whether its work_run_sources disagree on the pinned version
+    (mixed_version). Both qc_work_order and component_pins are lazy='noload'
+    on their models — an unloaded one silently reads as None/[] instead of
+    lazy-querying, which would just make that resolution wrong instead of
+    raising."""
     return [
         selectinload(TestResult.test_result_items).selectinload(TestResultItem.checks),
         selectinload(TestResult.photos),
         joinedload(TestResult.spec),
-        joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
+        joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run).selectinload(WorkRun.component_pins).joinedload(WorkRunComponentPin.version),
         selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
         selectinload(TestResult.assignments).joinedload(TestResultAssignment.employee),
         selectinload(TestResult.machines).joinedload(TestResultMachine.machine),
         selectinload(TestResult.breaks),
         joinedload(TestResult.cost),
+        joinedload(TestResult.qc_work_order).joinedload(QCWorkOrder.test_spec).joinedload(TestSpec.item_component_version),
     ]
 
 
@@ -39,8 +50,9 @@ def get_test_results_by_qc_work_order(qc_work_order_id):
             db.session.query(TestResult)
             .options(
                 selectinload(TestResult.test_result_items),
-                joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run),
-                selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list)
+                joinedload(TestResult.work_run_sources).joinedload(TestResultWorkRun.work_run).selectinload(WorkRun.component_pins).joinedload(WorkRunComponentPin.version),
+                selectinload(TestResult.required_items).joinedload(TestResultRequiredItem.material_list),
+                joinedload(TestResult.qc_work_order).joinedload(QCWorkOrder.test_spec).joinedload(TestSpec.item_component_version),
             )
             .filter(TestResult.qc_work_order_id == qc_work_order_id)
         )

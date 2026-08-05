@@ -448,6 +448,7 @@ class SalesItem(AuditMixin):
     material_list = db.relationship('MaterialList', back_populates='sales_item')
     work_order = db.relationship('WorkOrder', back_populates='sales_item', uselist=False, lazy="noload")
     qc_work_orders = db.relationship('QCWorkOrder', back_populates='sales_item')
+    test_specs = db.relationship('TestSpec', back_populates='sales_item')
     picking_request_items = db.relationship('PickingRequestItem', back_populates='sales_item', lazy='noload')
 
     # Production
@@ -466,7 +467,27 @@ class SalesItem(AuditMixin):
     # Test
     @property
     def unavailable_for_test_qty(self):
-        return sum(tr.claimed_qty for qc in self.qc_work_orders for tr in qc.test_results)
+        """Physical units already claimed against the shared DIRECT test pool
+        (the pool `create_qc_work_order`'s planned-qty guard bounds by
+        `quantity`). COMPONENT_SECTION QCs are excluded on purpose: per the
+        TestSpec unification "per-spec full qty" decision, each declaring
+        component independently requires the WHOLE `quantity` to be covered —
+        it does not draw down this shared pool. Summing them in here (the old
+        single-pool model, pre-TestSpec) would make two declaring components
+        exhaust — or go negative on — availability between themselves alone,
+        wrongly blocking every other test on the item.
+
+        Requires qc_work_orders[*].test_spec to be eager-loaded (it's
+        lazy='noload') — see sales_item_repository's eager-load comment on
+        this exact point; an unloaded test_spec silently reads as None and
+        this would misclassify every QC as DIRECT.
+        """
+        return sum(
+            tr.claimed_qty
+            for qc in self.qc_work_orders
+            for tr in qc.test_results
+            if qc.test_spec is None or qc.test_spec.source_type == TestSpecSourceType.DIRECT
+        )
 
     @property
     def picked_qty(self):
@@ -637,6 +658,38 @@ class MaterialList(AuditMixin):
             return round(self.cost_price / self.quantity, 6)
         return 0.0
 
+class TestSpecSourceType(enum.Enum):
+    DIRECT = 'DIRECT'
+    COMPONENT_SECTION = 'COMPONENT_SECTION'
+
+
+class TestSpec(AuditMixin):
+    """Unifies the two origins of a QC/test document that used to be forked by
+    the bare-boolean-by-proxy `QCWorkOrder.source_work_order_id`: a manually
+    created DIRECT spec, or a COMPONENT_SECTION spec generated because one of
+    the WorkOrder's ItemComponent template sections declared a test. One spec
+    per (sales_item, item_component) — see project_testspec_unification memory.
+    """
+    __tablename__ = "t_test_spec"
+    __table_args__ = (
+        UniqueConstraint('sales_item_id', 'item_component_id', name='uq_test_spec_sales_item_component'),
+    )
+
+    test_spec_id = db.Column(db.Integer, primary_key=True)
+    sales_item_id = db.Column(db.Integer, db.ForeignKey('t_sales_items.sales_item_id', ondelete='CASCADE'), nullable=False, index=True)
+    branch_id = db.Column(db.Integer, db.ForeignKey('m_branch.branch_id'), nullable=True, index=True)
+    source_type = db.Column(db.Enum(TestSpecSourceType), nullable=False)
+    item_component_id = db.Column(db.Integer, db.ForeignKey('t_item_component.item_component_id', ondelete='SET NULL'), nullable=True)
+    item_component_version_id = db.Column(db.Integer, db.ForeignKey('t_item_component_version.version_id', ondelete='SET NULL'), nullable=True)
+    section_keys = db.Column(db.JSON, nullable=True)
+    required_qty = db.Column(db.Double, nullable=False)
+
+    sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='test_specs', lazy='noload')
+    item_component = db.relationship('ItemComponent', foreign_keys=[item_component_id], lazy='noload')
+    item_component_version = db.relationship('ItemComponentVersion', foreign_keys=[item_component_version_id], lazy='noload')
+    qc_work_orders = db.relationship('QCWorkOrder', back_populates='test_spec', lazy='noload')
+
+
 class QCWorkOrderStatus(enum.Enum):
     PENDING = 'PENDING'
     INPROGRESS = 'INPROGRESS'
@@ -653,20 +706,19 @@ class QCWorkOrder(AuditMixin):
     qc_by = db.Column(db.String(100), nullable=True)
     quantity = db.Column(db.Double, nullable=False, default=1)
     remark = db.Column(db.String(500), nullable=True)
-    # Non-null marks this QCWorkOrder as auto-created because a WorkOrder's
-    # component declared a TEST SECTION, rather than manually created by QC
-    # staff. SET NULL on WorkOrder delete: the QCWorkOrder (and any TestResult
-    # already recorded against it) must survive even if the WorkOrder is gone.
-    source_work_order_id = db.Column(db.Integer, db.ForeignKey('t_work_order.work_order_id', ondelete='SET NULL'), nullable=True, index=True)
+    # Points at the TestSpec (DIRECT or COMPONENT_SECTION) this QCWorkOrder was
+    # created to fulfil. SET NULL on TestSpec delete: the QCWorkOrder (and any
+    # TestResult already recorded against it) must survive even if the spec is gone.
+    test_spec_id = db.Column(db.Integer, db.ForeignKey('t_test_spec.test_spec_id', ondelete='SET NULL'), nullable=True, index=True)
     sales_item = db.relationship('SalesItem', foreign_keys=[sales_item_id], back_populates='qc_work_orders')
-    source_work_order = db.relationship('WorkOrder', foreign_keys=[source_work_order_id], lazy='noload')
+    test_spec = db.relationship('TestSpec', foreign_keys=[test_spec_id], back_populates='qc_work_orders', lazy='noload')
     qc_form = db.relationship('QCForm', uselist=False, back_populates='qc_work_order', cascade='all, delete-orphan')
     qc_items = db.relationship('QCItem', back_populates='qc_work_order', cascade='all, delete-orphan')
     test_results = db.relationship('TestResult', back_populates='qc_work_order', lazy='noload')
 
     @property
     def is_component_declared(self):
-        return self.source_work_order_id is not None
+        return self.test_spec is not None and self.test_spec.source_type == TestSpecSourceType.COMPONENT_SECTION
 
 
 SalesItem.num_qc_work_order = column_property(
