@@ -728,6 +728,24 @@ modules:
   - method: view
     code: view.HOLIDAY_MANAGEMENT
     description: View จัดการวันหยุด
+- code: ITEM_DECODE_UPLOAD
+  name: นำเข้าข้อมูลถอดรหัสวัสดุ
+  parent_code: SETTING
+  level: 2
+  sort_order: 10
+  permissions:
+  - method: create
+    code: create.ITEM_DECODE_UPLOAD
+    description: Create นำเข้าข้อมูลถอดรหัสวัสดุ
+  - method: delete
+    code: delete.ITEM_DECODE_UPLOAD
+    description: Delete นำเข้าข้อมูลถอดรหัสวัสดุ
+  - method: edit
+    code: edit.ITEM_DECODE_UPLOAD
+    description: Edit นำเข้าข้อมูลถอดรหัสวัสดุ
+  - method: view
+    code: view.ITEM_DECODE_UPLOAD
+    description: View นำเข้าข้อมูลถอดรหัสวัสดุ
 - code: REPORT
   name: รายงาน
   parent_code: null
@@ -770,6 +788,8 @@ bootstrap:
     - edit.ROLE_MANAGEMENT
     - delete.ROLE_MANAGEMENT
     - view.ALL_BRANCH
+    - view.ITEM_DECODE_UPLOAD
+    - create.ITEM_DECODE_UPLOAD
   user:
     role_code: ADMIN
     password: '1234'
