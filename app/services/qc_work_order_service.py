@@ -124,11 +124,13 @@ def _remove_component_section_spec(spec):
             f"{qc.qc_work_order_code or qc.qc_work_order_id} "
             "มีการบันทึกผลการทดสอบไปแล้ว"
         )
+    removed_code = qc.qc_work_order_code if qc else None
     if qc:
         # Not delete_qc_work_order — that commits and has no TestResult check
         # (already made above). Caller owns the commit here.
         qc_work_order_repository.delete_auto_qc_work_order(qc)
     test_spec_repository.delete_test_spec(spec)
+    return removed_code
 
 
 def _ensure_component_section_auto_qc(spec, sales_item):
@@ -141,7 +143,7 @@ def _ensure_component_section_auto_qc(spec, sales_item):
     if qc:
         if abs((qc.quantity or 0) - sales_item.quantity) > QTY_EPS:
             qc.quantity = sales_item.quantity
-        return qc
+        return qc, False
 
     qc = QCWorkOrder(
         sales_item_id=sales_item.sales_item_id,
@@ -162,7 +164,7 @@ def _ensure_component_section_auto_qc(spec, sales_item):
     qc = qc_work_order_repository.create_qc_work_order(qc)
     db.session.flush()
     qc.qc_work_order_code = generate_qc_work_order_code(sales_item, qc.qc_work_order_id)
-    return qc
+    return qc, True
 
 
 def sync_component_test_specs(work_order, declared_components):
@@ -178,13 +180,21 @@ def sync_component_test_specs(work_order, declared_components):
     BE1 gate — read sales_item.test:
       * test == False: create/keep NO TestSpec, ever, regardless of what the
         components declare. Any pre-existing COMPONENT_SECTION specs get
-        cleaned up (results-guard still applies). Returns
-        {"skipped": True, "component_names": [...]} if there was anything to
-        skip, else None.
+        cleaned up (results-guard still applies).
       * test == True: reconcile specs to match declared_components exactly,
         upserting one COMPONENT_SECTION spec (+ auto QC) per declaring
         component and removing specs for components that no longer declare.
-        Always returns None on this path (no notice).
+
+    Returns a notice dict describing what the user should be told (or None when
+    nothing changed and nothing was skipped), so the save response can surface
+    it — symmetric across create/remove/skip rather than only the skip case:
+        {
+          "skipped": True,                       # test=False ignored declarations
+          "skipped_component_names": [str],
+          "created": [{"component_name", "qc_work_order_code"}],
+          "removed": [{"qc_work_order_code"}],
+        }
+    Only the keys with content are present.
 
     Called by item_component_service after a component-save's version
     snapshot is written — component saves must not construct a TestSpec or
@@ -200,26 +210,35 @@ def sync_component_test_specs(work_order, declared_components):
     }
 
     if not sales_item.test:
+        removed = []
         for spec in list(existing_specs.values()):
-            _remove_component_section_spec(spec)
+            code = _remove_component_section_spec(spec)
+            if code:
+                removed.append({"qc_work_order_code": code})
+        notice = {}
         if declared_components:
             logger.info(
                 "WorkOrder %s has %d component(s) declaring a test section but "
                 "sales_item %s has test=False — no TestSpec created",
                 work_order.work_order_id, len(declared_components), sales_item.sales_item_id,
             )
-            return {
-                "skipped": True,
-                "component_names": [d["component_name"] for d in declared_components],
-            }
-        return None
+            notice["skipped"] = True
+            notice["skipped_component_names"] = [d["component_name"] for d in declared_components]
+        if removed:
+            notice["removed"] = removed
+        return notice or None
 
     declared_by_component = {d["item_component_id"]: d for d in declared_components}
+
+    created = []
+    removed = []
 
     # Remove specs for components that no longer declare a test section.
     for item_component_id, spec in list(existing_specs.items()):
         if item_component_id not in declared_by_component:
-            _remove_component_section_spec(spec)
+            code = _remove_component_section_spec(spec)
+            if code:
+                removed.append({"qc_work_order_code": code})
             del existing_specs[item_component_id]
 
     # Upsert a spec (+ auto QC) for every currently-declaring component.
@@ -242,9 +261,19 @@ def sync_component_test_specs(work_order, declared_components):
             spec.item_component_version_id = decl["item_component_version_id"]
             spec.required_qty = sales_item.quantity
 
-        _ensure_component_section_auto_qc(spec, sales_item)
+        qc, was_created = _ensure_component_section_auto_qc(spec, sales_item)
+        if was_created:
+            created.append({
+                "component_name": decl["component_name"],
+                "qc_work_order_code": qc.qc_work_order_code,
+            })
 
-    return None
+    notice = {}
+    if created:
+        notice["created"] = created
+    if removed:
+        notice["removed"] = removed
+    return notice or None
 
 
 def create_qc_work_order(data):

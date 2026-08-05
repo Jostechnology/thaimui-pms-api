@@ -1,3 +1,4 @@
+from sqlalchemy import inspect as sa_inspect
 from app.con_sqlalchemy import (
     ComponentEditRequestStatus,
     ItemComponentVersion,
@@ -70,8 +71,25 @@ def resolve_test_section_keys(item_component) -> set:
     item_component_repository.get_item_component_for_document, or
     get_item_components_with_template_for_work_order) — both relationships are
     lazy='noload', so an unloaded one silently reads as None/[] rather than
-    querying, which would just make this function wrong instead of raising.
+    querying. Rather than let that make this function quietly WRONG (return
+    "no test section" for a component that has one — the exact class of bug
+    this whole feature exists to kill), we fail loud: a persistent instance
+    whose required relationships are unloaded raises instead of guessing.
     """
+    state = sa_inspect(item_component)
+    # Only guard persistent instances (transient/pending objects that were
+    # just built in-memory have no DB-backed relationships to "load").
+    if state.persistent:
+        unloaded = state.unloaded
+        missing = {"component_template", "component_template_sections"} & unloaded
+        if missing:
+            raise ValidationError(
+                "resolve_test_section_keys called with unloaded relationship(s) "
+                f"{sorted(missing)} on item_component {item_component.item_component_id}; "
+                "caller must fetch via a detail repository method that eager-loads "
+                "component_template + component_template_sections."
+            )
+
     template_flags = {}
     template = item_component.component_template
     if template and template.sections:
