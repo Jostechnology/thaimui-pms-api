@@ -1436,3 +1436,29 @@ class ReportRun(BaseModel):
         db.Index('ix_report_run_requested', 'requested_at'),
         db.Index('ix_report_run_status', 'status'),
     )
+
+
+class ItemDecodeSegment(AuditMixin):
+    """Positional code-decoder legend value-map for decodable item categories
+    (SLING, CHAIN). One row = one (category, segment, code) -> field/value pair.
+    Refreshed wholesale by admin xlsx upload (replace-on-upload)."""
+    __tablename__ = 'item_decode_segment'
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(32), nullable=False)   # 'SLING' | 'CHAIN'
+    segment = db.Column(db.String(8), nullable=False)     # '1-2','3-4','5-7','8','9','10-12'
+    code = db.Column(db.String(8), nullable=False)        # e.g. 'RA','636','2','095'
+    field = db.Column(db.String(32), nullable=False)      # 'type','brand','structure', etc.
+    value = db.Column(db.String(255), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('category', 'segment', 'code', 'field', name='uq_item_decode_segment'),
+        db.Index('ix_item_decode_segment_lookup', 'category', 'segment', 'code'),
+    )
+
+
+class ItemReference(AuditMixin):
+    """Flat Item No. -> Item Description lookup for non-decodable categories.
+    Refreshed wholesale by admin xlsx upload (replace-on-upload)."""
+    __tablename__ = 'item_reference'
+    item_no = db.Column(db.String(64), primary_key=True)
+    item_description = db.Column(db.String(500))
