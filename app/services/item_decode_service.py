@@ -12,7 +12,8 @@ its decode column, and stored in ItemDecodeSegment.segment. Decoding derives the
 distinct (segment, field) pairs for a category straight from the stored rows.
 """
 import re
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
+from io import BytesIO
 
 import openpyxl
 
@@ -34,6 +35,21 @@ FIELD_ALIASES = {
     'construction and strand': 'structure',
     'unit': 'grade_unit',
 }
+
+# Reverse of FIELD_ALIASES: schema field key -> the sheet header it came from.
+# Used by the export to rebuild original headers. Any field not listed here is
+# Title-cased (type -> "Type", manufacturer -> "Manufacturer").
+REVERSE_FIELD_HEADERS = {
+    'structure': 'Construction and Strand',
+    'grade_unit': 'Unit',
+}
+
+REFERENCE_SHEET_TITLE = 'Reference'
+REFERENCE_HEADERS = ('Item No.', 'Item Description')
+EXPORT_FILENAME = 'ThaiMui - Item Description.xlsx'
+XLSX_CONTENT_TYPE = (
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+)
 
 _RANGE_LIKE_RE = re.compile(r'^\d[\d\s\-]*$')
 _RANGE_RE = re.compile(r'^(\d+)(?:\s*-\s*(\d+))?$')
@@ -329,6 +345,111 @@ def _parse_reference_sheet(worksheet):
         description = _cell_text(excel_row[1]) if len(excel_row) > 1 else ''
         by_item_no[item_no] = {'item_no': item_no, 'item_description': description}
     return list(by_item_no.values())
+
+
+def _ordered_categories():
+    """Decodable categories in a stable display order: SLING then CHAIN first,
+    then any other declared category alphabetically. Drives both the overview and
+    export so their category/sheet ordering is deterministic."""
+    preferred = ['SLING', 'CHAIN']
+    ordered = [c for c in preferred if c in DECODABLE_CATEGORIES]
+    ordered += sorted(c for c in DECODABLE_CATEGORIES if c not in preferred)
+    return ordered
+
+
+def _group_legend_by_field(rows):
+    """Group ordered legend rows [(segment, field, code, value), ...] into an
+    OrderedDict keyed by (field, segment) -> [(code, value), ...]. Insertion
+    order follows the repository's (segment, field, code) ordering, so fields
+    come out grouped by segment then field, values by code."""
+    by_field = OrderedDict()
+    for segment, field, code, value in rows:
+        by_field.setdefault((field, segment), []).append((code, value))
+    return by_field
+
+
+def _field_header(field_key):
+    """Reverse-map a schema field key to its original sheet header for export."""
+    return REVERSE_FIELD_HEADERS.get(field_key, field_key.title())
+
+
+def get_item_decode_overview():
+    """Overview of every decodable category: its (field, segment) pairs with the
+    full code->value legend per field, plus row counts. reference_count is the
+    ItemReference row total. Same source the decoder derives its pairs from."""
+    categories = []
+    for category in _ordered_categories():
+        rows = item_decode_repository.get_category_legend_rows(category)
+        fields = [
+            {
+                'field': field,
+                'segment': segment,
+                'values': [{'code': code, 'value': value} for code, value in pairs],
+            }
+            for (field, segment), pairs in _group_legend_by_field(rows).items()
+        ]
+        categories.append({
+            'category': category,
+            'value_count': item_decode_repository.count_category_rows(category),
+            'fields': fields,
+        })
+    return {
+        'categories': categories,
+        'reference_count': item_decode_repository.count_reference(),
+    }
+
+
+def get_item_reference_list(data):
+    """Paginated ItemReference list. `search` (case-insensitive) matches item_no
+    OR item_description. Returns dict with data/total/page/pages."""
+    data = data or {}
+    page = data.get('page', 1)
+    per_page = data.get('per_page', 25)
+    search = data.get('search')
+    result = item_decode_repository.get_reference_list(page, per_page, search)
+    return {
+        'data': [
+            {'item_no': r.item_no, 'item_description': r.item_description}
+            for r in result.items
+        ],
+        'total': result.total,
+        'page': result.page,
+        'pages': result.pages,
+    }
+
+
+def export_workbook():
+    """Rebuild the legend/reference workbook as .xlsx bytes. One legend sheet per
+    decodable category (a column PAIR [segment-range, field header] per field,
+    independent-length code/value lists) plus a flat Reference sheet."""
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)  # drop the default empty sheet
+    try:
+        for category in _ordered_categories():
+            worksheet = workbook.create_sheet(title=category.title())
+            rows = item_decode_repository.get_category_legend_rows(category)
+            by_field = _group_legend_by_field(rows)
+            for pair_idx, ((field, segment), pairs) in enumerate(by_field.items()):
+                seg_col = pair_idx * 2 + 1
+                field_col = seg_col + 1
+                worksheet.cell(row=1, column=seg_col, value=segment)
+                worksheet.cell(row=1, column=field_col, value=_field_header(field))
+                for offset, (code, value) in enumerate(pairs):
+                    worksheet.cell(row=2 + offset, column=seg_col, value=code)
+                    worksheet.cell(row=2 + offset, column=field_col, value=value)
+
+        reference_ws = workbook.create_sheet(title=REFERENCE_SHEET_TITLE)
+        reference_ws.cell(row=1, column=1, value=REFERENCE_HEADERS[0])
+        reference_ws.cell(row=1, column=2, value=REFERENCE_HEADERS[1])
+        for offset, ref in enumerate(item_decode_repository.get_all_reference_rows()):
+            reference_ws.cell(row=2 + offset, column=1, value=ref.item_no)
+            reference_ws.cell(row=2 + offset, column=2, value=ref.item_description)
+
+        buffer = BytesIO()
+        workbook.save(buffer)
+        return buffer.getvalue()
+    finally:
+        workbook.close()
 
 
 def import_workbook(file_storage):
