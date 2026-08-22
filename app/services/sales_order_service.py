@@ -1,9 +1,9 @@
 from app.exception import MissingFieldsError, OuterServicesError, ValidationError
-from app.repositories import material_repository, sales_item_repository, sales_order_repository
+from app.repositories import material_repository, sales_item_repository, sales_order_repository, work_run_repository, test_result_repository
 from app.extensions import center_service
 from app.app import db
 from app.services import branch_service, cache_service, work_order_service, transaction_service
-from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesItemStatus, SalesOrderStatus, UrgencyLevel, WorkOrderStatus, MANUFACTURED_ITEM_GROUP
+from app.con_sqlalchemy import SalesOrder, SalesItem, MaterialList, SalesItemStatus, SalesOrderStatus, UrgencyLevel, WorkOrderStatus, MANUFACTURED_ITEM_GROUP, bangkok_now
 from app.extensions import wms_service
 from app.utils import convert_start_date, convert_end_date
 
@@ -307,6 +307,81 @@ def sales_order_finish(sales_order : SalesOrder):
             raise OuterServicesError(f"WMS ไม่สามารถจบ Order ได้ : {res.get('error')}")
 
     except Exception:
+        raise
+
+
+# --- Center cancel (cancel-pending drain) ---
+#
+# Center may request cancel at any time. We ack immediately (center has a DLQ, but
+# we never bounce it) and switch the order into a drain-pending state: no new forward
+# work, existing in-flight runs/tests finish, and the order goes terminal the moment
+# the drain empties. Stop-forward only — drained work keeps its output and picked
+# stock; WMS owns stock and is never reversed here.
+
+
+def assert_so_not_canceling(doc_entry):
+    """Block forward work on an order center has asked to cancel. Called from the
+    creation/start entries of runs, tests, and picking requests. No-op when the
+    order does not exist (the caller validates existence its own way) or is not
+    under cancel."""
+    if doc_entry is None:
+        return
+    sales_order = sales_order_repository.get_sales_order_for_cancel(doc_entry)
+    if sales_order is not None and sales_order.cancel_requested:
+        raise ValidationError("Order นี้ถูกขอยกเลิกจากส่วนกลางแล้ว — ไม่สามารถเพิ่มงานผลิต/เทส/เบิกใหม่ได้")
+
+
+def try_complete_cancellation(doc_entry):
+    """Stamp the terminal cancel date once an order under cancel has drained.
+    Drained = no run in {INPROGRESS, PAUSED} and no test in {INPROGRESS, PAUSED}.
+    Called after the intake drops PENDING work, and after each run/test completes.
+    Idempotent: does nothing if the order is not under cancel or already terminal.
+    Does not commit — the caller owns the transaction."""
+    if doc_entry is None:
+        return
+    sales_order = sales_order_repository.get_sales_order_for_cancel(doc_entry)
+    if sales_order is None or not sales_order.cancel_requested:
+        return
+    if sales_order.cancel_completed_date is not None:
+        return
+    active_runs = work_run_repository.count_active_runs_by_doc_entry(doc_entry)
+    active_tests = test_result_repository.count_active_tests_by_doc_entry(doc_entry)
+    if active_runs == 0 and active_tests == 0:
+        sales_order.cancel_completed_date = bangkok_now()
+
+
+def request_cancel_sales_order(doc_entry):
+    """Center cancel intake. Always ack (never bounce to DLQ). Missing or already
+    fully-completed orders are no-ops with no false banner. Idempotent for center
+    retries. Drops PENDING (not-yet-started) runs + tests, then auto-completes if
+    nothing is left in-flight."""
+    try:
+        sales_order = sales_order_repository.get_sales_order_for_cancel(doc_entry)
+
+        # Missing order, already shipped, or already under cancel -> ack + no-op.
+        if sales_order is None:
+            return None
+        if sales_order.status == SalesOrderStatus.COMPLETED:
+            return sales_order
+        if sales_order.cancel_requested:
+            return sales_order
+
+        sales_order.cancel_requested = True
+        sales_order.cancel_requested_date = bangkok_now()
+
+        # Drop planned-but-unstarted work — it consumed nothing, and leaving it
+        # would keep the drain from ever emptying.
+        for run in work_run_repository.get_pending_runs_by_doc_entry(doc_entry):
+            db.session.delete(run)
+        for test in test_result_repository.get_pending_tests_by_doc_entry(doc_entry):
+            db.session.delete(test)
+        db.session.flush()
+
+        try_complete_cancellation(doc_entry)
+        db.session.commit()
+        return sales_order
+    except Exception:
+        db.session.rollback()
         raise
 
 

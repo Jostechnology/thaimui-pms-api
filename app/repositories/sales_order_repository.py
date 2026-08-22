@@ -292,6 +292,13 @@ def get_sales_order_by_doc_entry(doc_entry, branch_id=None):
     return sales_order
 
 
+def get_sales_order_for_cancel(doc_entry):
+    """Lightweight load for the cancel intake. Returns None when absent —
+    a center cancel for an unknown doc_entry is ack'd + no-op'd, not an error."""
+    query = db.session.query(SalesOrder).filter(SalesOrder.doc_entry == doc_entry)
+    return query.first()
+
+
 def get_sales_order_by_doc_num(doc_num, branch_id=None):
     query = db.session.query(SalesOrder).filter(SalesOrder.doc_num == doc_num)
     if branch_id is not None:

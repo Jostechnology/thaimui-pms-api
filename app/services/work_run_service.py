@@ -181,6 +181,9 @@ def create_work_run(work_order_id, data):
     if not work_order:
         raise NotFoundError(f"Work Order {work_order_id} not found")
 
+    from app.services import sales_order_service
+    sales_order_service.assert_so_not_canceling(work_order.doc_entry)
+
     rework_sources_data = data.get("rework_sources", [])
     rework_source_test_result_id = data.get("rework_source_test_result_id")
 
@@ -342,6 +345,9 @@ def start_work_run(work_run_id, data=None):
         raise ValidationError(f"Work Run must be PENDING to start (current: {work_run.status.value})")
 
     work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id)
+
+    from app.services import sales_order_service
+    sales_order_service.assert_so_not_canceling(work_order.doc_entry if work_order else None)
 
     required = work_run_repository.get_required_items(work_run_id)
     needs_material = any(req.material_list_id for req in required)
@@ -584,6 +590,11 @@ def complete_work_run(work_run_id, data):
     full_run = work_run_repository.get_work_run_display(work_run_id)
     fresh_breaks = db.session.query(WorkRunBreak).filter(WorkRunBreak.work_run_id == work_run_id).all()
     _compute_and_save_work_run_cost(full_run, fresh_breaks)
+
+    # If the order is under center cancel, this run finishing may empty the drain.
+    work_order = work_order_repository.get_work_order_by_id(work_run.work_order_id)
+    from app.services import sales_order_service
+    sales_order_service.try_complete_cancellation(work_order.doc_entry if work_order else None)
 
     db.session.commit()
     return work_run

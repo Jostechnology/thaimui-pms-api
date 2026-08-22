@@ -129,6 +129,9 @@ def create_for_sales_order(doc_entry, data):
         if not so:
             raise NotFoundError(f"Sales Order {doc_entry} not found")
 
+        from app.services import sales_order_service
+        sales_order_service.assert_so_not_canceling(doc_entry)
+
         items = _build_items(data.get("items", []))
 
         pr = PickingRequest(

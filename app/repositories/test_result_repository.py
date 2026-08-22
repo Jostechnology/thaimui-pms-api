@@ -1,4 +1,4 @@
-from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestResultItem, TestResultWorkRun, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck, TestResultPhoto, TestResultSpec, TestSpec, WorkRunComponentPin
+from app.con_sqlalchemy import QCWorkOrder, WorkRun, WorkOrder, SalesItem, TestResult, TestSessionStatus, TestResultItem, TestResultWorkRun, TestResultRequiredItem, TestResultAssignment, TestResultMachine, TestResultBreak, TestResultCheck, TestResultPhoto, TestResultSpec, TestSpec, WorkRunComponentPin
 from app.app import db
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -157,6 +157,36 @@ def get_test_results_by_doc_entry(doc_entry):
         )
     except Exception:
         raise
+
+
+def get_pending_tests_by_doc_entry(doc_entry):
+    """PENDING (not-yet-started) test sessions under a SalesOrder. Dropped on
+    cancel — start fires the IN_TESTING transaction, so PENDING consumed nothing."""
+    query = (
+        db.session.query(TestResult)
+        .join(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
+        .join(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
+        .filter(
+            SalesItem.doc_entry == doc_entry,
+            TestResult.session_status == TestSessionStatus.PENDING,
+        )
+    )
+    return query.all()
+
+
+def count_active_tests_by_doc_entry(doc_entry):
+    """Count test sessions still in-flight (INPROGRESS/PAUSED) under a SalesOrder.
+    Used by the cancel drain check — zero means testing has drained."""
+    query = (
+        db.session.query(db.func.count(TestResult.test_result_id))
+        .join(QCWorkOrder, QCWorkOrder.qc_work_order_id == TestResult.qc_work_order_id)
+        .join(SalesItem, SalesItem.sales_item_id == QCWorkOrder.sales_item_id)
+        .filter(
+            SalesItem.doc_entry == doc_entry,
+            TestResult.session_status.in_([TestSessionStatus.INPROGRESS, TestSessionStatus.PAUSED]),
+        )
+    )
+    return query.scalar()
 
 
 def delete_test_result(test_result_id):

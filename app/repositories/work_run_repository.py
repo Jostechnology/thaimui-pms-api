@@ -1,7 +1,7 @@
 import time
 
 from app.api_auth import _log_timer
-from app.con_sqlalchemy import WorkRun, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem, WorkRunComponentPin
+from app.con_sqlalchemy import WorkRun, WorkRunStatus, WorkOrder, WorkRunAssignment, WorkRunMachine, WorkRunCost, WorkRunBreak, Employee, Machine, SalesItem, TestResult, TestResultWorkRun, WorkRunReworkSource, WorkRunTransaction, WorkRunRequiredItem, WorkRunComponentPin
 from app.app import db
 from sqlalchemy.orm import selectinload, joinedload
 
@@ -113,6 +113,34 @@ def get_work_runs_by_sales_item(sales_item_id):
         return query.all()
     except Exception:
         raise
+
+
+def get_pending_runs_by_doc_entry(doc_entry):
+    """PENDING (not-yet-started) runs under a SalesOrder. Dropped on cancel —
+    they consumed nothing (no pins/assignments/machines/cost until start)."""
+    query = (
+        db.session.query(WorkRun)
+        .join(WorkOrder, WorkOrder.work_order_id == WorkRun.work_order_id)
+        .filter(
+            WorkOrder.doc_entry == doc_entry,
+            WorkRun.status == WorkRunStatus.PENDING,
+        )
+    )
+    return query.all()
+
+
+def count_active_runs_by_doc_entry(doc_entry):
+    """Count runs still in-flight (INPROGRESS/PAUSED) under a SalesOrder.
+    Used by the cancel drain check — zero means production has drained."""
+    query = (
+        db.session.query(db.func.count(WorkRun.work_run_id))
+        .join(WorkOrder, WorkOrder.work_order_id == WorkRun.work_order_id)
+        .filter(
+            WorkOrder.doc_entry == doc_entry,
+            WorkRun.status.in_([WorkRunStatus.INPROGRESS, WorkRunStatus.PAUSED]),
+        )
+    )
+    return query.scalar()
 
 
 def get_consumed_defect_qty_for_work_run(source_work_run_id):

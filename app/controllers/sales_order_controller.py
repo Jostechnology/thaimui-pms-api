@@ -4,7 +4,7 @@ from flask import request, jsonify, g
 from app.exception import DisabledAction
 from app.ma_sqlalchemy import MaterialListSchema, SalesItemSchema, SalesOrderSchema, SalesOrderSearchSchema
 from app.services import cache_service, user_service
-from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order, get_sales_items_and_material_lists, delete_sales_order_by_doc_num, close_sales_order
+from app.services.sales_order_service import get_test_sales_order, search_sales_order, get_sales_order_detail, get_all_sales_orders, get_sales_items_from_sales_order, create_sales_order_routine, assign_branch_to_sales_order, get_sales_items_and_material_lists, delete_sales_order_by_doc_num, close_sales_order, request_cancel_sales_order
 from app.services.storage_service import PRESIGNED_CACHE_TTL
 from app.utils import decode_token, check_true_permissions
 import base64, json
@@ -259,6 +259,24 @@ def api_create_sales_order_routine():
         data = request.get_json()
         sales_orders = data.get("items", [])
         create_sales_order_routine(sales_orders)
+        return jsonify({"success": True}), 200
+    except Exception:
+        raise
+
+
+@app.route("/api/sales_order/<int:doc_entry>/cancel_routine", methods=["POST"])
+@verify_required_center
+def api_cancel_sales_order_routine(doc_entry):
+    """Center-driven cancel. Always acks (missing / already-completed / already-
+    cancelling orders are no-ops). Sets the drain-pending flag, drops unstarted
+    work, and auto-completes when nothing is left in-flight."""
+    try:
+        result = request_cancel_sales_order(doc_entry)
+        if result is not None:
+            branch_id = result.branch_id
+            cache_service.delete(_sales_order_detail_cache(doc_entry, branch_id))
+            for p in range(1, 4):
+                cache_service.delete(_sales_order_page_cache(p, 10, branch_id))
         return jsonify({"success": True}), 200
     except Exception:
         raise

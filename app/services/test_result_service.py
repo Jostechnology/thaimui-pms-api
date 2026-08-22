@@ -188,6 +188,9 @@ def create_test_result(qc_work_order_id, data):
         qc = qc_work_order_repository.get_qc_work_order_for_availability_check(qc_work_order_id)
         sales_item = qc.sales_item
 
+        from app.services import sales_order_service
+        sales_order_service.assert_so_not_canceling(sales_item.doc_entry if sales_item else None)
+
         claimed_qty = data.get("claimed_qty")
         if not claimed_qty or claimed_qty <= 0:
             raise ValidationError("จำนวนที่ขอเทสต้องมากกว่า 0")
@@ -256,6 +259,9 @@ def start_test_result(test_result_id, data=None):
             test_result.qc_work_order_id
         )
         sales_item = qc.sales_item
+
+        from app.services import sales_order_service
+        sales_order_service.assert_so_not_canceling(sales_item.doc_entry if sales_item else None)
 
         required = test_result_repository.get_required_items(test_result_id)
         needs_picked_goods = (not sales_item.produce) or any(
@@ -492,6 +498,13 @@ def finalize_test_result(test_result_id, data):
             total_cost=round(labor_cost + dep_cost_total + maint_cost_total + mat_cost, 4),
         )
         db.session.add(cost_record)
+
+        # If the order is under center cancel, this test finishing may empty the drain.
+        finalized_sales_item = test_result_repository.get_sales_item_by_test_result(test_result_id)
+        from app.services import sales_order_service
+        sales_order_service.try_complete_cancellation(
+            finalized_sales_item.doc_entry if finalized_sales_item else None
+        )
 
         db.session.commit()
         db.session.refresh(test_result)

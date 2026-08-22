@@ -1144,6 +1144,12 @@ class SalesOrder(AuditMixin):
     center_sales_order_id = db.Column(db.Integer, nullable=True)
     doc_num = db.Column(db.Integer, nullable=False, unique=True)
     status = db.Column(db.Enum(SalesOrderStatus), nullable=False, default=SalesOrderStatus.INPROGRESS)
+    # Center can request cancel at any time. cancel_requested = drain-pending banner
+    # (block new forward work, let in-flight runs/tests finish). cancel_completed_date
+    # is stamped when the drain empties — terminal. Stop-forward only: no WMS reversal.
+    cancel_requested = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    cancel_requested_date = db.Column(db.DateTime, nullable=True)
+    cancel_completed_date = db.Column(db.DateTime, nullable=True)
     urgency_level = db.Column(db.Enum(UrgencyLevel), nullable=True)
     card_code = db.Column(db.String(20), nullable=False)
     card_name = db.Column(db.String(200), nullable=False)
