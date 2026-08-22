@@ -263,12 +263,16 @@ def get_all_sales_orders(page, limit, search, branch_id=None, start_date=None, e
             # Needs action: at least one produce-flagged sales item without a work
             # order, OR at least one test-flagged sales item without a QC work order.
             # Reuses the same correlated subqueries already selected above rather
-            # than adding new ones.
+            # than adding new ones. Orders under center cancel are excluded — new
+            # work is blocked (assert_so_not_canceling), so an un-actioned produce/
+            # test item on a cancelling order can never be cleared and would
+            # otherwise sit in this list forever.
             query = query.filter(
+                SalesOrder.cancel_requested == False,  # noqa: E712 — SQL boolean compare
                 or_(
                     produce_total_subq > produce_has_workorder_subq,
                     test_total_subq > test_has_qcworkorder_subq,
-                )
+                ),
             )
 
         if sort_by == "urgency_level":
