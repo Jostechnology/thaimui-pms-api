@@ -28,48 +28,79 @@ depends_on = None
 
 
 def upgrade():
-    op.create_table(
-        't_test_spec',
-        sa.Column('test_spec_id', sa.Integer(), nullable=False, autoincrement=True),
-        sa.Column('sales_item_id', sa.Integer(), nullable=False),
-        sa.Column('branch_id', sa.Integer(), nullable=True),
-        sa.Column('source_type', sa.Enum('DIRECT', 'COMPONENT_SECTION', name='testspecsourcetype'), nullable=False),
-        sa.Column('item_component_id', sa.Integer(), nullable=True),
-        sa.Column('item_component_version_id', sa.Integer(), nullable=True),
-        sa.Column('section_keys', sa.JSON(), nullable=True),
-        sa.Column('required_qty', sa.Double(), nullable=False),
-        sa.Column('created_by', sa.String(length=80), nullable=True),
-        sa.Column('updated_by', sa.String(length=80), nullable=True),
-        sa.Column('created_date', sa.DateTime(), nullable=True),
-        sa.Column('updated_date', sa.DateTime(), nullable=True),
-        sa.PrimaryKeyConstraint('test_spec_id'),
-        sa.ForeignKeyConstraint(['sales_item_id'], ['t_sales_items.sales_item_id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['branch_id'], ['m_branch.branch_id']),
-        sa.ForeignKeyConstraint(['item_component_id'], ['t_item_component.item_component_id'], ondelete='SET NULL'),
-        sa.ForeignKeyConstraint(['item_component_version_id'], ['t_item_component_version.version_id'], ondelete='SET NULL'),
-        sa.UniqueConstraint('sales_item_id', 'item_component_id', name='uq_test_spec_sales_item_component'),
-    )
-    op.create_index('ix_test_spec_sales_item', 't_test_spec', ['sales_item_id'])
-    op.create_index('ix_test_spec_branch', 't_test_spec', ['branch_id'])
+    # Idempotent: a prior run of this migration crashed mid-flight. MySQL DDL
+    # auto-commits per statement and has no transactional rollback, so an
+    # unknown subset of the ops below already landed while alembic_version was
+    # never bumped. Each op is guarded so a rerun converges to the target state
+    # regardless of how far the crashed run got.
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
 
-    op.add_column(
-        't_qc_work_order',
-        sa.Column('test_spec_id', sa.Integer(), nullable=True),
-    )
-    op.create_foreign_key(
-        'fk_qc_work_order_test_spec',
-        't_qc_work_order', 't_test_spec',
-        ['test_spec_id'], ['test_spec_id'],
-        ondelete='SET NULL',
-    )
-    op.create_index(
-        'ix_qc_work_order_test_spec',
-        't_qc_work_order', ['test_spec_id'],
-    )
+    def has_table(name):
+        return insp.has_table(name)
 
-    op.drop_index('ix_qc_work_order_source_work_order', table_name='t_qc_work_order')
-    op.drop_constraint('fk_qc_work_order_source_work_order', 't_qc_work_order', type_='foreignkey')
-    op.drop_column('t_qc_work_order', 'source_work_order_id')
+    def has_column(table, col):
+        return any(c['name'] == col for c in insp.get_columns(table))
+
+    def has_index(table, name):
+        return any(i['name'] == name for i in insp.get_indexes(table))
+
+    def has_fk(table, name):
+        return any(fk['name'] == name for fk in insp.get_foreign_keys(table))
+
+    if not has_table('t_test_spec'):
+        op.create_table(
+            't_test_spec',
+            sa.Column('test_spec_id', sa.Integer(), nullable=False, autoincrement=True),
+            sa.Column('sales_item_id', sa.Integer(), nullable=False),
+            sa.Column('branch_id', sa.Integer(), nullable=True),
+            sa.Column('source_type', sa.Enum('DIRECT', 'COMPONENT_SECTION', name='testspecsourcetype'), nullable=False),
+            sa.Column('item_component_id', sa.Integer(), nullable=True),
+            sa.Column('item_component_version_id', sa.Integer(), nullable=True),
+            sa.Column('section_keys', sa.JSON(), nullable=True),
+            sa.Column('required_qty', sa.Double(), nullable=False),
+            sa.Column('created_by', sa.String(length=80), nullable=True),
+            sa.Column('updated_by', sa.String(length=80), nullable=True),
+            sa.Column('created_date', sa.DateTime(), nullable=True),
+            sa.Column('updated_date', sa.DateTime(), nullable=True),
+            sa.PrimaryKeyConstraint('test_spec_id'),
+            sa.ForeignKeyConstraint(['sales_item_id'], ['t_sales_items.sales_item_id'], ondelete='CASCADE'),
+            sa.ForeignKeyConstraint(['branch_id'], ['m_branch.branch_id']),
+            sa.ForeignKeyConstraint(['item_component_id'], ['t_item_component.item_component_id'], ondelete='SET NULL'),
+            sa.ForeignKeyConstraint(['item_component_version_id'], ['t_item_component_version.version_id'], ondelete='SET NULL'),
+            sa.UniqueConstraint('sales_item_id', 'item_component_id', name='uq_test_spec_sales_item_component'),
+        )
+    if not has_index('t_test_spec', 'ix_test_spec_sales_item'):
+        op.create_index('ix_test_spec_sales_item', 't_test_spec', ['sales_item_id'])
+    if not has_index('t_test_spec', 'ix_test_spec_branch'):
+        op.create_index('ix_test_spec_branch', 't_test_spec', ['branch_id'])
+
+    if not has_column('t_qc_work_order', 'test_spec_id'):
+        op.add_column(
+            't_qc_work_order',
+            sa.Column('test_spec_id', sa.Integer(), nullable=True),
+        )
+    if not has_fk('t_qc_work_order', 'fk_qc_work_order_test_spec'):
+        op.create_foreign_key(
+            'fk_qc_work_order_test_spec',
+            't_qc_work_order', 't_test_spec',
+            ['test_spec_id'], ['test_spec_id'],
+            ondelete='SET NULL',
+        )
+    if not has_index('t_qc_work_order', 'ix_qc_work_order_test_spec'):
+        op.create_index(
+            'ix_qc_work_order_test_spec',
+            't_qc_work_order', ['test_spec_id'],
+        )
+
+    # FK first: MySQL needs the backing index to drop the FK, so the index
+    # drop must come after the constraint drop.
+    if has_fk('t_qc_work_order', 'fk_qc_work_order_source_work_order'):
+        op.drop_constraint('fk_qc_work_order_source_work_order', 't_qc_work_order', type_='foreignkey')
+    if has_index('t_qc_work_order', 'ix_qc_work_order_source_work_order'):
+        op.drop_index('ix_qc_work_order_source_work_order', table_name='t_qc_work_order')
+    if has_column('t_qc_work_order', 'source_work_order_id'):
+        op.drop_column('t_qc_work_order', 'source_work_order_id')
 
 
 def downgrade():
