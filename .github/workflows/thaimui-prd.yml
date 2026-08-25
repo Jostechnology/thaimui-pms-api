@@ -1,0 +1,74 @@
+name: thaumui-pms-api
+
+on:
+  push:
+    branches:
+      - thaimui-prd
+permissions:
+  contents: write  # Give the GITHUB_TOKEN permission to push tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code from GitHub
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Set up Docker Buildx for multi-platform builds
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Log in to GitLab Container Registry
+      - name: Log in to GitLab Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: registry.gitlab.com
+          username: ${{ secrets.GITLAB_USERNAME }}
+          password: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+
+      # Build and push the Docker image
+      - name: Build and push Docker image
+        run: |
+          docker build -t registry.gitlab.com/jostechnology/thaimui-pms-api-prd:${{ github.sha }} .
+          docker push registry.gitlab.com/jostechnology/thaimui-pms-api-prd:${{ github.sha }}
+      # Create a new tag and push it to GitHub
+      - name: Create and push Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="v$(date +'%Y%m%d%H%M%S')-${{ github.sha }}"
+          echo "Creating Git tag $TAG"
+          git tag $TAG
+          git push origin $TAG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Host is behind VPN — CI runner cannot reach it. Generate the .env
+      # here instead of deploying, so it can be downloaded and copied by hand.
+      - name: Generate .env
+        run: |
+          echo "TAG=${{ github.sha }}" > .env
+          echo 'connection_string=${{ vars.CONNECTION_STRING_PRD }}' >> .env
+          echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY_PRD }}' >> .env
+          echo 'CENTER_ACCESS_KEY=${{ secrets.CENTER_ACCESS_KEY_PRD }}' >> .env
+          echo 'CENTER_URL=${{ vars.CENTER_URL_PRD }}' >> .env
+          echo 'DOCUMENT_GENERATOR_URL=${{ vars.DOCUMENT_GENERATOR_URL_PRD }}' >> .env
+          echo 'MINIO_ENDPOINT=${{ vars.MINIO_ENDPOINT_PRD }}' >> .env
+          echo 'MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY_PRD }}' >> .env
+          echo 'MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY_PRD }}' >> .env
+          echo 'MINIO_BUCKET=${{ secrets.MINIO_BUCKET_PRD }}' >> .env
+          echo 'MINIO_SECURE=${{ vars.MINIO_SECURE_PRD }}' >> .env
+          echo 'REDIS_URL=${{ vars.REDIS_URL_PRD }}' >> .env
+          echo 'WMS_URL=${{ vars.WMS_URL_PRD }}' >> .env
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prd-deploy-files
+          include-hidden-files: true
+          path: |
+            docker-compose.yml
+            seeds/permissions.yml
+            .env
