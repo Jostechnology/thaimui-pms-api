@@ -180,7 +180,15 @@ def create_sales_order_routine(data):
 
 def create_sales_order(data):
     try:
-        branch = branch_service.get_branch_by_code(data.get("pms_branch_code", None))
+        # Center attaches a branch for every order that concerns PMS. A missing
+        # pms_branch_code therefore means "does not concern PMS" — ingest it with
+        # branch_id=None so it stays invisible to normal (branch-scoped) users and
+        # rides the no-work auto-finish path straight to WMS. NULL never means
+        # "assign later" here: once an SO reaches center SAP has approved it, so it
+        # is immutable apart from cancel, which is handled separately.
+        branch_code = data.get("pms_branch_code")
+        branch = branch_service.get_branch_by_code(branch_code) if branch_code else None
+        branch_id = branch.branch_id if branch else None
         urgency_level = _parse_urgency(data.get("urgency_level"))
         sales_order = SalesOrder(
             doc_entry = data.get("doc_entry"),
@@ -194,7 +202,7 @@ def create_sales_order(data):
             group_code = data.get("group_code"),
             group_name = data.get("group_name"),
             urgency_level = urgency_level,
-            branch_id = branch.branch_id
+            branch_id = branch_id
         )
 
         for item in data.get("sales_item_list", []):
@@ -215,7 +223,7 @@ def create_sales_order(data):
                 # column is NOT NULL and the SQLAlchemy default does not kick in for an
                 # explicit None, so fall back to the same default the column declares
                 item_group=item.get("category_name") or MANUFACTURED_ITEM_GROUP,
-                branch_id = branch.branch_id
+                branch_id = branch_id
             )
             sales_order.sales_items.append(sales_item)
 
@@ -232,7 +240,7 @@ def create_sales_order(data):
                     unit_price=mat.get("unit_price"),
                     cost_price=mat.get("cost_price"),
                     item_group=mat.get("category_name") or "OTHER",
-                    branch_id = branch.branch_id,
+                    branch_id = branch_id,
                     order_line_num = mat.get("order_line_num")
                 )
                 transaction_service.create_init_material_transaction(material_list, "INIT")

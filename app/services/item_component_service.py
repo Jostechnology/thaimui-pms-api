@@ -294,8 +294,16 @@ def create_initial_versions(work_order):
     """
     versions = []
     for item in work_order.item_components:
+        # These components were just built in-memory and flushed, so their
+        # component_template / component_template_sections relationships
+        # (lazy='noload') are UNLOADED on the persistent instance. Snapshotting
+        # reads them and would trip resolve_test_section_keys' unloaded-guard.
+        # Re-fetch through the one populate_existing detail method to force the
+        # load onto the same identity-map object — mirrors how every update
+        # flow snapshots via _load_for_snapshot.
+        loaded = _load_for_snapshot(item.item_component_id)
         versions.append(
-            _snapshot_component(item, work_order, change_reason="สร้างใบสั่งผลิต")
+            _snapshot_component(loaded, work_order, change_reason="สร้างใบสั่งผลิต")
         )
 
     # Components start without a template (see docstring above), so this is
