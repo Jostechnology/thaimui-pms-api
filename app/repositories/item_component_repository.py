@@ -42,10 +42,17 @@ def get_item_components_with_template_for_work_order(work_order_id):
     currently declares a test section (item_component_service.resolve_test_section_keys
     needs both relationships loaded, never lazy-loaded)."""
     try:
+        # populate_existing() forces the eager loaders to fire even when the
+        # components are already in the session identity map with these
+        # relationships unloaded (e.g. just add()+flush()ed in the same txn).
+        # Without it SQLAlchemy hands back the identity-map instances untouched,
+        # leaving component_template / component_template_sections unloaded and
+        # tripping resolve_test_section_keys' unloaded-guard. Matches the
+        # populate_existing() on get_item_component_for_document below.
         query = db.session.query(ItemComponent).options(
             selectinload(ItemComponent.component_template),
             selectinload(ItemComponent.component_template_sections),
-        ).filter(ItemComponent.work_order_id == work_order_id)
+        ).populate_existing().filter(ItemComponent.work_order_id == work_order_id)
         return query.all()
     except Exception:
         raise
