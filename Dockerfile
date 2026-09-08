@@ -1,5 +1,5 @@
 # For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3.9-slim-bullseye
+FROM python:3.9-slim-bookworm
 
 # Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -8,9 +8,15 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1 
 
 
-# Install pip requirements
-RUN apt-get update
-RUN apt-get install python3-dev default-libmysqlclient-dev gcc  -y
+# Install build deps. update and install share one layer so the package index
+# can't go stale between them (a cached update layer + fresh install layer is
+# the classic "Unable to fetch some archives" cause). ForceIPv4 + Retries
+# defeat an unreachable IPv6 mirror and transient CDN index/pool skew.
+RUN apt-get update -o Acquire::ForceIPv4=true -o Acquire::Retries=5 \
+    && apt-get install -y --no-install-recommends \
+        -o Acquire::ForceIPv4=true -o Acquire::Retries=5 \
+        python3-dev default-libmysqlclient-dev gcc \
+    && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
 WORKDIR /
